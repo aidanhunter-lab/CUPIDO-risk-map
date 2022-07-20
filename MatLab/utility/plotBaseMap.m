@@ -1,7 +1,7 @@
 function varargout = plotBaseMap(area, varargin)
 % Returns figure displaying map of study area.
-% area = 'continent' => entire Antarctica
-% area = 'peninsula' => Antarctic peninsula
+% The study area should be one of those listed in the coordsTable optional
+% input argument (see file 'regional bounding coordinates.csv')
 
 extractVarargin(varargin)
 
@@ -17,6 +17,10 @@ if ~exist('origin', 'var'), origin = []; end
 if ~exist('parallels', 'var'), parallels = []; end
 if ~exist('ellipsoid', 'var'), Ellipsoid = []; else, Ellipsoid = ellipsoid; end
 if ~exist('axesLabelSize', 'var'), axesLabelSize = 11; end
+
+if strcmp(area, 'Southern Ocean') || strcmp(area, 'Antarctic Continent')
+    projection = 'Stereographic';
+end
 
 
 if ~exist('coordsTable', 'var')
@@ -35,7 +39,7 @@ knownArea = any(areaIndex);
 
 switch knownArea
     case false
-        warning('Specified area does not correspond to knwon coordinates. It is best to run this fuction with optional input argument coordsTable which stores area names and coordinates, otherwise see coordinates hard-coded into plotBaeMap.m')
+        warning('Specified area does not correspond to known coordinates. It is best to run this fuction with optional input argument coordsTable which stores area names and coordinates, otherwise see coordinates hard-coded into plotBaeMap.m')
         return
     case true
         nout = nargout;
@@ -89,25 +93,29 @@ switch createMap
                 'areacolour', areacolour, 'edgecolour', edgecolour)
         end
         
-        switch orientation
-            case 'NoOriginNoParallelsNoEllipsoid'
-                m_proj(projection, 'lon', lon, 'lat', lat);
-            case 'OriginNoParallelsNoEllipsoid'
-                m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin);
-            case 'NoOriginParallelsNoEllipsoid'
-                m_proj(projection, 'lon', lon, 'lat', lat, 'parallels', parallels);
-            case 'NoOriginNoParallelsEllipsoid'
-                m_proj(projection, 'lon', lon, 'lat', lat, 'ellipsoid', Ellipsoid);
-            case 'OriginParallelsNoEllipsoid'
-                m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin, 'parallels', parallels);
-            case 'OriginNoParallelsEllipsoid'
-                m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin, 'ellipsoid', Ellipsoid);
-            case 'NoOriginParallelsEllipsoid'
-                m_proj(projection, 'lon', lon, 'lat', lat, 'parallels', parallels, 'ellipsoid', Ellipsoid);
-            case 'OriginParallelsEllipsoid'
-                m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin, 'parallels', parallels, 'ellipsoid', Ellipsoid);
+        if ~strcmp(projection, 'Stereographic')
+            switch orientation
+                case 'NoOriginNoParallelsNoEllipsoid'
+                    m_proj(projection, 'lon', lon, 'lat', lat);
+                case 'OriginNoParallelsNoEllipsoid'
+                    m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin);
+                case 'NoOriginParallelsNoEllipsoid'
+                    m_proj(projection, 'lon', lon, 'lat', lat, 'parallels', parallels);
+                case 'NoOriginNoParallelsEllipsoid'
+                    m_proj(projection, 'lon', lon, 'lat', lat, 'ellipsoid', Ellipsoid);
+                case 'OriginParallelsNoEllipsoid'
+                    m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin, 'parallels', parallels);
+                case 'OriginNoParallelsEllipsoid'
+                    m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin, 'ellipsoid', Ellipsoid);
+                case 'NoOriginParallelsEllipsoid'
+                    m_proj(projection, 'lon', lon, 'lat', lat, 'parallels', parallels, 'ellipsoid', Ellipsoid);
+                case 'OriginParallelsEllipsoid'
+                    m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin, 'parallels', parallels, 'ellipsoid', Ellipsoid);
+            end
+        else
+            m_proj(projection, 'lon', mean(lon), 'lat', -90, 'rad', diff(lat))
         end
-        
+
         % plot coastline
         m_usercoast(mapDataFile, 'patch', areacolour, 'EdgeColor', edgecolour);
         
