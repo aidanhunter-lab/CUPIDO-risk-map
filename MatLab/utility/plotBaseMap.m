@@ -17,6 +17,7 @@ if ~exist('origin', 'var'), origin = []; end
 if ~exist('parallels', 'var'), parallels = []; end
 if ~exist('ellipsoid', 'var'), Ellipsoid = []; else, Ellipsoid = ellipsoid; end
 if ~exist('axesLabelSize', 'var'), axesLabelSize = 11; end
+if ~exist('speckle', 'var'), speckle = false; end
 
 if strcmp(area, 'Southern Ocean') || strcmp(area, 'Antarctic Continent')
     projection = 'Stereographic';
@@ -113,12 +114,20 @@ switch createMap
                     m_proj(projection, 'lon', lon, 'lat', lat, 'origin', origin, 'parallels', parallels, 'ellipsoid', Ellipsoid);
             end
         else
-            m_proj(projection, 'lon', mean(lon), 'lat', -90, 'rad', diff(lat))
+            rad = diff(lat);
+            lon = mean(lon);
+            lat = -90;
+            m_proj(projection, 'lon', lon, 'lat', lat, 'rad', rad)
         end
 
         % plot coastline
-        m_usercoast(mapDataFile, 'patch', areacolour, 'EdgeColor', edgecolour);
-        
+        switch speckle
+            case false
+                m_usercoast(mapDataFile, 'patch', areacolour, 'EdgeColor', edgecolour);
+            case true
+                m_usercoast(mapDataFile, 'speckle');
+        end
+
         % plot grid
         if ~exist('Xticklabels', 'var') && ~exist('Yticklabels', 'var')
             m_grid('XaxisLocation', XaxisLocation, 'fontsize', axesLabelSize);
