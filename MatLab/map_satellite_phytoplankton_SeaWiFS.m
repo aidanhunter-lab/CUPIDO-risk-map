@@ -110,9 +110,9 @@ monthAlignHoriz = 'right';
 monthAlignVert = 'top';
 
 mainTitle = true;
-% titleText = {'Phytoplankton concentration: 1997-2007 average', ...
-%     'SeaWiFS global data'}; % multiline title
-titleText = {'Phytoplankton concentration: SeaWiFS satellite data'}; % single line title
+titleText = {'Phytoplankton concentration: 1997-2007 average', ...
+    'SeaWiFS satellite data'}; % multiline title
+% titleText = {'Phytoplankton concentration: SeaWiFS satellite data'}; % single line title
 
 titleLat = max(lat) + 0.05 * diff(lat); % title position
 titleLon = 0; % centred
@@ -125,8 +125,8 @@ axisSize = 9;
 landColour = .4 .* ones(1,3);
 XaxisLocation = 'top';
 nColourBackTicks = 7; % number of ticks on colourbar
-% plotSize = [6 7]; % a little extra height to accomodate the multi-line title
-plotSize = [6 6]; % a little extra height to accomodate the multi-line title
+plotSize = [6 7]; % a little extra height to accomodate the multi-line title
+% plotSize = [6 6]; % a little extra height to accomodate the multi-line title
 
 anyData = nan(12,1);
 
@@ -155,6 +155,8 @@ for m = 1:12
     plotAxes.(plotName) = gca;
     set(plotAxes.(plotName), 'Colormap', cm)
     
+    pos_orig = plotAxes.(plotName).Position;
+
     % redraw map grid
     plotBaseMap(area, 'coordsTable', coordsTable, 'edgecolour', landColour, ...
         'redrawCoastline', false, 'XaxisLocation', XaxisLocation, ...
@@ -176,6 +178,9 @@ for m = 1:12
             set(cb.(plotName).Label, {'String', 'FontSize'}, ...
                 {'total carbon (mg / m^3)', cbarTitleSize});
     end
+    
+    % Colourbar moves the map. Reset in original position
+    plotAxes.(plotName).Position = pos_orig;
 
     switch displayMonth, case true
         switch abbrevMonth
