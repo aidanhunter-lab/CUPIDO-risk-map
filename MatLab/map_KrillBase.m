@@ -96,9 +96,9 @@ landColour = .4 .* ones(1,3);
 XaxisLocation = 'top';
 % nColourBackTicks = 7; % number of ticks on colourbar
 plotSize = [6 7]; % include a little extra height if using multi-line titles
-ptScale = 4;
+ptScale = 6;
 ptSizeMin = 10 .^ (1 / ptScale);
-ptSizeMax = 200 .^ (1 / ptScale);
+ptSizeMax = 150 .^ (1 / ptScale);
 
 % Choose threshold values to define point sizes
 nsizes = 4;
