@@ -57,9 +57,8 @@ axisSize = 9;
 landColour = .4 .* ones(1,3);
 XaxisLocation = 'top';
 % nColourBackTicks = 7; % number of ticks on colourbar
-plotSize = [6 6]; % include a little extra height if using multi-line titles
-% ptSizeMin = 10;
-% ptSizeMax = 200;
+% plotSize = [6 6];
+plotSize = [6 7]; % use scale that is consistent with other map plots so they look good together on poster
 ptSize = 100;
 
 % Choose colours
