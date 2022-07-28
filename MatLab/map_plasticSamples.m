@@ -107,6 +107,7 @@ end
 
 % gc = gca;
 
+% The m_legend.m function from package m_map has been modified -- see the utility directory
 leg = m_legend_extend([pt_macro, pt_micro], 'macro', 'micro');
 leg.Title.String = 'plastic size';
 leg.Title.FontWeight = 'normal';
