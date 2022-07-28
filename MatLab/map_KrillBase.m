@@ -96,13 +96,16 @@ landColour = .4 .* ones(1,3);
 XaxisLocation = 'top';
 % nColourBackTicks = 7; % number of ticks on colourbar
 plotSize = [6 7]; % include a little extra height if using multi-line titles
-ptSizeMin = 10;
-ptSizeMax = 200;
+ptScale = 4;
+ptSizeMin = 10 .^ (1 / ptScale);
+ptSizeMax = 200 .^ (1 / ptScale);
 
 % Choose threshold values to define point sizes
 nsizes = 4;
 st = 10 .^ (1:nsizes); % threshold values for point sizes
-ptSizes = round(linspace(ptSizeMin, ptSizeMax, nsizes+1));
+% ptSizes = round(linspace(ptSizeMin, ptSizeMax, nsizes+1));
+ptSizes = round(linspace(ptSizeMin, ptSizeMax, nsizes+1) .^ ptScale);
+
 
 krill.plotPointSize = nan(height(krill), 1);
 for i = 1:nsizes+1
@@ -138,21 +141,21 @@ hold on
 
 pt = m_scatter(krill.LONGITUDE, krill.LATITUDE, krill.plotPointSize, krill.plotCol);
 
-pt_day = m_line(0, lat(2), 'marker', 'o', 'color', krill.plotCol(ind_day1,:), ...
-    'linest', 'none', 'clip', 'none');
-pt_night = m_line(0, lat(2), 'marker', 'o', 'color', krill.plotCol(ind_night1,:), ...
-    'linest', 'none', 'clip', 'none');
+pt_day = m_scatter(0, lat(2), 'Marker', 'o', 'MarkerEdgeColor', krill.plotCol(ind_day1,:), ...
+    'SizeData', ptSizes(3));
+pt_night = m_scatter(0, lat(2), 'Marker', 'o', 'MarkerEdgeColor', krill.plotCol(ind_night1,:), ...
+    'SizeData', ptSizes(3));
 
-pt1 = m_line(0, lat(2), 'marker', 'o', 'color', [0 0 0], ...
-    'linest', 'none', 'clip', 'none', 'MarkerSize', 2);
-pt2 = m_line(0, lat(2), 'marker', 'o', 'color', [0 0 0], ...
-    'linest', 'none', 'clip', 'none', 'MarkerSize', 4);
-pt3 = m_line(0, lat(2), 'marker', 'o', 'color', [0 0 0], ...
-    'linest', 'none', 'clip', 'none', 'MarkerSize', 6);
-pt4 = m_line(0, lat(2), 'marker', 'o', 'color', [0 0 0], ...
-    'linest', 'none', 'clip', 'none', 'MarkerSize', 8);
-pt5 = m_line(0, lat(2), 'marker', 'o', 'color', [0 0 0], ...
-    'linest', 'none', 'clip', 'none', 'MarkerSize', 10);
+pt1 = m_scatter(0, lat(2), 'Marker', 'o', 'MarkerEdgeColor', [0 0 0], ...
+    'SizeData', ptSizes(1));
+pt2 = m_scatter(0, lat(2), 'Marker', 'o', 'MarkerEdgeColor', [0 0 0], ...
+    'SizeData', ptSizes(2));
+pt3 = m_scatter(0, lat(2), 'Marker', 'o', 'MarkerEdgeColor', [0 0 0], ...
+    'SizeData', ptSizes(3));
+pt4 = m_scatter(0, lat(2), 'Marker', 'o', 'MarkerEdgeColor', [0 0 0], ...
+    'SizeData', ptSizes(4));
+pt5 = m_scatter(0, lat(2), 'Marker', 'o', 'MarkerEdgeColor', [0 0 0], ...
+    'SizeData', ptSizes(5));
 
 set(pt, {'LineWidth', 'MarkerEdgeAlpha'}, {1, alpha})
 
@@ -164,11 +167,11 @@ end
 
 % gc = gca;
 
-leg = m_legend([pt_night, pt_day], 'night', 'day');
+leg = m_legend_extend([pt_night, pt_day], 'night', 'day');
 leg.Title.String = 'sample time';
 leg.Title.FontWeight = 'normal';
 
-leg = m_legend([pt5, pt4, pt3, pt2, pt1], '>10000', '>1000', '>100', '>10', '<10');
+leg = m_legend_extend([pt5, pt4, pt3, pt2, pt1], '>10000', '>1000', '>100', '>10', '<10');
 leg.Title.String = 'number/m^2';
 leg.Title.FontWeight = 'normal';
 
