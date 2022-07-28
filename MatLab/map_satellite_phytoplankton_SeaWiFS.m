@@ -182,6 +182,11 @@ for m = 1:12
     % Colourbar moves the map. Reset in original position
     plotAxes.(plotName).Position = pos_orig;
 
+    % Set colourbar width to 90% of map width
+    cbWidth = 0.9 * (pos_orig(3) - pos_orig(1));
+    cb.(plotName).Position(1) = 0.5 - 0.5 * cbWidth;
+    cb.(plotName).Position(3) = cbWidth;
+
     switch displayMonth, case true
         switch abbrevMonth
             case true, pm = Months.name(m);
@@ -226,6 +231,8 @@ for m = 1:12
     plt = plotHandles.(['plot' num2str(m)]);
     exportgraphics(plt, filepath)
 end
+
+close all
 
 
 GOT TO HERE SO FAR, WHICH IS FINE FOR INDIVIDUAL PLOTS TO DISPLAY ON A POSTER...
