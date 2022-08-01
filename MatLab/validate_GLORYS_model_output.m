@@ -351,17 +351,16 @@ switch source
             % temperature
             subplot(nrows, ncols, plotCount)
             idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
-%             plot(Data.temp(:,i), Data.depth(:,i), 'r');
-            plot(Data.temp(:,i), Data.(ctdVar)(:,i), 'r');
+            plot(Data.potemp(:,i), Data.(ctdVar)(:,i), 'r');
+%             plot(Data.temp(:,i), Data.(ctdVar)(:,i), 'r');
             hold on
-%             plot(idat.temperature, idat.depth, '--r')
             plot(idat.temperature, idat.(modVar), '--r')
             hold off
             set(gca, 'YDir','reverse')
             if logY
                 set(gca, 'YScale', 'log')
             end
-            xlabel(['temperature (' char(176) 'C)'])
+            xlabel(['potential temperature (' char(176) 'C)'])
             ylabel(ylab)
             title(['event ' num2str(Data.stn(i))], 'FontWeight', 'normal')
             if plotCount == 1
@@ -379,7 +378,7 @@ switch source
             if logY
                 set(gca, 'YScale', 'log')
             end
-            xlabel('salinity')
+            xlabel('practical salinity')
             ylabel(ylab)
             title(['station ' num2str(Data.stn(i))], 'FontWeight', 'normal')
             if plotCount == 1
@@ -446,6 +445,8 @@ switch source
 end
 
 close all
+
+%% Summary statistic plots
 
 % Plot some summary statistics quantifying the GLORYS model 'error' with
 % referenced to the CTD measures. For now just plot differences and ratios
@@ -549,10 +550,78 @@ switch savePlots, case true
     exportgraphics(fig, filepath)
 end
 
+close all
+
+%% Plot density profiles -- using GSW toolbox
+
+% Call 'gsw_contents' to view functions in GSW toolbox
+% gsw_contents
+
+% To calculate the water density we require the input variables: absolute
+% salinity; conservative temperature; and sea pressure (absolute pressure
+% minus 10.1325 dbar)
+
+help gsw_rho
+
+% The CTD data units are: salinity = psu (practical salinity units)
+%                         temperature & potential temp = degrees C
+%                         pressure = dbar (sea pressure)
+
+% The GLORYS data units are: salinity = psu (practical salinity units)
+%                            temperature = potential temp = degrees C
+
+ndepth = size(Data.press, 1);
+lon2D = repmat(reshape(Data.lon, [1, ncasts]), [ndepth, 1]);
+lat2D = repmat(reshape(Data.lat, [1, ncasts]), [ndepth, 1]);
+Data.salinAbs = gsw_SA_from_SP(Data.salin, Data.press, lon2D, lat2D);
+Data.contemp = gsw_CT_from_pt(Data.salinAbs, Data.potemp);
+
+
+for i = 1:ncasts
+    idat = dat.(['cast' num2str(i)]);
+    idat.salinityAbs = gsw_SA_from_SP(idat.salinity, idat.pressure, idat.lon, idat.lat);
+    idat.contemp = gsw_CT_from_pt(idat.salinityAbs, idat.temperature);
+    dat.(['cast' num2str(i)]) = idat;
+end
+
+% Calculate seawater density
+Data.density = gsw_rho(Data.salinAbs, Data.contemp, Data.press);
+for i = 1:ncasts
+    idat = dat.(['cast' num2str(i)]);
+    idat.density = gsw_rho(idat.salinityAbs, idat.contemp, idat.pressure);
+    dat.(['cast' num2str(i)]) = idat;
+end
+
+
+%% Compare the density profiles of CTD measures and GLORYS output
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 % RETRY THE ABOVE COMPARISON PLOT BUT INTERPOLATE THE CTD DATA TO MATCH THE
 % GLORYS DEPTH/PRESSURE LEVELS... I DON'T EXPECT IT WILL MAKE MUCH
-% DIFFERENCE BUT IT'S WHAT SALLY SUGGESTED...
+% DIFFERENCE BUT IT'S WHAT SALLY SUGGESTED... DIDN'T MAKE A DIFFERENCE
 
 comparisons.difTemp = nan(length(dat.depth), length(Data.stn));
 comparisons.difSalin = nan(length(dat.depth), length(Data.stn));
