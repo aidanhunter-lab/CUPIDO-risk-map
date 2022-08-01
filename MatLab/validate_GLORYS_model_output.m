@@ -27,7 +27,7 @@ switch source
             'removeSpuriousPoints', true, 'onlyDepthProfiles', true, ...
             'ShowMapTitle', true);
     case 'BAS central storage'
-        [Data, MetaData, ~] = Prepare_CTD_Data(project, source, region, ...
+        Data = Prepare_CTD_Data(project, source, region, ...
             'plotMaps', true, 'ShowMapTitle', true);
 end
 
@@ -124,8 +124,6 @@ end
 % Use info stored in extractData to inform GLORYS data download. Get data
 % from: https://resources.marine.copernicus.eu/product-detail/GLOBAL_MULTIYEAR_PHY_001_030/DATA-ACCESS
 
-
-
 % I have the full GLORYS data set for South Georgia stored on my laptop,
 % but as it's a large file it may not be suitable for GitHub (this should
 % be fine with LFS... but there's some sort of problem).
@@ -147,6 +145,23 @@ dat.latitude = ncread(filename, 'latitude'); % degrees North
 dat.temperature = ncread(filename, 'thetao'); % degrees C, seawater potential temperature, add_offset = 21, scale_factor = 0.00073244
 dat.salinity = ncread(filename, 'so'); % 1e-3 (practical salinity unit), add_offset = -0.0015259, scale_factor = 0.0015259
 
+% The CTD data were recorded in terms of pressure rather than depth. The
+% pressure was calculated from depth and latitude using the TEOS-80
+% equations, and the depth vairable was not stored.
+% Use the same equation to calculate pressure for the GLORYS data.
+
+ntime = length(dat.time);
+ndepth = length(dat.depth);
+nlon = length(dat.longitude);
+nlat = length(dat.latitude);
+lat2D = repmat(dat.latitude, [1, ndepth]);
+depth2D = repmat(reshape(dat.depth, [1, ndepth]), [nlat, 1]);
+dat.pressure = sw_pres(depth2D, lat2D);
+dat.pressure = repmat(reshape(dat.pressure, [1, nlat, ndepth]), ...
+    [nlon, 1, 1, ntime]);
+
+clearvars ntime ndepth nlon nlat lat2D depth2D
+
 % Adjust the time units to match those used for the CTD data, which is
 % MatLab default serial time (days since 1/1/0000).
 GLORYS_startDate = [1950 1 1 0 0 0];
@@ -158,6 +173,7 @@ clearvars GLORYS_startDate adjustTime filename
 
 
 %% Match GLORYS data to CTD samples
+
 
 switch source
     case 'BODC'
@@ -253,53 +269,129 @@ switch source
         for i = 1:ncasts
             % times
             m = abs(dat.time - Data.datenum(i));
-            [~,it] = min(m);
+            it = false(length(m),1);
+            [~,m] = min(m);
+            it(m) = true;
             % lat-lon
             m = abs(dat.longitude - Data.lon(i));
-            [~,ilon] = min(m);
+            ilon = m == min(m);
             m = abs(dat.latitude - Data.lat(i));
-            [~,ilat] = min(m);
-            % depths
-            % I'M NOT SURE HOW TO HANDLE THE DEPTHS BECAUSE THE CTD DATA IS
-            % GIVEN IN TERMS OF PRESSURE...
-%             idep = dat.depth < Data.press(i);
-%             idep = find(idep + [0; -diff(idep)]);
+            ilat = m == min(m);
+            % depths/pressure
+            ipres = squeeze(dat.pressure(ilon,ilat,:,it)) < max(Data.press(:,i));
+            ipres = ipres | [0; diff(~ipres)];
+
             indicesGLORYS.(['cast' num2str(i)]).time = it;
             indicesGLORYS.(['cast' num2str(i)]).lon = ilon;
             indicesGLORYS.(['cast' num2str(i)]).lat = ilat;
-%             indicesGLORYS.(['cast' num2str(i)]).depths = idep;
+            indicesGLORYS.(['cast' num2str(i)]).pressure = ipres;
 
         end
-        clearvars i m it ilon ilat
+        clearvars i m it ilon ilat ipres
 
         for i = 1:ncasts
             cast = ['cast' num2str(i)];
             indices = indicesGLORYS.(cast);
             dat.(cast).time = dat.time(indices.time);
-%             dat.(cast).depth = dat.depth(indices.depths);
-            dat.(cast).depth = dat.depth;
-            dat.(cast).longitude = dat.longitude(indices.lon);
-            dat.(cast).latitude = dat.latitude(indices.lat);
+            dat.(cast).lon = dat.longitude(indices.lon);
+            dat.(cast).lat = dat.latitude(indices.lat);
+            dat.(cast).pressure = squeeze(dat.pressure( ...
+                indices.lon, indices.lat, indices.pressure, indices.time));
             dat.(cast).temperature = squeeze(dat.temperature( ...
-                indices.lon, indices.lat, :, indices.time));
+                indices.lon, indices.lat, indices.pressure, indices.time));
             dat.(cast).salinity = squeeze(dat.salinity( ...
-                indices.lon, indices.lat, :, indices.time));
+                indices.lon, indices.lat, indices.pressure, indices.time));
             removeNaNs = isnan(dat.(cast).temperature) | isnan(dat.(cast).salinity);
-            dat.(cast).depth = dat.(cast).depth(~removeNaNs);
+            dat.(cast).pressure = dat.(cast).pressure(~removeNaNs);
             dat.(cast).temperature = dat.(cast).temperature(~removeNaNs);
             dat.(cast).salinity = dat.(cast).salinity(~removeNaNs);
         end
         clearvars i cast indices removeNaNs
-
 end
 
 
 %% Compare CTD samples to GLORYS model -- make plots
 
-% Simple plots of measurements and model outputs against depth to visually
-% compare CTD measures to physical model.
+% Simple plots of measurements and model outputs against depth (or pressure)
+% to visually compare CTD measures to physical model.
+
+depthOrPressure = 'pressure';
+switch depthOrPressure
+    case 'depth'
+        ctdVar = 'depth';
+        modVar = 'depth';
+        ylab = 'depth (m)';
+    case 'pressure'
+        ctdVar = 'press';
+        modVar = 'pressure';
+        ylab = 'pressure (dbar)';
+end
 
 switch source
+
+    case 'BAS central storage'
+
+        nrows = 2; % top = temperature, bottom = salinity
+        ncols = 4; % one column per CTD cast
+        h = 5; % plot height
+        w = 5; % and width
+        logY = false; % depth/pressure axis on log-scale?
+
+        for i = 1:ncasts
+            if i == 1, figNum = 0; end
+            plotCount = mod(i, ncols);
+            if plotCount == 0, plotCount = ncols; end
+            newFig = plotCount == 1;
+            if newFig
+                figNum = figNum + 1;
+                figName = ['plot' num2str(figNum)];
+                simplePlotHandles.(figName) = figure;
+                set(simplePlotHandles.(figName), {'Units', 'Position'}, {'inches', [0, 0, w*ncols, h*nrows]})
+            end
+            % temperature
+            subplot(nrows, ncols, plotCount)
+            idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
+%             plot(Data.temp(:,i), Data.depth(:,i), 'r');
+            plot(Data.temp(:,i), Data.(ctdVar)(:,i), 'r');
+            hold on
+%             plot(idat.temperature, idat.depth, '--r')
+            plot(idat.temperature, idat.(modVar), '--r')
+            hold off
+            set(gca, 'YDir','reverse')
+            if logY
+                set(gca, 'YScale', 'log')
+            end
+            xlabel(['temperature (' char(176) 'C)'])
+            ylabel(ylab)
+            title(['event ' num2str(Data.stn(i))], 'FontWeight', 'normal')
+            if plotCount == 1
+                legend('CTD', 'model', 'Location', 'southeast')
+            end
+            % salinity
+            subplot(nrows, ncols, plotCount + ncols)
+%             plot(Data.salin(:,i), Data.depth(:,i), 'b');
+            plot(Data.salin(:,i), Data.(ctdVar)(:,i), 'b');
+            hold on
+%             plot(idat.salinity, idat.depth, '--b')
+            plot(idat.salinity, idat.(modVar), '--b')
+            hold off
+            set(gca, 'YDir','reverse')
+            if logY
+                set(gca, 'YScale', 'log')
+            end
+            xlabel('salinity')
+            ylabel(ylab)
+            title(['station ' num2str(Data.stn(i))], 'FontWeight', 'normal')
+            if plotCount == 1
+                legend('CTD', 'model', 'Location', 'southeast')
+            end
+            if plotCount == ncols
+                sgtitle('Compare GLORYS model to CTD measurements')
+            end
+            pause(0.25)
+        end
+
+
     case 'BODC'
 
         for i = 1:length(cruises)
@@ -349,60 +441,9 @@ switch source
                 title(['station ' num2str(station)], 'FontWeight', 'normal')
             end
             sgtitle(['Cruise ' cruise])
-        end
-
-    case 'BAS central storage'
-
-        nrows = 2; % top = temperature, bottom = salinity
-        ncols = 4; % one column per CTD cast
-        h = 5; % plot height
-        w = 5; % and width
-        logDepth = false; % depth axis on log-scale?
-
-        for i = 1:ncasts
-            if i == 1, figNum = 0; end
-            plotCount = mod(i, ncols);
-            if plotCount == 0, plotCount = ncols; end
-            newFig = plotCount == 1;
-            if newFig
-                figNum = figNum + 1;
-                figName = ['plot' num2str(figNum)];
-                simplePlotHandles.(figName) = figure;
-                set(simplePlotHandles.(figName), {'Units', 'Position'}, {'inches', [0, 0, w*ncols, h*nrows]})
-            end
-            % temperature
-            subplot(nrows, ncols, plotCount)
-            idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
-            plot(Data.temp(:,i), Data.depth(:,i), 'r');
-            hold on
-            plot(idat.temperature, idat.depth, '--r')
-            hold off
-            set(gca, 'YDir','reverse')
-            if logDepth
-                set(gca, 'YScale', 'log')
-            end
-            xlabel(['temperature (' char(176) 'C)'])
-            ylabel('depth (m)')
-            title(['event ' num2str(Data.stn(i))], 'FontWeight', 'normal')
-            % salinity
-            subplot(nrows, ncols, plotCount + ncols)
-            plot(Data.salin(:,i), Data.depth(:,i), 'b');
-            hold on
-            plot(idat.salinity, idat.depth, '--b')
-            hold off
-            set(gca, 'YDir','reverse')
-            if logDepth
-                set(gca, 'YScale', 'log')
-            end
-            xlabel('salinity')
-            ylabel('depth (m)')
-            title(['station ' num2str(Data.stn(i))], 'FontWeight', 'normal')
-            if plotCount == ncols
-                sgtitle('Compare GLORYS model to CTD measurements')
-            end
+            pause(0.25)
         end
 end
-
 
 close all
 
@@ -423,12 +464,11 @@ comparisons.difSalin = nan(size(Data.salin));
 for i = 1:ncasts
     idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
     % interpolate model output to match ctd measurement depths
-    idat.tempInterp = interp1(idat.depth, idat.temperature, Data.depth(:,i));
-    idat.salinInterp = interp1(idat.depth, idat.salinity, Data.depth(:,i));
+    idat.tempInterp = interp1(idat.(modVar), idat.temperature, Data.(ctdVar)(:,i));
+    idat.salinInterp = interp1(idat.(modVar), idat.salinity, Data.(ctdVar)(:,i));
     comparisons.difTemp(:,i) = idat.tempInterp - Data.temp(:,i);
     comparisons.difSalin(:,i) = idat.salinInterp - Data.salin(:,i);
 end
-
 
 % Find the across-ctd casts mean and st.dev.
 summaryStats.mt = mean(comparisons.difTemp, 2, 'omitnan');
@@ -439,6 +479,15 @@ summaryStats.sds = std(comparisons.difSalin, 1, 2, 'omitnan');
 % Summary plots showing deviation of GLORYS model outputs from CTD measures.
 % Temperature
 
+switch depthOrPressure
+    case 'depth'
+        ind = find(~isnan(Data.depth(end,:)),1);
+        yvar = Data.depth(:,ind); clearvars ind
+    case 'pressure'
+        ind = find(~isnan(Data.press(end,:)),1);
+        yvar = Data.press(:,ind); clearvars ind
+end
+
 savePlots = true;
 lw = 1; % line width for summary stats
 
@@ -446,16 +495,16 @@ fig = figure;
 set(fig, {'Units', 'Position'}, {'inches', [0, 0, 8, 4]})
 subplot(1,2,1)
 Col = [0.65, 0.65, 0.65, 0.3]; % light grey semi-transparent lines for all individual CTD casts
-plot(comparisons.difTemp(1:end-1,:), depths, 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
+plot(comparisons.difTemp(1:end-1,:), yvar(1:end-1), 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
 hold on
-plot(summaryStats.mt(1:end-1), depths, 'Color', [0, 0, 0], 'LineWidth', lw)
+plot(summaryStats.mt(1:end-1), yvar(1:end-1), 'Color', [0, 0, 0], 'LineWidth', lw)
 plot([summaryStats.mt(1:end-1) - summaryStats.sdt(1:end-1), summaryStats.mt(1:end-1) + summaryStats.sdt(1:end-1)], ...
-    depths, '--', 'Color', [0, 0, 0], 'LineWidth', lw)
+    yvar(1:end-1), '--', 'Color', [0, 0, 0], 'LineWidth', lw)
 xl = xlim;
-yl = [0, max(depths)];
+yl = [0, max(yvar(1:end-1))];
 plot([0, 0], yl, 'r:', 'LineWidth', lw)
 set(gca, 'YDir', 'reverse')
-ylabel('depth (m)')
+ylabel(ylab)
 xlabel('temperature difference')
 yl = ylim;
 
@@ -479,12 +528,12 @@ hold off
 % Salinity
 subplot(1,2,2)
 Col = [0.65, 0.65, 0.65, 0.3]; % light grey semi-transparent lines for all individual CTD casts
-plot(comparisons.difSalin(1:end-1,:), depths, 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
+plot(comparisons.difSalin(1:end-1,:), yvar(1:end-1), 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
 hold on
-plot(summaryStats.ms(1:end-1), depths, 'Color', [0, 0, 0], 'LineWidth', lw)
+plot(summaryStats.ms(1:end-1), yvar(1:end-1), 'Color', [0, 0, 0], 'LineWidth', lw)
 plot([summaryStats.ms(1:end-1) - summaryStats.sds(1:end-1), summaryStats.ms(1:end-1) + summaryStats.sds(1:end-1)], ...
-    depths, '--', 'Color', [0, 0, 0], 'LineWidth', lw)
-yl = [0, max(depths)];
+    yvar(1:end-1), '--', 'Color', [0, 0, 0], 'LineWidth', lw)
+yl = [0, max(yvar(1:end-1))];
 % yl = ylim;
 plot([0, 0], yl, 'r:', 'LineWidth', lw)
 hold off
@@ -495,91 +544,108 @@ xlabel('salinity difference')
 sgtitle({'Compare GLORYS model output to CTD measures', 'Lines are modelled minus measured values'})
 
 switch savePlots, case true
-    filename = 'GLORYS vs CTD JR82_salinity and temperature.png';
+    filename = 'GLORYS vs CTD JR82_salinity and temperature_2.png';
     filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
     exportgraphics(fig, filepath)
 end
 
 
+% RETRY THE ABOVE COMPARISON PLOT BUT INTERPOLATE THE CTD DATA TO MATCH THE
+% GLORYS DEPTH/PRESSURE LEVELS... I DON'T EXPECT IT WILL MAKE MUCH
+% DIFFERENCE BUT IT'S WHAT SALLY SUGGESTED...
 
+comparisons.difTemp = nan(length(dat.depth), length(Data.stn));
+comparisons.difSalin = nan(length(dat.depth), length(Data.stn));
 
-
-switch source
-    case 'BAS central storage'
-
-        nrows = 2; % top = temperature, bottom = salinity
-        ncols = 4; % one column per CTD cast
-        h = 5; % plot height
-        w = 5; % and width
-        logDepth = false; % depth axis on log-scale?
-
-        for i = 1:ncasts
-            if i == 1, figNum = 0; end
-            plotCount = mod(i, ncols);
-            if plotCount == 0, plotCount = ncols; end
-            newFig = plotCount == 1;
-            if newFig
-                figNum = figNum + 1;
-                figName = ['plot' num2str(figNum)];
-                diffPlotHandles.(figName) = figure;
-                set(diffPlotHandles.(figName), {'Units', 'Position'}, {'inches', [0, 0, w*ncols, h*nrows]})
-            end
-            % temperature
-            subplot(nrows, ncols, plotCount)
-            idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
-            dataTemp = Data.temp(:,i);
-            modTemp = idat.temperature;
-            dataDepth = Data.depth(:,i);
-            modDepth = idat.depth;
-            % interpolate model output to match ctd measurement depths
-            modTempi = interp1(modDepth, modTemp, dataDepth);
-            difTemp = modTempi - dataTemp;
-            ratTemp = modTempi ./ dataTemp;
-            switch plotType
-                case 'ratios'
-                    xvar = ratTemp;
-                case 'differences'
-                    xvar = difTemp;
-%                     xvar = xvar ./ mean(dataTemp, 'omitnan');
-%                     xvar = xvar ./ std(dataTemp, 'omitnan');
-            end
-            plot(xvar, dataDepth, 'r')
-            set(gca, 'YDir','reverse')
-            if logDepth
-                set(gca, 'YScale', 'log')
-            end
-            xlabel(['temperature difference (' char(176) 'C)'])
-            ylabel('depth (m)')
-            title(['event ' num2str(Data.stn(i))], 'FontWeight', 'normal')
-            % salinity
-            subplot(nrows, ncols, plotCount + ncols)
-            dataSal = Data.salin(:,i);
-            modSal = idat.salinity;
-            dataDepth = Data.depth(:,i);
-            modDepth = idat.depth;
-            % interpolate model output to match ctd measurement depths
-            modSali = interp1(modDepth, modSal, dataDepth);
-            difSal = modSali - dataSal;
-            ratSal = modSali ./ dataSal;
-            switch plotType
-                case 'ratios'
-                    xvar = ratSal;
-                case 'differences'
-                    xvar = difSal;
-%                     xvar = xvar ./ mean(dataSal, 'omitnan');
-%                     xvar = xvar ./ std(dataSal, 'omitnan');
-            end
-            plot(xvar, dataDepth, 'b')
-            set(gca, 'YDir','reverse')
-            if logDepth
-                set(gca, 'YScale', 'log')
-            end
-            xlabel('salinity difference')
-            ylabel('depth (m)')
-            title(['station ' num2str(Data.stn(i))], 'FontWeight', 'normal')
-            if plotCount == ncols
-                sgtitle('Compare GLORYS model to CTD measurements')
-            end
-        end
+for i = 1:ncasts
+    idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
+    ny = length(idat.(modVar));
+    % interpolate ctd measures to match modelled measurement
+    % depths/pressures
+    iDatX = Data.(ctdVar)(:,i);
+    iDatY = Data.temp(:,i);
+    ind = ~isnan(iDatX);
+    iDat.tempInterp = interp1(iDatX(ind), iDatY(ind), idat.(modVar));
+    iDatY = Data.salin(:,i);
+    iDat.salinInterp = interp1(iDatX(ind), iDatY(ind), idat.(modVar));
+    comparisons.difTemp(1:ny,i) = idat.temperature - iDat.tempInterp;
+    comparisons.difSalin(1:ny,i) = idat.salinity - iDat.salinInterp;
 end
+
+% Find the across-ctd casts mean and st.dev.
+summaryStats.mt = mean(comparisons.difTemp, 2, 'omitnan');
+summaryStats.ms = mean(comparisons.difSalin, 2, 'omitnan');
+summaryStats.sdt = std(comparisons.difTemp, 1, 2, 'omitnan');
+summaryStats.sds = std(comparisons.difSalin, 1, 2, 'omitnan');
+
+% Summary plots showing deviation of GLORYS model outputs from CTD measures.
+% Temperature
+
+switch depthOrPressure
+    case 'depth'
+        yvar = dat.depth;
+    case 'pressure'
+        yvar = squeeze(dat.pressure(1,1,:,1));
+end
+
+savePlots = true;
+lw = 1; % line width for summary stats
+
+fig = figure;
+set(fig, {'Units', 'Position'}, {'inches', [0, 0, 8, 4]})
+subplot(1,2,1)
+Col = [0.65, 0.65, 0.65, 0.3]; % light grey semi-transparent lines for all individual CTD casts
+
+plot(comparisons.difTemp, yvar, 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
+% plot(comparisons.difTemp(1:end-1,:), yvar(1:end-1), 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
+
+hold on
+plot(summaryStats.mt, yvar, 'Color', [0, 0, 0], 'LineWidth', lw)
+plot([summaryStats.mt - summaryStats.sdt, summaryStats.mt + summaryStats.sdt], ...
+    yvar, '--', 'Color', [0, 0, 0], 'LineWidth', lw)
+xl = xlim;
+yl = [0, max(yvar(~isnan(summaryStats.mt)))];
+plot([0, 0], yl, 'r:', 'LineWidth', lw)
+set(gca, 'YDir', 'reverse')
+ylabel(ylab)
+xlabel('temperature difference')
+yl = ylim;
+
+l = 1/8*diff(xl); % legend line length
+lx = 1/12*diff(xl); % legend x inset
+ly = 1/20*diff(yl); % legend y inset
+lys = 1/20*diff(yl); % legend y spacing
+lts = 0.25 * l; % text space
+fs = 8; % font size
+
+plot([xl(1)+lx, xl(1)+lx+l], [yl(2)-ly, yl(2)-ly], 'r:', 'LineWidth', lw)
+text(lts + xl(1)+lx+l, yl(2)-ly, 'zero difference', 'FontSize', fs)
+plot([xl(1)+lx, xl(1)+lx+l], [yl(2)-ly-lys, yl(2)-ly-lys], 'Color', Col)
+text(lts + xl(1)+lx+l, yl(2)-ly-lys, 'individual samples', 'FontSize', fs)
+plot([xl(1)+lx, xl(1)+lx+l], [yl(2)-ly-2*lys, yl(2)-ly-2*lys], '--', 'Color', [0, 0, 0], 'LineWidth', lw)
+text(lts + xl(1)+lx+l, yl(2)-ly-2*lys, 'mean \pm st.dev.', 'FontSize', fs)
+plot([xl(1)+lx, xl(1)+lx+l], [yl(2)-ly-3*lys, yl(2)-ly-3*lys], 'Color', [0, 0, 0], 'LineWidth', lw)
+text(lts + xl(1)+lx+l, yl(2)-ly-3*lys, 'mean', 'FontSize', fs)
+hold off
+
+% Salinity
+subplot(1,2,2)
+Col = [0.65, 0.65, 0.65, 0.3]; % light grey semi-transparent lines for all individual CTD casts
+plot(comparisons.difSalin, yvar, 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
+hold on
+plot(summaryStats.ms, yvar, 'Color', [0, 0, 0], 'LineWidth', lw)
+plot([summaryStats.ms - summaryStats.sds, summaryStats.ms + summaryStats.sds], ...
+    yvar, '--', 'Color', [0, 0, 0], 'LineWidth', lw)
+yl = [0, max(yvar(~isnan(summaryStats.mt)))];
+% yl = ylim;
+plot([0, 0], yl, 'r:', 'LineWidth', lw)
+hold off
+set(gca, 'YDir', 'reverse')
+set(gca, 'XLim', [-0.5, 0.5]) % crop the plot
+xlabel('salinity difference')
+
+sgtitle({'Compare GLORYS model output to CTD measures', 'Lines are modelled minus measured values'})
+
+
+
 
