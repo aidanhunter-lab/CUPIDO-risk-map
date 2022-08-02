@@ -203,15 +203,15 @@ switch source
         Data = load('jr82data_nospikes.mat');
         CTDtimes = readcell('sample times.txt', 'Delimiter', ' ');
 
-        % These data are in terms of pressure and exclude depth.
-        % Calculate a depth field using the hydrostatic water pressure
-        % formula: pressure = density * gravity acceleratoin * depth
-        rho = 1023.6; % saltwater density (at surface??)
-        g = 9.81;
-        P = Data.jr82press; % pressure in decibars -- I think!
-        P = P * 1e4; % convert decibars to Pascals
-        d = P ./ (rho * g); % this shoud be improved... the density is not independent of depth
-        Data.depth = d;
+%         % These data are in terms of pressure and exclude depth.
+%         % Calculate a depth field using the hydrostatic water pressure
+%         % formula: pressure = density * gravity acceleratoin * depth
+%         rho = 1023.6; % saltwater density (at surface??)
+%         g = 9.81;
+%         P = Data.jr82press; % pressure in decibars -- I think!
+%         P = P * 1e4; % convert decibars to Pascals
+%         d = P ./ (rho * g); % this shoud be improved... the density is not independent of depth
+%         Data.depth = d;
 
 
 %         Data.jr82datenum = nan(size(Data.jr82stn));
