@@ -595,67 +595,80 @@ end
 
 %% Compare the density profiles of CTD measures and GLORYS output
 
+switch source
+
+    case 'BAS central storage'
+
+        nrows = 2;
+        ncols = 4;
+        h = 5; % plot height
+        w = 5; % and width
+        logY = false; % density axis on log-scale?
+
+        for i = 1:ncasts
+            if i == 1, figNum = 0; end
+            plotCount = mod(i, ncols*nrows);
+            if plotCount == 0, plotCount = ncols*nrows; end
+            newFig = plotCount == 1;
+            if newFig
+                figNum = figNum + 1;
+                figName = ['plot' num2str(figNum)];
+                densityPlotHandles.(figName) = figure;
+                set(densityPlotHandles.(figName), {'Units', 'Position'}, {'inches', [0, 0, w*ncols, h*nrows]})
+            end
+            subplot(nrows , ncols, plotCount)
+            idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
+            plot(Data.density(:,i), Data.(ctdVar)(:,i), 'Color', 'black')
+            hold on
+            plot(idat.density, idat.(modVar), 'Color', 'black', 'LineStyle', '--')
+            hold off
+            set(gca, 'YDir','reverse')
+            switch logY
+                case true
+                    set(gca, 'YScale', 'log')
+            end
+            xlabel('water density (kg m^{-3})')
+            ylabel(ylab)
+            title(['event ' num2str(Data.stn(i))], 'FontWeight', 'normal')
+            if plotCount == 1
+                legend('CTD', 'model', 'Location', 'southeast')
+            end
+            if plotCount == ncols*nrows
+                sgtitle('Compare GLORYS model to CTD measurements')
+            end
+            pause(0.25)
+        end
+
+
+    case 'BODC'
+
+end
+
+% These plots of density show a much better match between CTD and GLORYS
+% model than the plot of salinty and temperature.
+% Density decreases with temperature and increases with salinity, so it
+% seems that the model either over- or under-estimated both temperature and
+% salinity, but that these discrepancies somewhat cancel out when densities
+% are calculated. Good news!
+
+close all
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-% RETRY THE ABOVE COMPARISON PLOT BUT INTERPOLATE THE CTD DATA TO MATCH THE
-% GLORYS DEPTH/PRESSURE LEVELS... I DON'T EXPECT IT WILL MAKE MUCH
-% DIFFERENCE BUT IT'S WHAT SALLY SUGGESTED... DIDN'T MAKE A DIFFERENCE
-
-comparisons.difTemp = nan(length(dat.depth), length(Data.stn));
-comparisons.difSalin = nan(length(dat.depth), length(Data.stn));
+% Make a summary plot of density comparisons, combining all of the above
+% samples...
+comparisons.difDensity = nan(size(Data.density));
 
 for i = 1:ncasts
     idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
-    ny = length(idat.(modVar));
-    % interpolate ctd measures to match modelled measurement
-    % depths/pressures
-    iDatX = Data.(ctdVar)(:,i);
-    iDatY = Data.temp(:,i);
-    ind = ~isnan(iDatX);
-    iDat.tempInterp = interp1(iDatX(ind), iDatY(ind), idat.(modVar));
-    iDatY = Data.salin(:,i);
-    iDat.salinInterp = interp1(iDatX(ind), iDatY(ind), idat.(modVar));
-    comparisons.difTemp(1:ny,i) = idat.temperature - iDat.tempInterp;
-    comparisons.difSalin(1:ny,i) = idat.salinity - iDat.salinInterp;
+    % interpolate model output to match ctd measurement depths
+    idat.denInterp = interp1(idat.(modVar), idat.density, Data.(ctdVar)(:,i));
+    comparisons.difDensity(:,i) = idat.denInterp - Data.density(:,i);
 end
 
 % Find the across-ctd casts mean and st.dev.
-summaryStats.mt = mean(comparisons.difTemp, 2, 'omitnan');
-summaryStats.ms = mean(comparisons.difSalin, 2, 'omitnan');
-summaryStats.sdt = std(comparisons.difTemp, 1, 2, 'omitnan');
-summaryStats.sds = std(comparisons.difSalin, 1, 2, 'omitnan');
-
-% Summary plots showing deviation of GLORYS model outputs from CTD measures.
-% Temperature
-
-switch depthOrPressure
-    case 'depth'
-        yvar = dat.depth;
-    case 'pressure'
-        yvar = squeeze(dat.pressure(1,1,:,1));
-end
+summaryStats.md = mean(comparisons.difDensity, 2, 'omitnan');
+summaryStats.sdd = std(comparisons.difDensity, 1, 2, 'omitnan');
 
 savePlots = true;
 lw = 1; % line width for summary stats
@@ -664,20 +677,18 @@ fig = figure;
 set(fig, {'Units', 'Position'}, {'inches', [0, 0, 8, 4]})
 subplot(1,2,1)
 Col = [0.65, 0.65, 0.65, 0.3]; % light grey semi-transparent lines for all individual CTD casts
-
-plot(comparisons.difTemp, yvar, 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
-% plot(comparisons.difTemp(1:end-1,:), yvar(1:end-1), 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
-
+plot(comparisons.difDensity(1:end-1,:), yvar(1:end-1), 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
 hold on
-plot(summaryStats.mt, yvar, 'Color', [0, 0, 0], 'LineWidth', lw)
-plot([summaryStats.mt - summaryStats.sdt, summaryStats.mt + summaryStats.sdt], ...
-    yvar, '--', 'Color', [0, 0, 0], 'LineWidth', lw)
+plot(summaryStats.md(1:end-1), yvar(1:end-1), 'Color', [0, 0, 0], 'LineWidth', lw)
+plot([summaryStats.md(1:end-1) - summaryStats.sdd(1:end-1), summaryStats.md(1:end-1) + summaryStats.sdd(1:end-1)], ...
+    yvar(1:end-1), '--', 'Color', [0, 0, 0], 'LineWidth', lw)
 xl = xlim;
-yl = [0, max(yvar(~isnan(summaryStats.mt)))];
+yl = [0, max(yvar(1:end-1))];
 plot([0, 0], yl, 'r:', 'LineWidth', lw)
 set(gca, 'YDir', 'reverse')
 ylabel(ylab)
-xlabel('temperature difference')
+title('absolute difference', 'FontWeight', 'normal')
+xlabel('density (kg m^{-3})')
 yl = ylim;
 
 l = 1/8*diff(xl); % legend line length
@@ -697,24 +708,30 @@ plot([xl(1)+lx, xl(1)+lx+l], [yl(2)-ly-3*lys, yl(2)-ly-3*lys], 'Color', [0, 0, 0
 text(lts + xl(1)+lx+l, yl(2)-ly-3*lys, 'mean', 'FontSize', fs)
 hold off
 
-% Salinity
-subplot(1,2,2)
-Col = [0.65, 0.65, 0.65, 0.3]; % light grey semi-transparent lines for all individual CTD casts
-plot(comparisons.difSalin, yvar, 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
+subplot(1, 2, 2)
+x = comparisons.difDensity ./ Data.density;
+plot(x(1:end-1,:), yvar(1:end-1), 'Color', Col); % omit the deepest values as they're only 2 measures there so the summary stats are useless
 hold on
-plot(summaryStats.ms, yvar, 'Color', [0, 0, 0], 'LineWidth', lw)
-plot([summaryStats.ms - summaryStats.sds, summaryStats.ms + summaryStats.sds], ...
-    yvar, '--', 'Color', [0, 0, 0], 'LineWidth', lw)
-yl = [0, max(yvar(~isnan(summaryStats.mt)))];
-% yl = ylim;
+mx = mean(x, 2, 'omitnan');
+sdx = std(x, 1, 2, 'omitnan');
+plot(mx(1:end-1), yvar(1:end-1), 'Color', [0, 0, 0], 'LineWidth', lw)
+plot([mx(1:end-1) - sdx(1:end-1), mx(1:end-1) + sdx(1:end-1)], ...
+    yvar(1:end-1), '--', 'Color', [0, 0, 0], 'LineWidth', lw)
+xl = xlim;
+yl = [0, max(yvar(1:end-1))];
 plot([0, 0], yl, 'r:', 'LineWidth', lw)
-hold off
 set(gca, 'YDir', 'reverse')
-set(gca, 'XLim', [-0.5, 0.5]) % crop the plot
-xlabel('salinity difference')
-
-sgtitle({'Compare GLORYS model output to CTD measures', 'Lines are modelled minus measured values'})
-
+title({'relative difference', 'scaled by CTD measure'}, 'FontWeight', 'normal')
+ylabel(ylab)
+xlabel('unitless')
 
 
+
+sgtitle({'Water density from GLORYS model compared to CTD measures', 'Lines are modelled minus measured values'})
+
+switch savePlots, case true
+    filename = 'GLORYS vs CTD JR82_density.png';
+    filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
+    exportgraphics(fig, filepath)
+end
 
