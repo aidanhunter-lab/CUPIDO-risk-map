@@ -22,7 +22,7 @@
 
 % Adjust search path to include all MatLab scripts and the 'data' directory
 project = 'CUPIDO-risk-map';
-thisFile = which('analyseGLORYS.m');
+thisFile = which('densityCalcGLORYS.m');
 baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
 addpath(genpath(fullfile(baseDirectory, 'MatLab')))
 addpath(genpath(fullfile(baseDirectory, 'data')))
@@ -119,14 +119,18 @@ for i = 1:nyrs
         add_offset = double(min(dat.density(:)));
         prec = 7e2; % Chosen to be compatible with the int16 storage
         scale_factor = double(1 / prec);
-        dat.density_packed = int16((dat.density - add_offset) / scale_factor);
+        FillValue = -32767; % NaN values represented by scalar when int16 is used to store data
+        dat.density_packed = (dat.density - add_offset) / scale_factor;
+        dat.density_packed(isnan(dat.density)) = FillValue;
+        dat.density_packed = int16(dat.density_packed);
         % Create new density variable in the NetCDF file
         nccreate(filename, 'density', 'Dimensions', ... 
             {'longitude', nlon, 'latitude', nlat, 'depth', ndep, 'time', 1}, ...
-            'Datatype', DataType)
+            'Datatype', DataType) % , 'FillValue', FillValue)
         % Save the (integer-transformed) density variable into the NetCDF file
         ncwrite(filename, 'density', dat.density_packed)
         % Store data attributes -- in same format as temperature and salinity
+        ncwriteatt(filename, 'density', '_FillValue', FillValue)
         ncwriteatt(filename, 'density', 'long_name', 'Density')
         ncwriteatt(filename, 'density', 'standard_name', 'sea_water_density')
         ncwriteatt(filename, 'density', 'units', 'kg/m^3')
