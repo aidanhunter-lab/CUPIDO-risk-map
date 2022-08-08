@@ -13,8 +13,9 @@
 % 2010. The data are monthly averages all recorded as either day 15 or 16
 % of the month.
 
-% There are 329 separate data sets, each approximately 340MB. All 12 months
-% of 1993-2019, and months 1-5 of 2020.
+% There are 329 separate data sets, each approximately 360MB. All 12 months
+% of 1993-2019, and months 1-5 of 2020. After running this script, each
+% file will increase in size to 540MB.
 
 
 %% Preamble
@@ -44,10 +45,6 @@ ntimes = 12 * (nyrs - 1) + 5; % number of data sets (see above description)
 % consuming, but necessary as the data are large.
 % With each loop, a data is loaded, the density variable is calculated,
 % then the new variable is saved into the data set for future use.
-
-
-% IMPORTANT: for data storage efficieny see
-% https://www.unidata.ucar.edu/software/netcdf/workshops/2010/bestpractices/Packing.html
 
 showProgressBar = true;
 
