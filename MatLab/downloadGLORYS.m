@@ -64,6 +64,9 @@ for i = 1:nyrs
         filename = append(year, month, day, ".nc");
         fileExists = exist(filename, 'file') == 2;
         switch fileExists, case true
+            switch showProgressBar, case true
+                waitbar(fileCount / niter, progress)
+            end
             continue
         end
         for k = 1:length(times)
@@ -77,6 +80,7 @@ for i = 1:nyrs
         switch showProgressBar, case true
             waitbar(fileCount / niter, progress)
         end
+        pause(0.25)
     end
 end
 

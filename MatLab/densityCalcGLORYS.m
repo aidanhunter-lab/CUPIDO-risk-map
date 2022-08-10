@@ -140,6 +140,7 @@ for i = 1:nyrs
         clearvars dat lon3D lat3D press3D
         switch showProgressBar, case true
             waitbar(fileCount / ntimes, progress)
+            pause(0.25)
         end
     end
 end
