@@ -13,15 +13,16 @@
 % 2010. The data are monthly averages all recorded as either day 15 or 16
 % of the month.
 
-% There are 329 separate data sets, each approximately 340MB. All 12 months
-% of 1993-2019, and months 1-5 of 2020.
+% There are 329 separate data sets, each approximately 360MB. All 12 months
+% of 1993-2019, and months 1-5 of 2020. After running this script, each
+% file will increase in size to 540MB.
 
 
 %% Preamble
 
 % Adjust search path to include all MatLab scripts and the 'data' directory
 project = 'CUPIDO-risk-map';
-thisFile = which('analyseGLORYS.m');
+thisFile = which('densityCalcGLORYS.m');
 baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
 addpath(genpath(fullfile(baseDirectory, 'MatLab')))
 addpath(genpath(fullfile(baseDirectory, 'data')))
@@ -44,10 +45,6 @@ ntimes = 12 * (nyrs - 1) + 5; % number of data sets (see above description)
 % consuming, but necessary as the data are large.
 % With each loop, a data is loaded, the density variable is calculated,
 % then the new variable is saved into the data set for future use.
-
-
-% IMPORTANT: for data storage efficieny see
-% https://www.unidata.ucar.edu/software/netcdf/workshops/2010/bestpractices/Packing.html
 
 showProgressBar = true;
 
@@ -122,14 +119,18 @@ for i = 1:nyrs
         add_offset = double(min(dat.density(:)));
         prec = 7e2; % Chosen to be compatible with the int16 storage
         scale_factor = double(1 / prec);
-        dat.density_packed = int16((dat.density - add_offset) / scale_factor);
+        FillValue = -32767; % NaN values represented by scalar when int16 is used to store data
+        dat.density_packed = (dat.density - add_offset) / scale_factor;
+        dat.density_packed(isnan(dat.density)) = FillValue;
+        dat.density_packed = int16(dat.density_packed);
         % Create new density variable in the NetCDF file
         nccreate(filename, 'density', 'Dimensions', ... 
             {'longitude', nlon, 'latitude', nlat, 'depth', ndep, 'time', 1}, ...
-            'Datatype', DataType)
+            'Datatype', DataType) % , 'FillValue', FillValue)
         % Save the (integer-transformed) density variable into the NetCDF file
         ncwrite(filename, 'density', dat.density_packed)
         % Store data attributes -- in same format as temperature and salinity
+        ncwriteatt(filename, 'density', '_FillValue', FillValue)
         ncwriteatt(filename, 'density', 'long_name', 'Density')
         ncwriteatt(filename, 'density', 'standard_name', 'sea_water_density')
         ncwriteatt(filename, 'density', 'units', 'kg/m^3')
@@ -139,6 +140,7 @@ for i = 1:nyrs
         clearvars dat lon3D lat3D press3D
         switch showProgressBar, case true
             waitbar(fileCount / ntimes, progress)
+            pause(0.25)
         end
     end
 end
