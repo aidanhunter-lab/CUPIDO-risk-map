@@ -459,17 +459,63 @@ close all
 plotType = 'differences'; % may be 'differences'
 % plotType = 'ratios'; % or 'ratios'
 
-comparisons.difTemp = nan(size(Data.temp));
-comparisons.difSalin = nan(size(Data.salin));
+interpolateOrMean = 'mean'; % how to compare the model and data...
+% Interpolating the model to match the CTD depths is a neater way to code 
+% this but, technically, as the model represents depth layer averages it
+% may be better to average the CTD data over the model depth layers.
 
-for i = 1:ncasts
-    idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
-    % interpolate model output to match ctd measurement depths
-    idat.tempInterp = interp1(idat.(modVar), idat.temperature, Data.(ctdVar)(:,i));
-    idat.salinInterp = interp1(idat.(modVar), idat.salinity, Data.(ctdVar)(:,i));
-    comparisons.difTemp(:,i) = idat.tempInterp - Data.temp(:,i);
-    comparisons.difSalin(:,i) = idat.salinInterp - Data.salin(:,i);
+switch interpolateOrMean
+    case 'interpolate'
+
+        comparisons.difTemp = nan(size(Data.temp));
+        comparisons.difSalin = nan(size(Data.salin));
+
+        % Here the model output is interpolated to match the CTD data (the data
+        % were collected at regular intervals ~2m, whereas the model outputs are
+        % much more coarse)
+        for i = 1:ncasts
+            idat = dat.(['cast' num2str(i)]); % model output corresponding to CTD cast i
+            % interpolate model output to match ctd measurement depths
+            idat.tempInterp = interp1(idat.(modVar), idat.temperature, Data.(ctdVar)(:,i));
+            idat.salinInterp = interp1(idat.(modVar), idat.salinity, Data.(ctdVar)(:,i));
+            comparisons.difTemp(:,i) = idat.tempInterp - Data.temp(:,i);
+            comparisons.difSalin(:,i) = idat.salinInterp - Data.salin(:,i);
+        end
+
+    case 'mean'
+
+        % Rather than interpolating, it may be better to average the CTD data over
+        % the depth (pressure) ranges corresponding to the model. This is because
+        % the model output represent an average across the depth range.
+        comparisons.difTemp = nan(size(dat.depth, 1), ncasts);
+        comparisons.difSalin = nan(size(dat.depth, 1), ncasts);
+
+        for i = 1:ncasts
+            cast = ['cast' num2str(i)];
+            idat = dat.(cast); % model output corresponding to CTD cast i
+            n = size(idat.pressure, 1);
+            % Find midpoints of modelled depth/pressure
+            mid = nan(n + 1, 1);
+            mid(2:end-1,:) = 0.5 * (idat.pressure(1:end-1) + idat.pressure(2:end));
+            % Pad the pressure midpoint vector
+            mid([1,end],:) = [0; mid(end-1) ^ 2 / mid(end-2)];
+            Data.(cast).press = nan(n, 1);
+            Data.(cast).temp = nan(n, 1);
+            Data.(cast).salin = nan(n, 1);
+            for j = 1:n
+                ind = mid(j) <= Data.press(:,i) & Data.press(:,i) < mid(j+1);
+                if all(~ind), continue; end
+                Data.(cast).press(j) = mean(Data.press(ind,i), 'omitnan');
+                Data.(cast).temp(j) = mean(Data.temp(ind,i), 'omitnan');
+                Data.(cast).salin(j) = mean(Data.salin(ind,i), 'omitnan');
+            end
+            comparisons.difTemp(1:n,i) = idat.temperature - Data.(cast).temp;
+            comparisons.difSalin(1:n,i) = idat.salinity - Data.(cast).salin;
+        end
+
+
 end
+
 
 % Find the across-ctd casts mean and st.dev.
 summaryStats.mt = mean(comparisons.difTemp, 2, 'omitnan');
@@ -480,14 +526,37 @@ summaryStats.sds = std(comparisons.difSalin, 1, 2, 'omitnan');
 % Summary plots showing deviation of GLORYS model outputs from CTD measures.
 % Temperature
 
-switch depthOrPressure
-    case 'depth'
-        ind = find(~isnan(Data.depth(end,:)),1);
-        yvar = Data.depth(:,ind); clearvars ind
-    case 'pressure'
-        ind = find(~isnan(Data.press(end,:)),1);
-        yvar = Data.press(:,ind); clearvars ind
+switch interpolateOrMean
+    case 'interpolate'
+        switch depthOrPressure
+            case 'depth'
+                ind = find(~isnan(Data.depth(end,:)),1);
+                yvar = Data.depth(:,ind); clearvars ind
+            case 'pressure'
+                ind = find(~isnan(Data.press(end,:)),1);
+                yvar = Data.press(:,ind); clearvars ind
+        end
+
+    case 'mean'
+        switch depthOrPressure
+            case 'depth'
+                yvar = nan(size(dat.depth, 1), ncasts);
+                for i = 1:ncasts
+                    idat = dat.(['cast' num2str(i)]);
+                    n = size(idat.depth, 1);
+                    yvar(1:n,i) = idat.depth;
+                end
+            case 'pressure'
+                yvar = nan(size(dat.depth, 1), ncasts);
+                for i = 1:ncasts
+                    idat = dat.(['cast' num2str(i)]);
+                    n = size(idat.pressure, 1);
+                    yvar(1:n,i) = idat.pressure;
+                end
+        end
+        yvar = mean(yvar, 2, 'omitnan');
 end
+
 
 savePlots = true;
 lw = 1; % line width for summary stats
@@ -545,7 +614,7 @@ xlabel('salinity difference')
 sgtitle({'Compare GLORYS model output to CTD measures', 'Lines are modelled minus measured values'})
 
 switch savePlots, case true
-    filename = 'GLORYS vs CTD JR82_salinity and temperature_2.png';
+    filename = 'GLORYS vs CTD JR82_salinity and temperature.png';
     filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
     exportgraphics(fig, filepath)
 end
