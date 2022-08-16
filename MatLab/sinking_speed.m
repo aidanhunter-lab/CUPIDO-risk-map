@@ -14,23 +14,29 @@ function v = sinking_speed(shape, rho, rho_p, mu, g, varargin)
 % ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 extractVarargin(varargin)
+if ~exist('L', 'var'), L = []; end
+if ~exist('D', 'var'), D = []; end
+if ~exist('Ds', 'var'), Ds = []; end
+if ~exist('Di', 'var'), Di = []; end
+if ~exist('Dl', 'var'), Dl = []; end
 
 switch shape
 
     case 'cylinder'
         % Pellet length and diameter must be given
-        if ~exist('L', 'var') || ~exist('D', 'var')
+        if isempty(L) || isempty(D)
             error('Faecal pellet length and diameter, L and D, must be specified in varargin.')
         end
         v = 0.079 ./ mu .* (rho_p - rho) .* g .* L ^ 2 * (L ./ D) ^ -1.664;
 
     case 'ellipsoid'
         % Pellet small, medium and large diameters must be given
-        if ~exist('Ds', 'var') || ~exist('Di', 'var') || ~exist('Dl', 'var')
+        if isempty(Ds) || isempty(Di) || isempty(Dl)
             error('Faecal pellet diameters (short = Ds, intermediate = Di, large = Dl) must be specified in varargin.')
         end
         E = shape_ellipsoid(Ds, Di, Dl);
         v = 1 ./ 18 ./ mu .* {rho_p - rho} .* g .* Dn ^ 2 .* E ^ 0.38;
+
 end
 end
 
