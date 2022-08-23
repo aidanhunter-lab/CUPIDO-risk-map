@@ -67,58 +67,24 @@ isOceanCell = any(aboveSeafloor, 3); % index all relevant lon-lat cells
 
 %% Calculate sinking speeds
 % The sinking speed equations are written in cgs units.
-% Specify parameter values
-pars.mu = 0.00189 * 1e1;  % seawater viscosity, g / cm / s. [1 N s / m^2 = 1 Pa s = 10 g / cm / s]
-pars.g = 9.81 * 1e2;      % acceleration due to gravity, cm / s^2. [1 m / s^2 = 10^2 cm / s^2]
-% See Atkinson et al., 2012, for krill faecal pellet properties
-pars.rho_p = 1116 * 1e-3; % faecal pellet density, g / cm^3. [1 kg / m^3 = 10^-3 g / cm^3]
-% pars.rho_p = 1220 * 1e-3; % faecal pellet density, g / cm^3. [1 kg / m^3 = 10^-3 g / cm^3] (value from Komar 1980)
-
-% Faecal pellet dimensions (cm) crudely approximated from Komar et al 1981.
-% Range of euphausiid faecal pellet volume measured by Komar is approx
-% 1e-5 -> 5e-5. Antarctic krill likely near the upper side of this range.
-% This is corroborated by Schmidt et al 2012, who use a standard pellet
-% volume of 0.05 mm^3 = 5e-5 cm^3.
-% pars.V = 5e-5;
-
-% Atkinson et al 2012 provide more detail on krill faecal pellet
-% dimensions, giving a larger median volume.
-% pars.V = 1e-3 * 0.0754; % cm^3
-
-pars.shape = 'cylinder';  % faecal pellet shape (may be cylinder or ellipsoid)
-% It seems that the Atkinson data refer to cylindrical pellets
-pars.L = 2667 * 1e-4; % median length (cm)
-pars.D = 178 * 1e-4; % median width (cm)
-
-% Faecal pellet dimensions, cm.
-% For now, let's assume that faecal pellets are either cylindrical OR
-% ellipsoidal. We may introduce a mixture of shapes later...
-switch pars.shape
-    case 'cylinder'
-        pars.Ds = []; pars.Di = []; pars.Dl = [];
-        pars.V = 0.25 * pi * pars.D ^ 2 * pars.L;
-%         x = 15; % assume that length is x times diameter (L = xD)
-%         pars.D = ((4 * pars.V) / (pi * x)) ^ (1 / 3); % diameter
-%         pars.L = x * pars.D; % length
-%         pars.Ds = []; pars.Di = []; pars.Dl = [];
-    case 'ellipsoid'
-        pars.Ds = pars.D; pars.Di = pars.D;
-        pars.Dl = pars.L;
-        pars.V = 1 / 6 * pi * pars.Ds * pars.Di * pars.Dl;
-%         % assume that the two smallest diameters are equal (Di = Ds), and
-%         % that the largest diameter is x times the smallest (Dl = xDi = xDs)
-%         x = 5;
-%         pars.Ds = ((6 * pars.V) / (pi * x)) ^ (1 / 3); % smallest principal axis (diameter)
-%         pars.Di = pars.Ds; % intermediate
-%         pars.Dl = x * pars.Ds; % largest
-%         pars.L = []; pars.D = [];
-end
+% Load parameter values
+pars = initialise_parameters();
 
 % Find faecal pellet sinking speed, cm / s
 [v, Re] = sinking_speed(pars.shape, 1e-3 * dat.density, pars.rho_p, pars.mu, pars.g, ...
     'L', pars.L, 'D', pars.D, 'Dl', pars.Dl, 'Di', pars.Di, 'Ds', pars.Ds, ...
-    'useMeans_Re', true, 'returnMax_Re', true);
+    'useMeans_Re', false, 'returnMax_Re', true);
 
+% PERHAPS THE SINKING SPEED EQUATIONS COULD BE MODIFIED TO ACCOUNT FOR
+% VOLUME REDUCTIONS RESULTING FROM REMINERALISATION. I DON'T WANT TO MODEL
+% FAECAL PELLETS OF VARYING SIZE (THEY WILL BE CONSTANT VOLUME), HOWEVER, I
+% DO WANT TO MODEL REMINERALISATION WHICH IS A PROCESS THAT REDUCES SIZE
+% AND THEREFORE REDUCES SINK SPEED. REMINERALISATION WILL BE MODELLED AS
+% REDUCTION IN TOTAL CARBON (REDUCING THE NUMBER OF FAECAL PELLETS, BUT NOT
+% THEIR SIZE). I COULD TRY TO MODIFY THE SINK SPEED EQUATION TO ACCOUNT FOR
+% THIS BY REDUCING SINK SPEED WITHIN DEEPER LAYERS WHERE PELLETS HAVE SPENT
+% MORE TIME BEING DEGRADED. THIS WILL TAKE A BIT OF THOUGHT, BUT IS WORTH
+% KEEPING IN MIND... I'M NOT SURE HOW LARGE/IMPORTANT THE EFFECT WILL BE...
 
 
 %% Include plastics
