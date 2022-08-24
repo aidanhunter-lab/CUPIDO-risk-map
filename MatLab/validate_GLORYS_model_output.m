@@ -121,18 +121,35 @@ end
 
 %% Load GLORYS data
 
-% Use info stored in extractData to inform GLORYS data download. Get data
-% from: https://resources.marine.copernicus.eu/product-detail/GLOBAL_MULTIYEAR_PHY_001_030/DATA-ACCESS
+% The required GLORYS data should have already been downloaded using script
+% downloadGLORYS.m.
+% Otherwise, data may be manually downloaded from:
+% https://resources.marine.copernicus.eu/product-detail/GLOBAL_MULTIYEAR_PHY_001_030/DATA-ACCESS
 
-% I have the full GLORYS data set for South Georgia stored on my laptop,
-% but as it's a large file it may not be suitable for GitHub (this should
-% be fine with LFS... but there's some sort of problem).
+% If the data were downloaded to a directory outside of the Git repo then
+% we need to locate it -- see 'out_dir' in downloadGLORYS.m.
+copydata = true; % copy data into Git repo (if 'true' then the data should be stored using Git-LFS).
 
 switch source
     case 'BODC'
         filename = 'cmems_mod_glo_phy_my_0.083_P1M-m_1656419648164.nc'; % This South Georgia monthly means, lots of years
     case 'BAS central storage'
-        filename = 'cmems_mod_glo_phy_my_0.083_P1D-m_1657890500777.nc'; % Scotia Sea daily means, 2003 Jan-Feb
+        filename = '20030107-20030217_daily.nc'; % Scotia Sea daily means, 2003 Jan-Feb
+        filepath = filename;
+        inRepo = exist(filename, 'file') == 2;
+        if ~inRepo
+            filepath = ['/home/aihunt/Documents/work/CUPIDO/data/physical_models/' ...
+                'Copernicus_Programme/Mercator_Ocean_International/GLORYS/Scotia Sea/2003 Jan-Feb'];
+            filepath = fullfile(filepath, filename);
+            switch copydata, case true
+                destination = fullfile(baseDirectory, 'data/physical_models/Copernicus_Programme/Mercator_Ocean_International/GLORYS/Scotia Sea/2003 Jan-Feb');
+                if exist(destination, 'dir') ~= 7
+                    mkdir(destination)
+                end
+                copyfile(filepath, destination)
+            end
+        end
+%         filename = 'cmems_mod_glo_phy_my_0.083_P1D-m_1657890500777.nc'; % Scotia Sea daily means, 2003 Jan-Feb
 end
 
 ncinfo(filename)
