@@ -8,8 +8,14 @@ thisFile = which('analyseGLORYS.m');
 baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
 addpath(genpath(fullfile(baseDirectory, 'MatLab')))
 addpath(genpath(fullfile(baseDirectory, 'data')))
+% Where data are stored in the Git-repo
 dataPath = fullfile(baseDirectory, 'data', 'physical_models', ... 
     'Copernicus_Programme', 'Mercator_Ocean_International', 'GLORYS', 'Southern Ocean');
+if exist(dataPath, 'dir') ~= 7, mkdir(dataPath); end
+% Where data were stored when downloaded
+dataStorage = ['/home/aihunt/Documents/work/CUPIDO/data/physical_models/' ...
+    'Copernicus_Programme/Mercator_Ocean_International/GLORYS/Southern Ocean'];
+
 Months = ["01","02","03","04","05","06","07","08","09","10","11","12"];
 Days = ["15","16"];
 
@@ -19,8 +25,60 @@ Days = ["15","16"];
 % how much to load into RAM. Let's limit it to a single year or season,
 % i.e, 12 months.
 
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+% FIRST WE WILL COPY DATA INTO THE GIT REPO FOR EASE OF USE -- BUT ONLY A
+% SINGLE SEASON (THE MOST RECENT) BECAUSE THESE DATA ARE VERY LARGE.
+season = 2019;
+nseasons = length(season);
+ymin = season;
+ymax = season + 1;
+yrs = ymin:ymax;
+months = [7:12, 1:6]; % Jul-Dec, Jan-Jun
+nmonths = length(months);
+ntimes = nseasons * nmonths;
+% Data are stored with file names given by date, so define a struct with
+% the required dates
+for i = 1:ntimes
+    imonth = mod(i-1, nmonths) + 1;
+    month = months(imonth);
+    if ismember(month, 7:12)
+        iyr = 1;
+    elseif ismember(month, 1:6)
+        iyr = 2;
+    end
+    yr = yrs(iyr);
+    timeDat.season(i) = season;
+    timeDat.year(i) = yr;
+    timeDat.month(i) = month;
+end
+clearvars imonth month iyr yr ymin ymax yrs months nmonths
+disp(timeDat)
+
+for i = 1:ntimes
+    f = {fullfile(dataPath, append(num2str(timeDat.year(i)), Months(timeDat.month(i) == str2double(Months)), Days(1), ".nc")), ...
+        fullfile(dataPath, append(num2str(timeDat.year(i)), Months(timeDat.month(i) == str2double(Months)), Days(2), ".nc"))};
+    fileExists = [exist(f{1}, 'file'), exist(f{2}, 'file')] == 2;
+    if any(fileExists), continue; end
+    if season == 2019
+        filenames = {append(num2str(timeDat.year(i)), Months(timeDat.month(i) == str2double(Months)), Days(1), ".nc"), ...
+            append(num2str(timeDat.year(i)), Months(timeDat.month(i) == str2double(Months)), Days(2), ".nc")};
+        SOURCE = {fullfile(dataStorage, filenames{1}), ...
+            fullfile(dataStorage, filenames{2})};
+        fileExists = [exist(SOURCE{1}, 'file'), exist(SOURCE{2}, 'file')] == 2;
+        if ~any(fileExists), continue; end
+        SOURCE = SOURCE{fileExists};
+        filename = filenames{fileExists};
+        DESTINATION = fullfile(dataPath, filename);
+        copyfile(SOURCE, DESTINATION);
+    end
+end
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 % Choose a SINGLE season from 1993-2019. (A season is defined as starting 
-% July 1st and ending June 30th.)
+% July 1st and ending June 30th.) For now let's just use the most recent
+% season, 2019, which should be in the Git repo.
 season = 2019;
 nseasons = length(season);
 ymin = season;
@@ -47,7 +105,7 @@ for i = 1:ntimes
     timeDat.year(i) = yr;
     timeDat.month(i) = month;
 end
-clearvars imonth month iyr yr season nseasons ymin ymax yrs months nmonths
+clearvars imonth month iyr yr ymin ymax yrs months nmonths
 disp(timeDat)
 
 % Load water density data into struct 'dat'
@@ -55,6 +113,7 @@ for i = 1:ntimes
     f = {fullfile(dataPath, append(num2str(timeDat.year(i)), Months(timeDat.month(i) == str2double(Months)), Days(1), ".nc")), ...
         fullfile(dataPath, append(num2str(timeDat.year(i)), Months(timeDat.month(i) == str2double(Months)), Days(2), ".nc"))};
     fileExists = [exist(f{1}, 'file'), exist(f{2}, 'file')] == 2;
+
     if ~any(fileExists), continue; end
     filename = f{fileExists}; % choose the file name that exists in the search path
     if i ==1
