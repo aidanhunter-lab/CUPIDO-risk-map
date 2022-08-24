@@ -22,11 +22,11 @@ season = 2019;
 months = [10:12, 1:3];
 % Load the seawater density values.
 % Model extraction & density calculations must be done already.
-waterDensity = loadWaterDensity(path_physicalModel, season, months);
+dat = loadWaterDensity(path_physicalModel, season, months);
 
 % Number of lat-lon grid cells
-nlon = length(waterDensity.lon);
-nlat = length(waterDensity.lat);
+nlon = length(dat.lon);
+nlat = length(dat.lat);
 
 %% Set up depth layers
 % The GLORYS model output contains 50 depth layers going to nearly 6000 m,
@@ -55,47 +55,51 @@ wm = 0.5 * (wi(1:end-1) + wi(2:end));          % depth layer midpoints
 
 % The GLORYS model output corresponds to depth layer midpoints. Interpolate
 % the model to match our selected depth layers.
-waterDensity.density = permute(waterDensity.density, [3 1 2 4]); % shift depth to first dimension
-% CHECK THE INTERP OPTIONS TO MAKE SURE THE BOUNDARIES ARE HANDLED WELL...
-waterDensity.density = interp1(waterDensity.depth, waterDensity.density, wm);
-waterDensity.density = permute(waterDensity.density, [2 3 1 4]); % restore dimension order
-waterDensity.depth = wm;
+dat.density = permute(dat.density, [3 1 2 4]); % shift depth to first dimension
+dat.density = interp1(dat.depth, dat.density, wm);
+dat.density = permute(dat.density, [2 3 1 4]); % restore dimension order
+dat.depth = wm;
 
 % Index the ocean grid cells -- for efficiency, other cells may be omitted
 % from calculations.
-aboveSeafloor = ~isnan(waterDensity.density(:,:,:,1)); % index all relevant lon-lat-depth cells
+aboveSeafloor = ~isnan(dat.density(:,:,:,1)); % index all relevant lon-lat-depth cells
 isOceanCell = any(aboveSeafloor, 3); % index all relevant lon-lat cells
 
 %% Calculate sinking speeds
 % The sinking speed equations are written in cgs units.
-shape = 'ellipsoid';  % faecal pellet shape
-% rho_p = 1060 * 1e-3; % faecal pellet density, g / cm^3. [1 kg / m^3 = 10^-3 g / cm^3]
-rho_p = 1300 * 1e-3; % faecal pellet density, g / cm^3. [1 kg / m^3 = 10^-3 g / cm^3]
-mu = 0.00189 * 1e1;  % seawater viscosity, g / cm / s. [1 N s / m^2 = 1 Pa s = 10 g / cm / s]
-g = 9.81 * 1e2;      % acceleration due to gravity, cm / s^2. [1 m / s^2 = 10^2 cm / s^2]
-
-% Faecal pellet dimensions, cm.
-% For now, let's assume that faecal pellets are either cylindrical OR
-% ellipsoidal. We may introduce a mixture of shapes later...
-% The values have been crudely approximated from Komar et al. 1981.
-switch shape
-    case 'cylinder'
-        L = 0.09847; % length
-        D = 0.01969; % diameter
-        Ds = []; Di = []; Dl = [];
-        V = 0.25 * pi * D ^ 2 * L; % volume
-    case 'ellipsoid'
-        Dl = 0.09847; % largest principal axis (diameter)
-        Di = 0.03411; % intermediate
-        Ds = 0.01706; % smallest
-        L = []; D = [];
-        V = pi/6 * Dl * Di * Ds; % volume
-end
+% Load parameter values
+pars = initialise_parameters();
 
 % Find faecal pellet sinking speed, cm / s
-[v, Re] = sinking_speed(shape, 1e-3 * waterDensity.density, rho_p, mu, g, ...
-    'L', L, 'D', D, 'Dl', Dl, 'Di', Di, 'Ds', Ds, ...
-    'useMeans_Re', true, 'returnMax_Re', true);
+[v, Re] = sinking_speed(pars.shape, 1e-3 * dat.density, pars.rho_p, pars.mu, pars.g, ...
+    'L', pars.L, 'D', pars.D, 'Dl', pars.Dl, 'Di', pars.Di, 'Ds', pars.Ds, ...
+    'useMeans_Re', false, 'returnMax_Re', true);
+
+% PERHAPS THE SINKING SPEED EQUATIONS COULD BE MODIFIED TO ACCOUNT FOR
+% VOLUME REDUCTIONS RESULTING FROM REMINERALISATION. I DON'T WANT TO MODEL
+% FAECAL PELLETS OF VARYING SIZE (THEY WILL BE CONSTANT VOLUME), HOWEVER, I
+% DO WANT TO MODEL REMINERALISATION WHICH IS A PROCESS THAT REDUCES SIZE
+% AND THEREFORE REDUCES SINK SPEED. REMINERALISATION WILL BE MODELLED AS
+% REDUCTION IN TOTAL CARBON (REDUCING THE NUMBER OF FAECAL PELLETS, BUT NOT
+% THEIR SIZE). I COULD TRY TO MODIFY THE SINK SPEED EQUATION TO ACCOUNT FOR
+% THIS BY REDUCING SINK SPEED WITHIN DEEPER LAYERS WHERE PELLETS HAVE SPENT
+% MORE TIME BEING DEGRADED. THIS WILL TAKE A BIT OF THOUGHT, BUT IS WORTH
+% KEEPING IN MIND... I'M NOT SURE HOW LARGE/IMPORTANT THE EFFECT WILL BE...
+
+
+%% Include plastics
+
+% Plastic dimensions. These may be comparable to the faecal pellet
+% dimensions. Look up a paper that shows plastic particles inside faecal
+% pellet and get approx dimensions from there.
+% The plastics that are excreted may be smaller than those that are eaten
+% because they are ground down to smaller sizes. An ingested piece of
+% plastic may not be excreted all at once, it be excreted gradually as
+% smaller pieces.
+
+Vp = 229972525; % mu m^3
+1e-12 * Vp
+
 
 
 
