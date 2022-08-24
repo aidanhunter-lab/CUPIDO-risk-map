@@ -4,14 +4,13 @@
 % run it once.
 
 % The monthly average GLORYS output should already be downloaded by running
-% downloadGLORYS.m. 
+% downloadGLORYS.m. They are stored in a directory outside of the Git-repo
+% -- see downloadGLORYS.m.
 
-% All of the monthly data for the Southern Ocean should be stored in a
-% sub-directory of the data directory. These data are separate files for
-% each month in each year (1993-2020) and the files are named in the 
-% year-month-day format, e.g., 20100516.nc corresponds to the 16th of May 
-% 2010. The data are monthly averages all recorded as either day 15 or 16
-% of the month.
+% These data are separate files for each month in each year (1993-2020) and
+% the files are named in the year-month-day format, e.g., 20100516.nc
+% corresponds to the 16th of May 2010. The data are monthly averages all
+% recorded as either day 15 or 16 of the month.
 
 % There are 329 separate data sets, each approximately 360MB. All 12 months
 % of 1993-2019, and months 1-5 of 2020. After running this script, each
@@ -26,9 +25,15 @@ thisFile = which('densityCalcGLORYS.m');
 baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
 addpath(genpath(fullfile(baseDirectory, 'MatLab')))
 addpath(genpath(fullfile(baseDirectory, 'data')))
-dataPath = fullfile(baseDirectory, 'data', 'physical_models', ... 
-    'Copernicus_Programme', 'Mercator_Ocean_International', 'GLORYS', ...
-    'Southern Ocean');
+
+% Set dataPath to specify directory where data were stored
+dataPath = ['/home/aihunt/Documents/work/CUPIDO/data/physical_models/' ...
+    'Copernicus_Programme/Mercator_Ocean_International/GLORYS/Southern Ocean'];
+
+% dataPath = fullfile(baseDirectory, 'data', 'physical_models', ... 
+%     'Copernicus_Programme', 'Mercator_Ocean_International', 'GLORYS', ...
+%     'Southern Ocean');
+
 months = ["01","02","03","04","05","06","07","08","09","10","11","12"];
 days = ["15","16"];
 % Choose a year range
