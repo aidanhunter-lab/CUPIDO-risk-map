@@ -36,7 +36,8 @@ krill.year = yr;
 krill.month = mo;
 krill.day = day;
 
-% Choose a year range -- roughly corresponding to availability of other data
+% Choose a year range -- roughly corresponding to availability of other
+% data, or simply use all available data
 % ymin = 1997;
 ymin = min(krill.year);
 ymax = max(krill.year);
@@ -191,6 +192,103 @@ set(pt5, 'Visible', 'off')
 filename = 'KrillBase_mapPlot_SouthernOcean_allSamples.png';
 filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
 exportgraphics(plt, filepath)
+
+
+%% Smooth the measurements into a regular grid -- see Atkinson et al. 2008
+
+% Define a grid: 9° longitude by 3° latitude 
+longrid = lon(1):9:lon(2);
+latgrid = lat(1):3:lat(2);
+nlon = length(longrid)-1;
+nlat = length(latgrid)-1;
+ncells = nlon * nlat;
+datgrid = nan(nlat, nlon);
+
+for i = 1:nlon
+    ind_ = longrid(i) < krill.LONGITUDE & krill.LONGITUDE <= longrid(i+1);
+    for j = 1:nlat
+        ind = ind_ & ...
+            latgrid(j) < krill.LATITUDE & krill.LATITUDE <= latgrid(j+1);
+        if ~any(ind), continue; end
+        dat = krill(ind,:);
+        v = mean(dat.STANDARDISED_KRILL_UNDER_1M2, 'omitnan');
+        datgrid(j,i) = v;
+    end
+end
+
+% Create colour scheme -- same scale as Atkinson 2008
+nc = plasma;
+ncols = 10;
+clims = 2 .^ (1:ncols-1);
+nc = nc(round(linspace(1, size(nc, 1), ncols)),:);
+colgrid = ones([size(datgrid), 3]);
+for i = 1:nlon
+    for j = 1:nlat
+        d = datgrid(j,i);
+        if isnan(d), continue; end
+        ind = [0 clims] < d & d < [clims inf];
+        colgrid(j,i,:) = nc(ind,:);
+    end
+end
+
+
+
+% plot map
+
+plt = figure;
+set(plt, {'Units', 'Position'}, {'inches', [0 0 plotSize(1) plotSize(2)]})
+% Create map
+plotBaseMap(area, 'coordsTable', coordsTable, 'edgecolour', landColour, ...
+    'redrawCoastline', false, 'XaxisLocation', XaxisLocation, ... 
+    'axesLabelSize', axisSize);
+hold on
+
+for i = 1:nlon
+    for j = 1:nlat
+        x = [longrid(i) longrid(i+1) longrid(i+1) longrid(i)];
+        y = [latgrid(j) latgrid(j) latgrid(j+1) latgrid(j+1)];
+        z = squeeze(colgrid(j,i,:))';
+        m_patch(x, y, z, 'LineStyle', 'none')
+    end
+end
+
+plotBaseMap(area, 'coordsTable', coordsTable, 'edgecolour', landColour, ...
+    'redrawCoastline', false, 'XaxisLocation', XaxisLocation, ... 
+    'axesLabelSize', axisSize);
+
+x = [longrid(1) longrid(2) longrid(2) longrid(1)];
+y = [latgrid(end-1) latgrid(end-1) latgrid(end) latgrid(end)];
+
+for i = 1:ncols
+    pl.(['v' num2str(i)]) = m_patch(x, y, nc(i,:), 'LineStyle', 'none');
+    assignin('caller', ['pl' num2str(i)], pl.(['v' num2str(i)]))
+end
+
+pl.(['v' num2str(0)]) = m_patch(x, y, [1 1 1], 'LineStyle', 'none');
+assignin('caller', ['pl' num2str(0)], pl.(['v' num2str(0)]))
+
+
+leg = m_legend_extend([pl10 pl9 pl8 pl7 pl6 pl5 pl4 pl3 pl2 pl1 pl0], ...
+    ['>' num2str(clims(9))], ...
+    [num2str(clims(8)) '-' num2str(clims(9))],...
+    [num2str(clims(7)) '-' num2str(clims(8))],...
+    [num2str(clims(6)) '-' num2str(clims(7))],...
+    [num2str(clims(5)) '-' num2str(clims(6))],...
+    [num2str(clims(4)) '-' num2str(clims(5))],...
+    [num2str(clims(3)) '-' num2str(clims(4))],...
+    [num2str(clims(2)) '-' num2str(clims(3))],...
+    [num2str(clims(1)) '-' num2str(clims(2))],...
+    ['0-' num2str(clims(1))], ...
+    'no data');
+
+leg.Title.String = 'number/m^2';
+leg.Title.FontWeight = 'normal';
+
+
+filename = 'KrillBase_mapPlot_SouthernOcean_allSamples_griddedAverage.png';
+filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
+exportgraphics(plt, filepath)
+
 
 
 

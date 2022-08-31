@@ -93,53 +93,72 @@ sf = 1;
 set(h,'units','characters');
 axpos = get(h,'pos');
 axh = (sf*lh+1);
+% axh = (sf*lh);
 set(h,'position',[(axpos(1)+axpos(3) - axw) axpos(2) axw axh])
 
 for i = 1:lh
   xp = [0.05 0.2 0.35];
-  iy = (i*sf-1)*0.8/lh + 0.25;
-  yp = [iy iy iy];
+%   iy = (i*sf-1)*0.8/lh + 0.25;
+%   yp = [iy iy iy];
   
   if ~MAP_PROJECTION.newgraphics
     lintest=strcmp(get(handles(i),'type'),'line');
     scattertest=strcmp(get(handles(i),'type'),'scatter');
+    patchtest=strcmp(get(handles(i),'type'),'patch');
   else
     lintest=isgraphics(handles(i),'line');
     scattertest=isgraphics(handles(i),'scatter');
+    patchtest=isgraphics(handles(i),'patch');
   end
   
   if lintest
-    mark = get(handles(i),'marker');
-    msize = get(handles(i),'markersize');
-    linest = get(handles(i),'linestyle');
-    linew = get(handles(i),'linewidth');
-    clr = get(handles(i),'color');
-    if ~strcmp(linest,'none')
-      l1(i) = plot(xp,yp,'marker','none', ...
-	  'color',clr,'linewidth',linew);
-    end
-    l2(i) = plot(xp(2),yp(2),'marker',mark, ...
-	'linewidth',linew, 'markersize', msize, ...
-	'color',clr);
-    t(i) = text(0.5, iy, varargin{i});
+      iy = (i*sf-1)*0.8/lh + 0.25;
+      yp = [iy iy iy];
+      mark = get(handles(i),'marker');
+      msize = get(handles(i),'markersize');
+      linest = get(handles(i),'linestyle');
+      linew = get(handles(i),'linewidth');
+      clr = get(handles(i),'color');
+      if ~strcmp(linest,'none')
+          l1(i) = plot(xp,yp,'marker','none', ...
+        	  'color',clr,'linewidth',linew);
+      end
+      l2(i) = plot(xp(2),yp(2),'marker',mark, ...
+      	'linewidth',linew, 'markersize', msize, ...
+    	'color',clr);
+      t(i) = text(0.5, iy, varargin{i});
   end
   
   if scattertest
-    mark = get(handles(i),'Marker');
-    msize = get(handles(i),'SizeData');
-    clrEdge = get(handles(i),'MarkerEdgeColor');
-    clrFace = get(handles(i),'MarkerFaceColor');
-    alphaEdge = get(handles(i), 'MarkerEdgeAlpha');
-    alphaFace = get(handles(i), 'MarkerFaceAlpha');
-%    if ~strcmp(linest,'none')
-%      l1(i) = plot(xp,yp,'marker','none', ...
-%	  'color',clr,'linewidth',linew);
- %   end
-    l2(i) = scatter(xp(2),yp(2),'Marker',mark, ...
-	'SizeData', msize, 'MarkerEdgeColor', clrEdge, 'MarkerFaceColor', clrFace, 'MarkerFaceAlpha', alphaFace, 'MarkerEdgeAlpha', alphaEdge);
-    t(i) = text(0.5, iy, varargin{i});
+      iy = (i*sf-1)*0.8/lh + 0.25;
+      yp = [iy iy iy];
+      mark = get(handles(i),'Marker');
+      msize = get(handles(i),'SizeData');
+      clrEdge = get(handles(i),'MarkerEdgeColor');
+      clrFace = get(handles(i),'MarkerFaceColor');
+      alphaEdge = get(handles(i), 'MarkerEdgeAlpha');
+      alphaFace = get(handles(i), 'MarkerFaceAlpha');
+      l2(i) = scatter(xp(2),yp(2),'Marker',mark, ...
+      	'SizeData', msize, 'MarkerEdgeColor', clrEdge, 'MarkerFaceColor', clrFace, 'MarkerFaceAlpha', alphaFace, 'MarkerEdgeAlpha', alphaEdge);
+      t(i) = text(0.5, iy, varargin{i});
   end
-  
+
+  if patchtest
+      iy = (i*sf-1)*0.9/lh + 0.1;
+      yp = [iy iy iy];
+      % Just use a square marker here
+      mark = 's';
+%       msize = get(handles(i),'MarkerSize');
+      clrEdge = get(handles(i),'EdgeColor');
+      clrFace = get(handles(i),'FaceColor');
+      alphaEdge = get(handles(i), 'EdgeAlpha');
+      alphaFace = get(handles(i), 'FaceAlpha');
+      t(i) = text(0.5, iy, varargin{i});
+      msize = 6 * get(t(i), 'FontSize');
+      l2(i) = scatter(xp(2),yp(2),'Marker',mark, ...
+      	'SizeData', msize, 'MarkerEdgeColor', clrEdge, 'MarkerFaceColor', clrFace, 'MarkerFaceAlpha', alphaFace, 'MarkerEdgeAlpha', alphaEdge);
+  end
+
 end
 
 
