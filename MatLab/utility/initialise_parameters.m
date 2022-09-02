@@ -25,9 +25,31 @@ switch pars.shape
         pars.Dl = pars.L;
         pars.V = 1 / 6 * pi * pars.Ds * pars.Di * pars.Dl;
 end
-
 % The faecal pellet volumes from the Atkinson data are at the uppper end of
 % the range given for euphausiid pellets (approx 1e-5 -> 5e-5) in 
 % Komar et al (1981). This makes sense as Antarctic krill are largest
 % euphausiid. The volume is also close to the standard volume (5e-5) used
 % by Schmidt et al (2012).
+
+% Faecal pellet carbon content - measured by Clara Manno from sediment trap
+% samples (original units: mg C / mm^3)
+switch pars.shape
+    case 'cylinder'
+        pars.fpCm_summer = 0.03 * 1e3;   % mean mg C / cm^3
+        pars.fpCsd_summer = 0.006 * 1e3; % standard deviation
+        pars.fpCm_winter = 0.018 * 1e3;
+        pars.fpCsd_winter = 0.006 * 1e3;
+    case 'ellipsoid'
+        pars.fpCm_summer = 0.052 * 1e3;
+        pars.fpCsd_summer = 0.005 * 1e3;
+        pars.fpCm_winter = 0.034 * 1e3;
+        pars.fpCsd_winter = 0.006 * 1e3;
+    case 'sphere'
+        pars.fpCm_summer = 0.035 * 1e3;
+        pars.fpCsd_summer = 0.004 * 1e3;
+        pars.fpCm_winter = 0.027 * 1e3;
+        pars.fpCsd_winter = 0.008 * 1e3;
+end
+
+
+
