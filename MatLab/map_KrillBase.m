@@ -291,7 +291,136 @@ exportgraphics(plt, filepath)
 
 
 
+% Remake the averaged/gridded plots separately for each month of data (Jan,
+% Feb, Mar)
+
+datgrid = nan(nlat, nlon, 3);
+
+for m = 1:3
+    indm = krill.month == m;
+    for i = 1:nlon
+        indi = indm & ...
+            longrid(i) < krill.LONGITUDE & krill.LONGITUDE <= longrid(i+1);
+        for j = 1:nlat
+            indj = indi & ...
+                latgrid(j) < krill.LATITUDE & krill.LATITUDE <= latgrid(j+1);
+            if ~any(indj), continue; end
+            dat = krill(indj,:);
+            v = mean(dat.STANDARDISED_KRILL_UNDER_1M2, 'omitnan');
+            datgrid(j,i,m) = v;
+        end
+    end
+end
+
+% Create colour scheme -- same scale as Atkinson 2008
+nc = plasma;
+ncols = 10;
+clims = 2 .^ (1:ncols-1);
+nc = nc(round(linspace(1, size(nc, 1), ncols)),:);
+colgrid = ones([size(datgrid), 3]);
+for m = 1:3
+    for i = 1:nlon
+        for j = 1:nlat
+            d = datgrid(j,i,m);
+            if isnan(d), continue; end
+            ind = [0 clims] < d & d < [clims inf];
+            colgrid(j,i,m,:) = nc(ind,:);
+        end
+    end
+end
 
 
+% plot maps
+displayLegend = true;
+plotSize = [6 8];
+legPosition = [65, 1, 17, 12];
+
+displayMonth = true;
+monthLat = max(lat) + 0.05 * diff(lat); % text position
+monthLon = -150; % bottom-left
+monthSize = 13;
+monthAlignHoriz = 'right';
+monthAlignVert = 'top';
+
+for m = 1:3
+    if m == 1, clearvars plotHandles; end
+    plotName = ['plt' num2str(m)];
+    plotHandles.(plotName) = figure;
+    set(plotHandles.(plotName), {'Units', 'Position'}, {'inches', [0 0 plotSize(1) plotSize(2)]})
+%     set(plt, {'Units', 'Position'}, {'inches', [0 0 plotSize(1) plotSize(2)]})
+    % Create map
+    plotBaseMap(area, 'coordsTable', coordsTable, 'edgecolour', landColour, ...
+        'redrawCoastline', false, 'XaxisLocation', XaxisLocation, ...
+        'axesLabelSize', axisSize);
+    hold on
+
+    for i = 1:nlon
+        for j = 1:nlat
+            x = [longrid(i) longrid(i+1) longrid(i+1) longrid(i)];
+            y = [latgrid(j) latgrid(j) latgrid(j+1) latgrid(j+1)];
+            z = squeeze(colgrid(j,i,m,:))';
+            m_patch(x, y, z, 'LineStyle', 'none')
+        end
+    end
+
+    plotBaseMap(area, 'coordsTable', coordsTable, 'edgecolour', landColour, ...
+        'redrawCoastline', false, 'XaxisLocation', XaxisLocation, ...
+        'axesLabelSize', axisSize);
+
+    switch displayMonth, case true
+        mm = {'January','February','March'};
+        pm = mm{m};
+        m_text(monthLon, monthLat, pm, ...
+            'FontSize', monthSize, ...
+            'HorizontalAlignment', monthAlignHoriz, 'VerticalAlignment', monthAlignVert)
+    end
+
+    switch displayLegend, case true
+
+        x = [longrid(1) longrid(2) longrid(2) longrid(1)];
+        y = [latgrid(end-1) latgrid(end-1) latgrid(end) latgrid(end)];
+
+        for i = 1:ncols
+            pl.(['v' num2str(i)]) = m_patch(x, y, nc(i,:), 'LineStyle', 'none');
+            assignin('caller', ['pl' num2str(i)], pl.(['v' num2str(i)]))
+        end
+
+        pl.(['v' num2str(0)]) = m_patch(x, y, [1 1 1], 'LineStyle', 'none');
+        assignin('caller', ['pl' num2str(0)], pl.(['v' num2str(0)]))
 
 
+        leg = m_legend_extend([pl10 pl9 pl8 pl7 pl6 pl5 pl4 pl3 pl2 pl1 pl0], ...
+            ['>' num2str(clims(9))], ...
+            [num2str(clims(8)) '-' num2str(clims(9))],...
+            [num2str(clims(7)) '-' num2str(clims(8))],...
+            [num2str(clims(6)) '-' num2str(clims(7))],...
+            [num2str(clims(5)) '-' num2str(clims(6))],...
+            [num2str(clims(4)) '-' num2str(clims(5))],...
+            [num2str(clims(3)) '-' num2str(clims(4))],...
+            [num2str(clims(2)) '-' num2str(clims(3))],...
+            [num2str(clims(1)) '-' num2str(clims(2))],...
+            ['0-' num2str(clims(1))], ...
+            'no data');
+
+        leg.Title.String = 'number/m^2';
+        leg.Title.FontWeight = 'normal';
+
+        leg.Position = legPosition;
+    end
+
+    pause(0.25)
+
+end
+
+% save plots
+for m = 1:3
+    plotName = ['plt' num2str(m)];
+    switch displayLegend
+        case true
+            filename = ['KrillBase_mapPlot_SouthernOcean_griddedAverage_month' num2str(m) '.png'];
+        case false
+            filename = ['KrillBase_mapPlot_SouthernOcean_griddedAverage_month' num2str(m) '_noLegend.png'];
+    end
+    filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
+    exportgraphics(plotHandles.(plotName), filepath)
+end
