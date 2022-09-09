@@ -235,15 +235,180 @@ end
 close all
 
 
-GOT TO HERE SO FAR, WHICH IS FINE FOR INDIVIDUAL PLOTS TO DISPLAY ON A POSTER...
-    THE CODE BELOW IS OLD AND STILL NEEDS ADJUSTED.
+
+%% Average the data into a grid for risk map
+
+dlon = 9;
+dlat = 3 ;
+
+% If the mapped lon or lat range is not divisible by the grid increment
+% then there will be white space
+disp(mod(diff(lon), dlon) == 0)
+disp(mod(diff(lat), dlat) == 0)
+
+
+longrid = lon(1):dlon:lon(2);
+latgrid = lat(1):dlat:lat(2);
+nlon = length(longrid)-1;
+nlat = length(latgrid)-1;
+nmonth = size(Dat.month, 3);
+datgrid = nan(nlat, nlon, nmonth);
+
+% This loop may take a minute or two -- maybe worthwhile vectorising...
+for j = 1:nlat
+    indj = latgrid(j) < Dat.latitude(:,:,1) & Dat.latitude(:,:,1) <= latgrid(j+1);
+    for i = 1:nlon
+        indi = indj & ...
+            longrid(i) < Dat.longitude(:,:,1) & Dat.longitude(:,:,1) <= longrid(i+1);
+        for m = 1:nmonth
+            indm = indi & Dat.month(1,1,:) == m;
+            if ~any(indm(:)), continue; end
+            datgrid(j,i,m) = mean(Dat.(Var)(indm), 'omitnan');
+            disp(num2str(((j-1)*nlon*nmonth + (i-1)*nmonth + m) / nlat / nlon / nmonth))
+        end
+    end
+end
+
+
+% Create colour scheme
+nc = viridis;
+ncols = 10;
+cmin = min(datgrid(:));
+cmax = max(datgrid(:));
+clims = logspace(log10(cmin), log10(cmax), ncols + 1);
+clims_round = round(clims, 2, 'significant');
+nc = nc(round(linspace(1, size(nc, 1), ncols)),:);
+colgrid = ones([size(datgrid), 3]);
+for m = 1:nmonth
+    for i = 1:nlon
+        for j = 1:nlat
+            d = datgrid(j,i,m);
+            if isnan(d), continue; end
+            ind = clims(1:end-1) <= d & d <= clims(2:end);
+            colgrid(j,i,m,:) = nc(ind,:);
+        end
+    end
+end
+
+
+% plot maps
+
+plotSize = [6, 9];
+% legPosition_xy = [62, 1];
+legPosition = [55, 1, 25, 12];
+
+
+displayLegend = true;
+
+for m = 1:nmonth
+    month = Months.index(m);
+    if m == 1, clearvars plotHandles plotAxes; end
+    plotName = ['plot' num2str(m)];
+    plotHandles.(plotName) = figure;
+    set(plotHandles.(plotName), {'Units', 'Position'}, {'inches', [0 0 plotSize(1) plotSize(2)]})
+    % Create map
+    plotBaseMap(area, 'coordsTable', coordsTable, 'edgecolour', landColour, ...
+        'redrawCoastline', false, 'XaxisLocation', XaxisLocation, ...
+        'axesLabelSize', axisSize);
+    hold on
+
+    for i = 1:nlon
+        for j = 1:nlat
+            x = [longrid(i) longrid(i+1) longrid(i+1) longrid(i)];
+            y = [latgrid(j) latgrid(j) latgrid(j+1) latgrid(j+1)];
+            z = squeeze(colgrid(j,i,m,:))';
+            m_patch(x, y, z, 'LineStyle', 'none')
+        end
+    end
+
+    plotBaseMap(area, 'coordsTable', coordsTable, 'edgecolour', landColour, ...
+    'redrawCoastline', false, 'XaxisLocation', XaxisLocation, ... 
+    'axesLabelSize', axisSize);
+
+    switch displayMonth, case true
+        switch abbrevMonth
+            case true, pm = Months.name(m);
+            case false, pm = Months.nameFull(m);
+        end
+        m_text(monthLon, monthLat, pm, ...
+            'FontSize', monthSize, ...
+            'HorizontalAlignment', monthAlignHoriz, 'VerticalAlignment', monthAlignVert)
+    end
+
+    switch mainTitle, case true
+        m_text(titleLon, titleLat, titleText, ...
+            'FontSize', titleSize, ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'Bottom')
+    end
+
+    switch displayLegend, case true
+        x = [longrid(1) longrid(2) longrid(2) longrid(1)];
+        y = [latgrid(end-1) latgrid(end-1) latgrid(end) latgrid(end)];
+
+        for i = 1:ncols
+            pl.(['v' num2str(i)]) = m_patch(x, y, nc(i,:), 'LineStyle', 'none');
+            assignin('caller', ['pl' num2str(i)], pl.(['v' num2str(i)]))
+        end
+
+        pl.(['v' num2str(0)]) = m_patch(x, y, [1 1 1], 'LineStyle', 'none');
+        assignin('caller', ['pl' num2str(0)], pl.(['v' num2str(0)]))
+
+        % This legend is badly coded!
+        leg = m_legend_extend([pl10 pl9 pl8 pl7 pl6 pl5 pl4 pl3 pl2 pl1 pl0], ...
+            [num2str(clims_round(10)) '-' num2str(clims_round(11))],...
+            [num2str(clims_round(9)) '-' num2str(clims_round(10))],...
+            [num2str(clims_round(8)) '-' num2str(clims_round(9))],...
+            [num2str(clims_round(7)) '-' num2str(clims_round(8))],...
+            [num2str(clims_round(6)) '-' num2str(clims_round(7))],...
+            [num2str(clims_round(5)) '-' num2str(clims_round(6))],...
+            [num2str(clims_round(4)) '-' num2str(clims_round(5))],...
+            [num2str(clims_round(3)) '-' num2str(clims_round(4))],...
+            [num2str(clims_round(2)) '-' num2str(clims_round(3))],...
+            [num2str(clims_round(1)) '-' num2str(clims_round(2))],...
+            'no data');
+
+        switch Var
+            case 'Tchl'
+                set(leg.Title, 'String', 'chlorophyll (mg / m^3)')
+            case 'carbon'
+                set(leg.Title, 'String', 'carbon (mg / m^3)')
+        end
+
+        leg.Position = legPosition;
+%         leg.Position(1:2) = legPosition_xy;
+
+        for i = 0:ncols
+            pl.(['v' num2str(i)]).Visible = 'off';
+        end
+    end
+
+    pause(0.25)
+
+end
+
+% save plots
+for m = 1:nmonth
+    mon = num2str(Months.index(m));
+    if length(mon) == 1, mon = ['0' mon]; end
+    switch displayLegend
+        case true
+            filename = ['SeaWiFS_' area '_' Var '_' mon '_gridded.png'];
+        case false
+            filename = ['SeaWiFS_' area '_' Var '_' mon '_gridded_noLegend.png'];
+    end
+    filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
+    plt = plotHandles.(['plot' num2str(m)]);
+    exportgraphics(plt, filepath)
+end
+
+
+close all
 
 
 
 
 
-
-
+OLDER CODE BELOW -- NOT YET DELETED AS THERE MIGHT BE USEFUL STUFF THERE
 
 
 % For South Georgia, all months excluding June & July have data. However,
