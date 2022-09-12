@@ -1,4 +1,4 @@
-function [h] = m_legend(varargin)
+function [h] = m_legend_extend(varargin)
 % M_LEGEND Add a legend to a map. This function does not have the
 %         full functionality of LEGEND but avoids some of the problems
 %         encountered using that function in M_MAP. Feel free to

@@ -6,10 +6,16 @@
 %% Preamble
 % Adjust search path to include all MatLab scripts and the 'data' directory
 project = 'CUPIDO-risk-map';
-thisFile = which('risk_map.m');
+thisFile = which('run_risk_map.m');
 baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
 addpath(genpath(fullfile(baseDirectory, 'MatLab')))
 addpath(genpath(fullfile(baseDirectory, 'data')))
+
+%% Model domain
+
+% Specify the modelled area and horizontal & vertical resolutions
+domain = map_domain();
+
 
 %% Load GLORYS physical model -- monthly means
 
@@ -19,14 +25,53 @@ path_physicalModel = fullfile(baseDirectory, 'data', 'physical_models', ...
 % Choose a single season
 season = 2019;
 % and months within that season
-months = [10:12, 1:3];
+% months = [10:12, 1:3];
+months = 1:3;
 % Load the seawater density values.
 % Model extraction & density calculations must be done already.
 dat = loadWaterDensity(path_physicalModel, season, months);
 
-% Number of lat-lon grid cells
-nlon = length(dat.lon);
-nlat = length(dat.lat);
+
+% Match the data resolution to the map grid
+ncells = domain.nlon * domain.nlat;
+ind = nan(length(dat.lon), length(dat.lat));
+m = nan(ncells,1);
+for j = 1:domain.nlat
+    indj = domain.latgrid(j) <= dat.lat & dat.lat < domain.latgrid(j+1);
+    for i = 1:domain.nlon
+        indi = domain.longrid(i) <= dat.lon & dat.lon < domain.longrid(i+1);
+        ind_ = indi & indj';
+        n = (j - 1) * domain.nlon + i;
+        m(n) = sum(ind_(:));
+        ind(ind_) = n;
+    end
+end
+
+nd = length(dat.depth);
+nt = length(dat.time);
+densityAv = nan(max(m), nd, nt, ncells);
+for i = 1:ncells
+    j = ind == i;
+    j = repmat(j, [1 1 nd nt]);
+    x = dat.density(j);
+    x = reshape(x, m(i), nd, nt);
+    densityAv(1:m(i), :, :, i) = x;
+%     disp([num2str(round(100 * i / ncells, 2, 'significant')) '%'])
+end
+
+densityAv_ = mean(densityAv, 'omitnan');
+densityAv_ = permute(densityAv_, [4, 2, 3, 1]);
+densityAv_ = reshape(densityAv_, domain.nlon, domain.nlat, nd, nt);
+
+dat.lon = 0.5 * (domain.longrid(1:end-1) + domain.longrid(2:end))';
+dat.lat = 0.5 * (domain.latgrid(1:end-1) + domain.latgrid(2:end))';
+dat.density = densityAv_;
+
+
+
+
+
+
 
 %% Set up depth layers
 % The GLORYS model output contains 50 depth layers going to nearly 6000 m,
