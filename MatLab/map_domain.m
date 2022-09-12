@@ -51,8 +51,10 @@ v.dlon = dlon;
 v.dlat = dlat;
 v.nlon = diff(lon_range) / dlon; % number of longitudinal
 v.nlat = diff(lat_range) / dlat; % and latitudinal grid cells
-v.longrid = lon_range(1):dlon:lon_range(2); % grid cell boundaries
-v.latgrid = lat_range(1):dlat:lat_range(2);
+v.longrid = (lon_range(1):dlon:lon_range(2))'; % grid cell boundaries
+v.latgrid = (lat_range(1):dlat:lat_range(2))';
+v.lon = 0.5 * (v.longrid(1:end-1) + v.longrid(2:end)); % grid cell midpoints
+v.lat = 0.5 * (v.latgrid(1:end-1) + v.latgrid(2:end));
 
 
 %% Vertical domain
@@ -106,10 +108,30 @@ nDeepLayers = (maxDepth - exportDepth) / deepLayerWidth; % maximum number of mod
 
 depthLayerWidths(nDepthsUpper+2:nDepthsUpper+nDeepLayers+1) = repmat(deepLayerWidth, [1, nDeepLayers]);
 depthEdges = cumsum([0, depthLayerWidths]);
-% depthMid = 0.5 * (depthEdges(1:end-1) + depthEdges(2:end));
+depthMid = 0.5 * (depthEdges(1:end-1) + depthEdges(2:end));
 
 v.depth_range = depth_range;
-v.depthgrid = depthEdges;
+v.depthgrid = depthEdges';
+v.depth = depthMid';
+
+
+% Area at top and bottom of each grid cell
+longrid = repmat(v.longrid, [1, v.nlat+1]);
+latgrid = repmat(reshape(v.latgrid, 1, []), [v.nlon+1, 1]);
+Area = areaquad(latgrid(1:end-1,1:end-1), longrid(1:end-1,1:end-1), ...
+    latgrid(2:end,2:end), longrid(2:end,2:end));
+h = 4 * pi .* (earthRadius - v.depthgrid) .^ 2;
+h = repmat(reshape(h, 1, 1, []), v.nlon, v.nlat, 1);
+AreaEarth = h .* Area;
+v.area = AreaEarth;
+
+% Volume of each grid cell
+Area = repmat(Area, [1 1 length(v.depth)]);
+Volume = 4 / 3 * pi .* Area;
+h = abs(diff((earthRadius - v.depthgrid) .^ 3));
+VolumeEarth = Volume .* repmat(reshape(h, 1, 1, []), v.nlon, v.nlat, 1);
+v.volume = VolumeEarth;
+
 
 if ~constraints(1)
     warning('Depth layers in upper water column have widths that decrease with depth! It should be the other way around. Reduce values of inputs nDepthsUpper or surfaceLayerWidth.')
