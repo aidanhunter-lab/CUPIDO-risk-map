@@ -111,6 +111,7 @@ depthEdges = cumsum([0, depthLayerWidths]);
 depthMid = 0.5 * (depthEdges(1:end-1) + depthEdges(2:end));
 
 v.depth_range = depth_range;
+v.ndepth = length(depthMid);
 v.depthgrid = depthEdges';
 v.depth = depthMid';
 
@@ -140,3 +141,12 @@ end
 if ~constraints(2)
     warning('Constraint exportDepth >= microAttDepth is not satisfied -- alter these input variables. This constraint may be removed in future...')
 end
+
+
+%% Time range
+if ~exist('months', 'var')
+    months = 1:3; % January - March by default
+end
+v.nmonth = length(months);
+v.month = months';
+

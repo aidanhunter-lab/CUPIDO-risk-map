@@ -1,6 +1,9 @@
 %% Load and organise forcing data
 function [forc, domain] = prepare_forcing(baseDirectory, domain, varargin)
 
+
+%% Set default values for optional arguments
+
 extractVarargin(varargin)
 
 % Directory for model files
@@ -10,12 +13,38 @@ if ~exist('path_physicalModel', 'var')
 end
 % Choose a single season
 if ~exist('season', 'var')
+    % data for selected season must be stored in directory path_physicalModel
     season = 2019;
 end
 % and months within that season
-if ~exist('months', 'var')
-    months = 1:3; % choose Jan-Mar to match available krill data
-%     months = [10:12, 1:3];
+months = domain.month';
+% if ~exist('months', 'var')
+%     months = 1:3; % choose Jan-Mar to match available krill data
+% %     months = [10:12, 1:3];
+% end
+
+% Years of krillbase data to retain -- 2-element vector (min,max)
+if ~exist('year_range_krillbase', 'var')
+    year_range_krillbase = [-inf,inf]; % All years by default
+end
+
+% Use day-time and/or night-time samples from krillabse
+if ~exist('dayornight_krillbase', 'var')
+    dayornight_krillbase = 'both'; % select 'day', 'night', or 'both'
+end
+if ~ismember(dayornight_krillbase, {'both','day','night'})
+    error("Input argument dayornight_krillbase must be 'both', 'day', or 'night'.")
+end
+
+% Krillbase measurement variable to use as abundance value
+if ~exist('var_krillbase', 'var')
+    var_krillbase = 'STANDARDISED_KRILL_UNDER_1M2';
+end
+
+
+% SeaWiFS chlorophyll measurement variables to use as abundance value(s)
+if ~exist('vars_chl', 'var')
+    vars_chl = 'Tchl'; % total chlorophyll as default -- returning multiple measurement variables may be possible
 end
 
 
@@ -26,6 +55,9 @@ end
 phys = loadWaterDensity(path_physicalModel, season, months);
 
 % Match the data resolution to the map grid
+[~,phys.time] = datevec(double(phys.time));
+phys = renameStructField(phys, 'time', 'month');
+
 % Interpolate over depths.
 phys.density = permute(phys.density, [3 1 2 4]);
 phys.density = interp1(phys.depth, phys.density, domain.depth);
@@ -45,8 +77,9 @@ for j = 1:domain.nlat
         ind(ind_) = n;
     end
 end
-nd = length(phys.depth);
-nt = length(phys.time);
+
+nd = domain.ndepth;
+nt = domain.nmonth;
 densityAv = nan(max(m), nd, nt, ncells);
 for i = 1:ncells
     j = ind == i;
@@ -70,8 +103,6 @@ phys.density = densityAv;
 domain.aboveSeafloor = ~isnan(phys.density(:,:,:,1)); % index all relevant lon-lat-depth cells
 domain.isOcean = any(domain.aboveSeafloor,3); % index all relevant lon-lat cells
 
-forc.phys = phys;
-
 
 %% Krill data
 
@@ -94,56 +125,41 @@ krill.year = yr;
 krill.month = mo;
 krill.day = day;
 
-% Choose a year range -- roughly corresponding to availability of other
-% data, or simply use all available data
-% ymin = 1997;
-ymin = min(krill.year);
-ymax = max(krill.year);
-krill = krill(krill.year >= ymin & krill.year <= ymax,:);
+% Filter by year -- by default all data is retained
+krill = krill(krill.year >= year_range_krillbase(1) & ... 
+    krill.year <= year_range_krillbase(2),:);
 
 % Use day-time and/or night-time samples
-dayornight = 'both'; % select 'day', 'night', or 'both'
-krill = krill(ismember(krill.DAY_NIGHT, {'day', 'night'}),:);
-switch dayornight
+krill = krill(ismember(krill.DAY_NIGHT, {'day', 'night'}),:); % omit samples where day or night is unknown
+switch dayornight_krillbase
     case {'day', 'night'}
-        krill = krill(strcmp(krill.DAY_NIGHT, dayornight),:);
+        krill = krill(strcmp(krill.DAY_NIGHT, dayornight_krillbase),:);
 end
-
-% Variable to plot
-Var = 'STANDARDISED_KRILL_UNDER_1M2';
 
 % Omit measuremtns zeros?
 omitZeros = false;
 switch omitZeros, case true
-    krill = krill(krill.(Var) > 0,:);
+    krill = krill(krill.(var_krillbase) > 0,:);
 end
-
-krill_s = table2struct(krill, 'ToScalar', true);
-fields = fieldnames(krill_s);
-keepFields = {'LATITUDE', 'LONGITUDE', 'SEASON', 'TOP_SAMPLING_DEPTH', ...
-    'BOTTOM_SAMPLING_DEPTH', 'STANDARDISED_KRILL_UNDER_1M2', 'year', ... 
-    'month', 'day'};
-krill_s = rmfield(krill_s, fields(~ismember(fieldnames(krill_s), keepFields)));
 
 % Create struct for krill measurements -- similar to phys
 zoo = rmfield(phys, 'density');
-zoo.krill = zeros(domain.nlon, domain.nlat, length(domain.depth), length(phys.time));
+zoo.krill = zeros(domain.nlon, domain.nlat, domain.ndepth, domain.nmonth);
 
 % Smooth the measurements into a regular grid to match map domain.
 % See Atkinson et al. 2008.
-datgrid = nan(domain.nlon, domain.nlat, 1, length(phys.time));
+datgrid = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
 for i = 1:domain.nlon
     indi = domain.longrid(i) < krill.LONGITUDE & krill.LONGITUDE <= domain.longrid(i+1);
     for j = 1:domain.nlat
         indj = indi & ...
             domain.latgrid(j) < krill.LATITUDE & krill.LATITUDE <= domain.latgrid(j+1);
-        for k = 1:length(phys.time)
-            tt = double(phys.time(k));
-            [~,m] = datevec(tt);
+        for k = 1:domain.nmonth
+            m = domain.month(k);
             indk = indj & krill.month == m;
             if ~any(indk), continue; end
             dat = krill(indk,:);
-            v = mean(dat.STANDARDISED_KRILL_UNDER_1M2, 'omitnan');
+            v = mean(dat.(var_krillbase), 'omitnan');
             datgrid(i,j,1,k) = v;
         end
     end
@@ -157,26 +173,22 @@ zoo.krill(:,:,1,:) = datgrid;
 zoo.krill =  zoo.krill .* ... 
     (0.5 * (domain.area(:,:,1:end-1) + domain.area(:,:,2:end))) ./ domain.volume;
 
-forc.zoo = zoo;
-
 
 %% Phytoplankton data
 
 filename = 'SeaWiFS_Phytoplankton-Size-Class-1997-2007-Southern-Ocean.mat';
 load(filename, 'Dat') % data was stored as variable 'Dat'
-% disp(Dat)
 % Convert -999 to nan
 fields = fieldnames(Dat);
 for i = 1:length(fields)
     x = Dat.(fields{i});
     x(x == -999) = nan;
-    Dat.(fields{i}) = x; clear x
+    Dat.(fields{i}) = x;
 end
 
 % Omit unused variables
-useVars = 'Tchl';
 fields = fieldnames(Dat);
-keepVars = [{'month','latitude','longitude'}, useVars];
+keepVars = [{'month','latitude','longitude'}, vars_chl];
 Dat = rmfield(Dat, fields(~ismember(fields, keepVars)));
 
 % Filter the data by month
@@ -184,11 +196,6 @@ ind = ismember(Dat.month, months);
 Dat = structfun(@(z) z(ind), Dat, ...
     'UniformOutput', false);
 
-% Exclude data outside map boundaries
-mv = [domain.lon_range(1), domain.lon_range(1), domain.lon_range(2), ...
-    domain.lon_range(2), domain.lon_range(1); ...
-    domain.lat_range(1), domain.lat_range(2), domain.lat_range(2), ...
-    domain.lat_range(1), domain.lat_range(1)];
 % Find data within mapped region
 inmap = inpolygon(Dat.longitude, Dat.latitude, mv(1,:), mv(2,:));
 % Omit data outside mapped region
@@ -196,28 +203,26 @@ Dat = structfun(@(z) z(inmap), Dat, 'UniformOutput', false);
 
 % Create struct for phytoplankton prey measurements -- similar to phys
 prey = rmfield(phys, 'density');
-prey.chl = zeros(domain.nlon, domain.nlat, length(domain.depth), length(phys.time));
+prey.chl = zeros(domain.nlon, domain.nlat, domain.ndepth, domain.nmonth);
 
 % Smooth the measurements into a regular grid to match map domain.
-datgrid = nan(domain.nlon, domain.nlat, 1, length(prey.time));
+datgrid = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
 for i = 1:domain.nlon
     indi = domain.longrid(i) < Dat.longitude & Dat.longitude <= domain.longrid(i+1);
     for j = 1:domain.nlat
         indj = indi & ...
             domain.latgrid(j) < Dat.latitude & Dat.latitude <= domain.latgrid(j+1);
-        for k = 1:length(prey.time)
-            tt = double(prey.time(k));
-            [~,m] = datevec(tt);
+        for k = 1:domain.nmonth
+            m = domain.month(k);
             indk = indj & Dat.month == m;
             if ~any(indk), continue; end
             dat = structfun(@(z) z(indk), Dat, 'UniformOutput', false);
-            v = mean(dat.(useVars), 'omitnan'); % this is not robust to multiple useVars values
+            v = mean(dat.(vars_chl), 'omitnan'); % this is not robust to multiple useVars values
             datgrid(i,j,1,k) = v;
-            disp(((i-1)*domain.nlat*length(prey.time) + (j-1)*length(prey.time) + k) / domain.nlon / domain.nlat / length(prey.time))
+%             disp(((i-1)*domain.nlat*length(prey.time) + (j-1)*length(prey.time) + k) / domain.nlon / domain.nlat / length(prey.time))
         end
     end
 end
-
 
 % Distribute prey between modelled depth layers.
 % For now just put them all into the surface layer.
@@ -229,5 +234,28 @@ prey.chl(:,:,1,:) = datgrid;
 % zoo.krill =  zoo.krill .* ... 
 %     (0.5 * (domain.area(:,:,1:end-1) + domain.area(:,:,2:end))) ./ domain.volume;
 
-forc.prey = prey;
+
+
+%% Plastics
+
+
+%% Output struct
+forc.lon = domain.lon;
+forc.lat = domain.lat;
+forc.depth = domain.depth;
+forc.month = domain.month;
+
+forc.density_seawater = phys.density;
+forc.chl_total = prey.chl;
+forc.krill = zoo.krill;
+
+forcSize = [domain.nlon, domain.nlat, domain.ndepth, domain.nmonth];
+
+correctSize = [all(size(forc.density_seawater) == forcSize), ...
+    all(size(forc.chl_total) == forcSize), ... 
+    all(size(forc.krill) == forcSize)];
+
+if ~all(correctSize)
+    warning('Some forcing data have incorrect dimension! Something is not right...')
+end
 

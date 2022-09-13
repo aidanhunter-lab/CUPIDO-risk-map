@@ -18,13 +18,15 @@ domain = map_domain();
 
 
 %% Prepare model forcing data
-forc = prepare_forcing(baseDirectory, domain);
+[forc, domain] = prepare_forcing(baseDirectory, domain);
+
+
+%% Model parameters
+% The sinking speed equations are written in cgs units.
+pars = initialise_parameters();
 
 
 %% Calculate sinking speeds
-% The sinking speed equations are written in cgs units.
-% Load parameter values
-pars = initialise_parameters();
 
 % Find faecal pellet sinking speed, cm / s
 [v, Re] = sinking_speed(pars.shape, 1e-3 * dat.density, pars.rho_p, pars.mu, pars.g, ...
