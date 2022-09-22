@@ -55,8 +55,7 @@ end
 phys = loadWaterDensity(path_physicalModel, season, months);
 
 % Match the data resolution to the map grid
-[~,phys.time] = datevec(double(phys.time));
-phys = renameStructField(phys, 'time', 'month');
+[~,phys.month] = datevec(double(phys.time));
 
 % Interpolate over depths.
 phys.density = permute(phys.density, [3 1 2 4]);
@@ -100,8 +99,18 @@ phys.density = densityAv;
 
 % Use the physical model data to determine which grid cells are land and
 % which are below the seafloor.
-domain.aboveSeafloor = ~isnan(phys.density(:,:,:,1)); % index all relevant lon-lat-depth cells
-domain.isOcean = any(domain.aboveSeafloor,3); % index all relevant lon-lat cells
+% Include index matrices in the domain struct
+isLand = all(isnan(phys.density(:,:,:,1)), 3);
+isWaterColumn = ~isnan(phys.density(:,:,:,1));
+isSurfaceLayer = cat(3, true(domain.nlon, domain.nlat, 1), ... 
+    false(domain.nlon, domain.nlat, domain.ndepth-1)) .* ~isLand;
+isBottomLayer = cat(3, false(domain.nlon, domain.nlat), ...
+    logical(-diff(isWaterColumn, 1, 3)));
+
+domain.isLand = isLand;
+domain.isWaterColumn = isWaterColumn;
+domain.isSurfaceLayer = isSurfaceLayer;
+domain.isBottomLayer = isBottomLayer;
 
 
 %% Krill data
@@ -165,7 +174,11 @@ for i = 1:domain.nlon
     end
 end
 
-% Distribute krill between modelled depth layers.
+% Index grid cells lacking data
+noKrillData = isnan(datgrid);
+% and set all these as NaN
+zoo.krill(repmat(noKrillData, [1, 1, domain.ndepth, 1])) = nan;
+% Distribute observed krill between modelled depth layers.
 % For now just put them all into the surface layer.
 zoo.krill(:,:,1,:) = datgrid;
 
@@ -244,10 +257,12 @@ forc.lon = domain.lon;
 forc.lat = domain.lat;
 forc.depth = domain.depth;
 forc.month = domain.month;
+forc.time = double(phys.time);
 
 forc.density_seawater = phys.density;
 forc.chl_total = prey.chl;
 forc.krill = zoo.krill;
+forc.noKrillData = noKrillData;
 
 forcSize = [domain.nlon, domain.nlat, domain.ndepth, domain.nmonth];
 

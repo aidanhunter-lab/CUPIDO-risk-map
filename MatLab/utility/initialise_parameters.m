@@ -1,5 +1,33 @@
-function pars = initialise_parameters()
+function pars = initialise_parameters(domain, varargin)
+% Set default values for all model parameters.
 
+% We may specify any parameter value in the function call as an optional
+% argument name-value pair.
+extractVarargin(varargin)
+
+%% Modelled time steps
+if ~exist('dt_out', 'var')
+    % time step (s) of returned results
+    dt_out = 3600; % 60 minute outputs
+end
+if ~exist('dt_max', 'var')
+    % maximum integration time step (s)
+    dt_max = 1800; % 30 minute steps
+end
+% There is a stability constraint on integration time steps...
+min_width = min(diff(domain.depthgrid)); % width (m) of narrowest depth layer
+max_speed = 2000 / 24 / 60 / 60; % upper limit on faecal pellet sinking speed (m/s)
+dt_max_ = min_width / max_speed;
+if dt_max >= dt_max_
+    % If time step is too large then reset to (hopefully!) stable value
+    dt_max = dt_max_;
+    dt_max = floor(dt_max / 60 / 5) * 5 * 60; % round down to nearest 5 minutes
+end
+pars.dt_out = dt_out;
+pars.dt_max = dt_max;
+
+
+%% Physical parameters
 pars.mu = 0.00189 * 1e1;  % seawater viscosity, g / cm / s. [1 N s / m^2 = 1 Pa s = 10 g / cm / s]
 pars.g = 9.81 * 1e2;      % acceleration due to gravity, cm / s^2. [1 m / s^2 = 10^2 cm / s^2]
 
