@@ -3,7 +3,7 @@
 % Build up a risk map gradually layer by layer. Focus on a single year...
 
 
-%% Preamble
+%% Directories
 % Adjust search path to include all MatLab scripts and the 'data' directory
 project = 'CUPIDO-risk-map';
 thisFile = which('run_risk_map.m');
@@ -12,7 +12,6 @@ addpath(genpath(fullfile(baseDirectory, 'MatLab')))
 addpath(genpath(fullfile(baseDirectory, 'data')))
 
 %% Model domain
-
 % Specify the modelled area and horizontal & vertical resolutions
 domain = map_domain();
 
@@ -23,7 +22,44 @@ domain = map_domain();
 
 %% Model parameters
 % The sinking speed equations are written in cgs units.
-pars = initialise_parameters();
+pars = initialise_parameters(domain);
+
+
+%% Initial values
+% Generate initial values for all modelled variables.
+% The modelled variable is total carbon in krill faecal pellets.
+init = generate_initials(domain, pars, forc);
+
+
+%% Integrate equations
+
+% Set solver options.
+% The integrator is called separately for each distinct period of forcing
+% data (which is monthly intervals).
+odeMaxTime = pars.dt_max; % max integration timestep (seconds)
+odeInitTime = 0.5 * odeMaxTime; % initial integration timestep (solver will automatically reduce this if required)
+odeOptions = odeset('InitialStep', odeInitTime, 'MaxStep', odeMaxTime); % Integration tolerances can be set here if required...
+% Solver functions
+integratorChoices = {'ode45', 'ode23', 'ode113', 'ode15s', 'ode23s'};
+odeIntegrator = integratorChoices{1};
+odeSolve = str2func(odeIntegrator);
+
+% WRITE A FUNCTION TO INTEGRATE THE MODEL. THIS WILL LOOP THROUGH THE
+% FORCING DATA MONTHS, CALLING THE INTEGRATOR SEPARATELY FOR EACH PERIOD. I
+% CAN ALSO USE PARALLEL PROCESSING TO QUICKLY HANDLE THE HORIZONTAL GRID
+% CELLS AS THE MODEL IS IDENTICALLY RUN FOR EACH UNIQUE CELL.
+out = integrateModel(domain, pars, forc, init, odeIntegrator, odeOptions);
+
+
+
+sol = odeSolve(@(t, y) risk_map_model(t, y, domain, pars, forc), [0 1], init.CFP, odeOptions);
+
+% sol = odeSolve(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
+
+
+% Integrate
+[out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ...
+    odeIntegrator, odeOptions, 'returnExtra', returnExtra);
 
 
 %% Calculate sinking speeds

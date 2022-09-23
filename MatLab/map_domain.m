@@ -115,6 +115,9 @@ v.ndepth = length(depthMid);
 v.depthgrid = depthEdges';
 v.depth = depthMid';
 
+v.gridSize = [v.nlon, v.nlat, v.ndepth];
+v.horizGridIndex = repmat(reshape(1:(v.nlon * v.nlat), [v.nlon, v.nlat]), ...
+    [1, 1, v.ndepth]);
 
 % Area at top and bottom of each grid cell
 longrid = repmat(v.longrid, [1, v.nlat+1]);
