@@ -70,7 +70,8 @@ OUT = repmat(xx, 1, nColumns);
 
 % Loop through (horizontal) grid cells
 parfor i = 1:nColumns
-    if isLand(i), continue; end % skip irrelevant grid cells
+    % Skip irrelevant grid cells -- it's better doing this before the loop
+    if isLand(i), continue; end
     % Forcing data
     Forcing = structfun(@(z) z(:,:,i), forc, 'UniformOutput', false);
     % Initial state
@@ -133,6 +134,4 @@ x = permute(x, [2, 3, 4, 5, 1]);
 for i = 1:nvars
     outStruct.(varNames{i}) = x(:,:,:,:,i);
 end
-
-
 
