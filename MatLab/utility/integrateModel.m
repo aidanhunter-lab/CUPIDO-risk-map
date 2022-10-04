@@ -68,14 +68,21 @@ OUT = repmat(xx, 1, nColumns);
 
 %% Integration
 
-% Loop through (horizontal) grid cells
-parfor i = 1:nColumns
-    % Skip irrelevant grid cells -- it's better doing this before the loop
-    if isLand(i), continue; end
+% Loop through valid horizontal grid cells
+
+% Index valid horizontal grid cells
+ind = domain.horizGridIndex(:,:,1) .* ~isLand;
+ind(ind == 0) = [];
+nvalid = length(ind);
+OUT_ = OUT(:,ind);
+init_ = init(:,ind);
+% Loop through each water column
+parfor i = 1:nvalid
+    ii = ind(i);
     % Forcing data
-    Forcing = structfun(@(z) z(:,:,i), forc, 'UniformOutput', false);
+    Forcing = structfun(@(z) z(:,:,ii), forc, 'UniformOutput', false);
     % Initial state
-    y0 = init(:,i);
+    y0 = init_(:,i);
     % Integrating method
     odeSolve = str2func(odeIntegrator);
     % Integration times -- start/end times matching months
@@ -96,13 +103,21 @@ parfor i = 1:nColumns
         %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         % Store solutions for selected output times
         outTimes = pars.dt_out:pars.dt_out:t1;
-        OUT{j,i} = deval(sol, outTimes);
+        OUT_{j,i} = deval(sol, outTimes);
         % Update initials for next integration increment
-        y0 = OUT{j,i}(:,end);
+        y0 = OUT_{j,i}(:,end);
     end
 end
 
 %% Tidy up
+
+% Move solutions into full output array
+for i = 1:nvalid
+    ii = ind(i);
+    for j = 1:nForcPeriods
+        OUT{j,ii} = OUT_{j,i};
+    end
+end
 
 % Convert solution stored in cell-array OUT into more readable format
 x = OUT(:);

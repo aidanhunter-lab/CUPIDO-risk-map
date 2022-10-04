@@ -24,7 +24,7 @@ area = coordsTable.Location{10};
 
 % Waller (2017) providews a list of plastic samples with lat-lon coords.
 % Just use this for now -- I can include more later...
-filename = fullfile(baseDirectory, 'data','plastic_quantity', 'Waller_2017', 'tableS1.csv');
+filename = fullfile(baseDirectory, 'data', 'plastic_quantity', 'Waller_2017', 'tableS1.csv');
 plastics = readtable(filename);
 
 % Exclude any data outside of the map bounding coordinates.

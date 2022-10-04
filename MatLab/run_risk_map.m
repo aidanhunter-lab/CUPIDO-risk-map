@@ -34,40 +34,14 @@ init = generate_initials(domain, pars, forc);
 %% Integrate equations
 
 % Set solver options.
-% The integrator is called separately for each distinct period of forcing
-% data (which is monthly intervals).
-odeMaxTime = pars.dt_max; % max integration timestep (seconds)
-odeInitTime = 0.5 * odeMaxTime; % initial integration timestep (solver will automatically reduce this if required)
-odeOptions = odeset('InitialStep', odeInitTime, 'MaxStep', odeMaxTime); % Integration tolerances can be set here if required...
-% Solver functions
-integratorChoices = {'ode45', 'ode23', 'ode113', 'ode15s', 'ode23s'};
-odeIntegrator = integratorChoices{1};
-odeSolve = str2func(odeIntegrator);
+[odeIntegrator, odeOptions] = integration_options(pars);
 
-% WRITE A FUNCTION TO INTEGRATE THE MODEL. THIS WILL LOOP THROUGH THE
-% FORCING DATA MONTHS, CALLING THE INTEGRATOR SEPARATELY FOR EACH PERIOD. I
-% CAN ALSO USE PARALLEL PROCESSING TO QUICKLY HANDLE THE HORIZONTAL GRID
-% CELLS AS THE MODEL IS IDENTICALLY RUN FOR EACH UNIQUE CELL.
 out = integrateModel(domain, pars, forc, init, odeIntegrator, odeOptions);
 
 
 
-sol = odeSolve(@(t, y) risk_map_model(t, y, domain, pars, forc), [0 1], init.CFP, odeOptions);
-
-% sol = odeSolve(@(t, v_in) ODEs(t, v_in, parameterList, forcing, j, false), [0 1], v_in, odeOptions);
 
 
-% Integrate
-[out, auxVars] = integrateTrajectories(FixedParams, Params, Forc, v0, ...
-    odeIntegrator, odeOptions, 'returnExtra', returnExtra);
-
-
-%% Calculate sinking speeds
-
-% Find faecal pellet sinking speed, cm / s
-[v, Re] = sinking_speed(pars.shape, 1e-3 * dat.density, pars.rho_p, pars.mu, pars.g, ...
-    'L', pars.L, 'D', pars.D, 'Dl', pars.Dl, 'Di', pars.Di, 'Ds', pars.Ds, ...
-    'useMeans_Re', false, 'returnMax_Re', true);
 
 % PERHAPS THE SINKING SPEED EQUATIONS COULD BE MODIFIED TO ACCOUNT FOR
 % VOLUME REDUCTIONS RESULTING FROM REMINERALISATION. I DON'T WANT TO MODEL
