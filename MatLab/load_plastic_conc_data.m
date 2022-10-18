@@ -17,16 +17,6 @@ dataDirectory = fullfile(baseDirectory, relDataDir);
 addpath(genpath(dataDirectory));
 addpath(genpath(fullfile(baseDirectory, 'MatLab')))
 
-%% Load data
-
-% Waller (2017) providews a list of plastic samples with lat-lon coords.
-% Just use this for now -- I can include more later...
-source = 'Waller_2017';
-filepath = fullfile(dataDirectory, source);
-filename = 'tableS1.csv';
-plastics = readtable(fullfile(filepath, filename));
-
-unique(plastics.Source, 'stable');
 
 %% Relevant studies
 %% Cincinelli 2017
@@ -274,6 +264,95 @@ Zhang_2022.categories = types;
 Zhang_2022.colour = colours;
 
 Data.Zhang_2022 = Zhang_2022;
+
+
+%% Waller 2017 providews a list of plastic samples with lat-lon coords.
+source = 'Waller_2017';
+filepath = fullfile(dataDirectory, source);
+filename = 'tableS1.csv';
+plastics = readtable(fullfile(filepath, filename));
+plastics = renamevars(plastics, {'Type', 'Long', 'Lat', 'Quantity', 'Measure', 'Location_1'}, ...
+    {'Size', 'Longitude', 'Latitude', 'Value' ,'Unit', 'Class'});
+
+sources = unique(plastics.Source, 'stable');
+
+%% Eriksen 2014
+
+ind = strcmp(plastics.Source, sources{contains(sources, 'Eriksen')});
+dat = plastics(ind,:);
+
+dat = removevars(dat, {'Class'});
+dat.Station = (1:height(dat))';
+
+dat = movevars(dat, {'Station', 'Size'}, 'Before', 'Location');
+dat = movevars(dat, {'Value', 'Unit'}, 'After', 'Location');
+dat = movevars(dat, {'Longitude', 'Latitude'}, 'After', 'Unit');
+
+dat.Unit(strcmp(dat.Unit, 'g km-2')) = {'g/km2'};
+dat.Unit(strcmp(dat.Unit, 'Particles km-2')) = {'pieces/km2'};
+dat.Size = strrep(dat.Size, 'M', 'm');
+
+Eriksen_2014.abundance = dat;
+
+% These are measurements of particles
+Type = {'particle'};
+Value = 100;
+Unit = {'percent'};
+Eriksen_2014.categories = table(Type, Value, Unit);
+
+Data.Eriksen_2014 = Eriksen_2014;
+
+%% Cozar 2014
+
+ind = strcmp(plastics.Source, sources{contains(sources, 'Cózar')});
+dat = plastics(ind,:);
+
+dat = removevars(dat, {'Class'});
+dat.Station = (1:height(dat))';
+
+dat = movevars(dat, {'Station', 'Size'}, 'Before', 'Location');
+dat = movevars(dat, {'Value', 'Unit'}, 'After', 'Location');
+dat = movevars(dat, {'Longitude', 'Latitude'}, 'After', 'Unit');
+
+dat.Unit(strcmp(dat.Unit, 'g km-2')) = {'g/km2'};
+dat.Size = strrep(dat.Size, 'M', 'm');
+
+Cozar_2014.abundance = dat;
+
+% Are these measurements of particles? check reference paper
+Type = {'particle'};
+Value = 100;
+Unit = {'percent'};
+Cozar_2014.categories = table(Type, Value, Unit);
+
+Data.Cozar_2014 = Cozar_2014;
+
+
+%% adventurescience.org
+
+ind = strcmp(plastics.Source, sources{contains(sources, 'adventure')});
+dat = plastics(ind,:);
+
+dat = removevars(dat, {'Class'});
+dat.Station = (1:height(dat))';
+
+dat = movevars(dat, {'Station', 'Size'}, 'Before', 'Location');
+dat = movevars(dat, {'Value', 'Unit'}, 'After', 'Location');
+dat = movevars(dat, {'Longitude', 'Latitude'}, 'After', 'Unit');
+
+dat.Value = 1000 .* dat.Value; % convert particles/L -> particles/m^3
+dat.Unit = repmat({'particles/m3'}, height(dat), 1);
+dat.Size = strrep(dat.Size, 'M', 'm');
+
+adventurescience.abundance = dat;
+
+Type = {'particle'};
+Value = 100;
+Unit = {'percent'};
+adventurescience.categories = table(Type, Value, Unit);
+
+Data.adventurescience = adventurescience;
+
 
 
 
