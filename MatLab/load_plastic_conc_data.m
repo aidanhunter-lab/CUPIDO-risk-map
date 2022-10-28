@@ -38,6 +38,9 @@ polymers = readtable(fullfile(filepath, filename));
 dat_tot = join(abundance, stations);
 % dat_tot.Type = repmat({'total'}, height(dat_tot), 1);
 
+dat_tot.Date = repmat(datetime({'01-Jan-2010', '28-Feb-2010'}), height(dat_tot), 1);
+
+
 % % Plastic categories (fibre, fragment, other)
 % dat_cat = dat_tot; dat_cat(1:end,:) = [];
 % Types = unique(categories.Type, 'stable');
@@ -143,6 +146,7 @@ abn_type.Unit = repmat({'percent'}, height(abn_type), 1);
 abn_type = movevars(abn_type, 'Value', 'Before', 'Unit');
 abn_type = movevars(abn_type, 'SizeRange', 'Before', 'Value');
 
+dat_tot.Date = repmat(datetime({'01-Feb-2017', '28-Feb-2017'}), height(dat_tot), 1);
 
 % Store all output in a struct
 Lacerda_2019.abundance = dat_tot;
@@ -255,6 +259,9 @@ polymers = readtable(fullfile(filepath, filename));
 types.Properties.VariableNames(:,1:2) = {'Depth','Type'};
 types.Type(strcmp(types.Type, 'Line/Fibre')) = {'Fibre'};
 
+stations.Date = repmat(datetime({'01-Dec-2017', '31-Jan-2018'}), height(stations), 1);
+
+
 Zhang_2022.abundance = stations;
 Zhang_2022.abundance_stats = stats;
 Zhang_2022.size = sizes;
@@ -316,6 +323,8 @@ dat = movevars(dat, {'Longitude', 'Latitude'}, 'After', 'Unit');
 
 dat.Unit(strcmp(dat.Unit, 'g km-2')) = {'g/km2'};
 dat.Size = strrep(dat.Size, 'M', 'm');
+
+dat.Date = repmat(datetime({'01-Dec-2012', '28-Feb-2013'}), height(dat), 1);
 
 Cozar_2014.abundance = dat;
 
