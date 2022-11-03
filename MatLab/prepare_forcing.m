@@ -1,10 +1,33 @@
 %% Load and organise forcing data
 function [forc, domain] = prepare_forcing(baseDirectory, domain, varargin)
 
+extractVarargin(varargin)
+
+%% Load forcing and domain from file?
+if ~exist('loadFromFile', 'var')
+    loadFromFile = false;
+end
+if ~exist('forcFile', 'var')
+    forcFile = 'forcing.mat';
+end
+forcPath = fullfile(baseDirectory, 'MatLab', 'temp', forcFile);
+if ~exist('domainFile', 'var')
+    domainFile = 'domain.mat';
+end
+domainPath = fullfile(baseDirectory, 'MatLab', 'temp', domainFile);
+
+switch loadFromFile, case true
+    forc = load(forcPath).forc;
+    domain = load(domainPath).domain;
+    return
+end
 
 %% Set default values for optional arguments
 
-extractVarargin(varargin)
+% Save output struct in 'temp' directory to avoid recalling function?
+if ~exist('saveOutput', 'var')
+    saveOutput = true;
+end
 
 % Directory for model files
 if ~exist('path_physicalModel', 'var')
@@ -45,6 +68,14 @@ end
 % SeaWiFS chlorophyll measurement variables to use as abundance value(s)
 if ~exist('vars_chl', 'var')
     vars_chl = 'Tchl'; % total chlorophyll as default -- returning multiple measurement variables may be possible
+end
+
+% Time forcing data set-up
+if ~exist('timeSetUp', 'var')
+    timeSetUp = true;
+end
+switch timeSetUp, case true
+    tic; fprintf('\n\n'); disp(append("started: ", string(datetime('now'))))
 end
 
 
@@ -115,6 +146,7 @@ domain.isBottomLayer = isBottomLayer;
 
 %% Krill data
 
+% Density
 filename = 'krillbase_data.csv';
 krill = readtable(filename);
 
@@ -180,11 +212,222 @@ noKrillData = isnan(datgrid);
 zoo.krill(repmat(noKrillData, [1, 1, domain.ndepth, 1])) = nan;
 % Distribute observed krill between modelled depth layers.
 % For now just put them all into the surface layer.
-zoo.krill(:,:,1,:) = datgrid;
+whichDepths = 1;
+wd = false(domain.ndepth, 1); wd(whichDepths) = true;
+zoo.krill(:,:,wd,:) = datgrid; % individuals/m^2
+zoo.krill(:,:,~wd,:) = nan;
 
 % Change units to number/m^3
 zoo.krill =  zoo.krill .* ... 
-    (0.5 * (domain.area(:,:,1:end-1) + domain.area(:,:,2:end))) ./ domain.volume;
+    (0.5 * (domain.area(:,:,1:end-1) + domain.area(:,:,2:end))); % individuals/grid cell
+zoo.krill =  zoo.krill ./ domain.volume; % individuals/m^3
+
+
+% Length
+filename = 'LENGTH_DATA_20200201.csv';
+krillLength = readtable(filename);
+
+filename = 'HAUL_METADATA_20200201.csv';
+meta = readtable(filename);
+
+% filename = 'NET_CODES20200201.csv';
+% netcodes = readtable(filename);
+% 
+% filename = 'NET_TRAJECTORY_20200201.csv';
+% nettraj = readtable(filename);
+
+krillLength = innerjoin(krillLength, meta, 'Keys', 'REF');
+
+% Find data within mapped region
+inmap = inpolygon(krillLength.LON, krillLength.LAT, mv(1,:), mv(2,:));
+% Omit data outside mapped region
+krillLength = krillLength(inmap,:);
+
+% Filter by year -- by default all data is retained
+krillLength = krillLength(krillLength.YEAR >= year_range_krillbase(1) & ... 
+    krillLength.YEAR <= year_range_krillbase(2),:);
+
+% Use day-time and/or night-time samples
+krillLength = krillLength(ismember(krillLength.DAY_NIGHT, {'D', 'N'}),:); % omit samples where day or night is unknown
+switch dayornight_krillbase
+    case {'day', 'night'}
+        krillLength = krillLength(strcmp(krillLength.DAY_NIGHT, dayornight_krillbase),:);
+end
+
+% Unit conversions
+
+if exist('pars', 'var')
+    % length to weight
+    try
+        krillLength.WEIGHT_mg_dry = pars.W_dry_a .* krillLength.LENGTH_mm_ .^ pars.W_dry_b;
+        krillLength.WEIGHT_mg_wet = pars.W_wet_a .* krillLength.LENGTH_mm_ .^ pars.W_wet_b;
+        % carbon content from dry weight
+        krillLength.CARBON_mg = pars.W_dry2c .* krillLength.WEIGHT_mg_dry;
+    catch
+        warning("Optional argument 'pars' is present but the allometric parameters are missing. See 'intialise_parameters.m'.")
+    end
+else
+    filename = 'Unit Conversions.csv';
+    tr = readtable(filename);
+    % length to weight
+    a = 'W_dry_a';
+    b = 'W_dry_b';
+    % tr.Unit(strcmp(tr.Parameter, a))
+    % tr.Unit(strcmp(tr.Parameter, b))
+    a = tr.Value(strcmp(tr.Parameter, a));
+    b = tr.Value(strcmp(tr.Parameter, b));
+    krillLength.WEIGHT_mg_dry = a .* krillLength.LENGTH_mm_ .^ b;
+    a = 'W_wet_a';
+    b = 'W_wet_b';
+    a = tr.Value(strcmp(tr.Parameter, a));
+    b = tr.Value(strcmp(tr.Parameter, b));
+    krillLength.WEIGHT_mg_wet = a .* krillLength.LENGTH_mm_ .^ b;
+    % carbon content from dry weight
+    p = 'W_dry2c';
+    s = 'Summer';
+    p = tr.Value(strcmp(tr.Parameter, p) & strcmp(tr.Group, s));
+    krillLength.CARBON_mg = p .* krillLength.WEIGHT_mg_dry;
+end
+
+% Match data to map grid - get weighted means and sd
+% lengths
+datgrid1 = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
+datgrid2 = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
+% dry weight
+datgrid3 = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
+datgrid4 = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
+% wet weight
+datgrid5 = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
+datgrid6 = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
+% carbon weight
+datgrid7 = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
+datgrid8 = nan(domain.nlon, domain.nlat, 1, domain.nmonth);
+
+for i = 1:domain.nlon
+    indi = domain.longrid(i) < krillLength.LON & krillLength.LON <= domain.longrid(i+1);
+    for j = 1:domain.nlat
+        indj = indi & ...
+            domain.latgrid(j) < krillLength.LAT & krillLength.LAT <= domain.latgrid(j+1);
+        for k = 1:domain.nmonth
+            m = domain.month(k);
+            indk = indj & krillLength.MONTH == m;
+            if ~any(indk), continue; end
+            dat = krillLength(indk,:);
+
+%             figure
+%             h = histogram(dat.CARBON_mg(dat.EVENT == 15), 'FaceAlpha', 0.4)
+%             hold on
+%             histogram(dat.CARBON_mg(dat.EVENT == 17), 'FaceAlpha', 0.4)
+%             histogram(dat.CARBON_mg(dat.EVENT == 18), 'FaceAlpha', 0.4)
+
+            % Mean lengths weighted by event sample size
+            ev = unique(dat.EVENT);
+            evn = arrayfun(@(z) sum(dat.EVENT == z), ev); % number of measures per sample event
+            % Summary stats on log scale
+            meanLogLen = arrayfun(@(z) mean(log(dat.LENGTH_mm_(dat.EVENT == z)), 'omitnan'), ev); % log-scale mean lengths
+            meanLogLen = sum(evn ./ sum(evn) .* meanLogLen);
+            sdLogLen = arrayfun(@(z) std(log(dat.LENGTH_mm_(dat.EVENT == z)), 'omitnan'), ev); % log-scale mean lengths
+            sdLogLen = sum(evn ./ sum(evn) .* sdLogLen);
+
+            meanLogWdry = arrayfun(@(z) mean(log(dat.WEIGHT_mg_dry(dat.EVENT == z)), 'omitnan'), ev); % log-scale mean lengths
+            meanLogWdry = sum(evn ./ sum(evn) .* meanLogWdry);
+            sdLogWdry = arrayfun(@(z) std(log(dat.WEIGHT_mg_dry(dat.EVENT == z)), 'omitnan'), ev); % log-scale mean lengths
+            sdLogWdry = sum(evn ./ sum(evn) .* sdLogWdry);
+
+            meanLogWwet = arrayfun(@(z) mean(log(dat.WEIGHT_mg_wet(dat.EVENT == z)), 'omitnan'), ev); % log-scale mean lengths
+            meanLogWwet = sum(evn ./ sum(evn) .* meanLogWwet);
+            sdLogWwet = arrayfun(@(z) std(log(dat.WEIGHT_mg_wet(dat.EVENT == z)), 'omitnan'), ev); % log-scale mean lengths
+            sdLogWwet = sum(evn ./ sum(evn) .* sdLogWwet);
+
+            meanLogC = arrayfun(@(z) mean(log(dat.CARBON_mg(dat.EVENT == z)), 'omitnan'), ev); % log-scale mean lengths
+            meanLogC = sum(evn ./ sum(evn) .* meanLogC);
+            sdLogC = arrayfun(@(z) std(log(dat.CARBON_mg(dat.EVENT == z)), 'omitnan'), ev); % log-scale mean lengths
+            sdLogC = sum(evn ./ sum(evn) .* sdLogC);
+
+%             rr = normrnd(meanLogC, sdLogC, 1000, 1);
+%             rr = exp(rr);
+%             figure
+%             histogram(rr)
+            
+            datgrid1(i,j,1,k) = meanLogLen;
+            datgrid2(i,j,1,k) = sdLogLen;
+            datgrid3(i,j,1,k) = meanLogWdry;
+            datgrid4(i,j,1,k) = sdLogWdry;
+            datgrid5(i,j,1,k) = meanLogWwet;
+            datgrid6(i,j,1,k) = sdLogWwet;
+            datgrid7(i,j,1,k) = meanLogC;
+            datgrid8(i,j,1,k) = sdLogC;
+        end
+    end
+end
+
+A = nan(domain.nlon, domain.nlat, domain.ndepth, domain.nmonth);
+zoo.krillLenMeanLog = A;
+zoo.krillLenSDLog = A;
+zoo.krillDryWtMeanLog = A;
+zoo.krillDryWtSDLog = A;
+zoo.krillWetWtMeanLog = A;
+zoo.krillWetWtSDLog = A;
+zoo.krillCMeanLog = A;
+zoo.krillCSDLog = A;
+
+% Distribute between modelled depth layers.
+zoo.krillLenMeanLog(:,:,wd,:) = datgrid1;
+zoo.krillLenSDLog(:,:,wd,:) = datgrid2;
+zoo.krillDryWtMeanLog(:,:,wd,:) = datgrid3;
+zoo.krillDryWtSDLog(:,:,wd,:) = datgrid4;
+zoo.krillWetWtMeanLog(:,:,wd,:) = datgrid5;
+zoo.krillWetWtSDLog(:,:,wd,:) = datgrid6;
+zoo.krillCMeanLog(:,:,wd,:) = datgrid7;
+zoo.krillCSDLog(:,:,wd,:) = datgrid8;
+
+% Some density samples are not matched to length stats -- infill with
+% nearest neighbours
+gotL = ~isnan(zoo.krillLenMeanLog); % index data values
+misL = ~isnan(zoo.krill) & ~gotL; % index data to infill
+for j = 1:length(zoo.month)
+    g = gotL(:,:,wd,j);
+    i = misL(:,:,wd,j);
+    li = find(i);
+    [ri, ci] = find(i);
+    fi = [ri, ci];
+    [ri, ci] = find(g);
+    gi = [ri, ci];
+    ni = sum(i(:));
+    for k = 1:ni
+        % length
+        ml = zoo.krillLenMeanLog(:,:,wd,j);
+        ms = zoo.krillLenSDLog(:,:,wd,j);
+        ii = fi(k,:);
+        d = (sum(abs(gi - ii) .^ 2, 2)) .^ 0.5;
+        md = find(d == min(d), 1);
+        ml(li(k)) = ml(gi(md,1), gi(md,2));
+        ms(li(k)) = ms(gi(md,1), gi(md,2));
+        zoo.krillLenMeanLog(:,:,wd,j) = ml;
+        zoo.krillLenSDLog(:,:,wd,j) = ms;
+        % dry weight
+        ml = zoo.krillDryWtMeanLog(:,:,wd,j);
+        ms = zoo.krillDryWtSDLog(:,:,wd,j);
+        ml(li(k)) = ml(gi(md,1), gi(md,2));
+        ms(li(k)) = ms(gi(md,1), gi(md,2));
+        zoo.krillDryWtMeanLog(:,:,wd,j) = ml;
+        zoo.krillDryWtSDLog(:,:,wd,j) = ms;
+        % wet weight
+        ml = zoo.krillWetWtMeanLog(:,:,wd,j);
+        ms = zoo.krillWetWtSDLog(:,:,wd,j);
+        ml(li(k)) = ml(gi(md,1), gi(md,2));
+        ms(li(k)) = ms(gi(md,1), gi(md,2));
+        zoo.krillWetWtMeanLog(:,:,wd,j) = ml;
+        zoo.krillWetWtSDLog(:,:,wd,j) = ms;
+        % carbon weight
+        ml = zoo.krillCMeanLog(:,:,wd,j);
+        ms = zoo.krillCSDLog(:,:,wd,j);
+        ml(li(k)) = ml(gi(md,1), gi(md,2));
+        ms(li(k)) = ms(gi(md,1), gi(md,2));
+        zoo.krillCMeanLog(:,:,wd,j) = ml;
+        zoo.krillCSDLog(:,:,wd,j) = ms;
+    end
+end
 
 
 %% Phytoplankton data
@@ -263,6 +506,14 @@ forc.density_seawater = phys.density;
 forc.chl_total = prey.chl;
 forc.krill = zoo.krill;
 forc.noKrillData = noKrillData;
+forc.krillLenMeanLog = zoo.krillLenMeanLog;
+forc.krillLenSDLog = zoo.krillLenSDLog;
+forc.krillDryWtMeanLog = zoo.krillDryWtMeanLog;
+forc.krillDryWtSDLog = zoo.krillDryWtSDLog;
+forc.krillWetWtMeanLog = zoo.krillWetWtMeanLog;
+forc.krillWetWtSDLog = zoo.krillWetWtSDLog;
+forc.krillCMeanLog = zoo.krillCMeanLog;
+forc.krillCSDLog = zoo.krillCSDLog;
 
 forcSize = [domain.nlon, domain.nlat, domain.ndepth, domain.nmonth];
 
@@ -273,4 +524,30 @@ correctSize = [all(size(forc.density_seawater) == forcSize), ...
 if ~all(correctSize)
     warning('Some forcing data have incorrect dimension! Something is not right...')
 end
+
+
+%% Save
+switch saveOutput, case true
+    path = fullfile(baseDirectory, 'MatLab', 'temp');
+    if ~exist(path, 'dir')
+        mkdir(fileparts(path), 'temp')
+        addpath(genpath(path))
+    end
+    filename = 'forcing.mat';
+    filepath = fullfile(path, filename);
+    save(filepath, 'forc')
+    filename = 'domain.mat';
+    filepath = fullfile(path, filename);
+    save(filepath, 'domain')
+end
+
+%%
+switch timeSetUp, case true
+    setUpTime = toc / 60; fprintf('\n'); disp(append("finished: ", string(datetime('now')))); fprintf('\n');
+    disp(['Forcing data set-up time: ' num2str(floor(setUpTime)) ' mins, ' ...
+        num2str(floor(mod(60*setUpTime,60))) ' secs']); fprintf('\n\n')
+end
+
+
+
 

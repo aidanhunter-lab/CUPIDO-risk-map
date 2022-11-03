@@ -52,6 +52,8 @@ Depths = {'all', 'surface','subsurface'};
 Depth = Depths{2};
 Types = {'total', 'fragment', 'fibre'};
 Type = Types{3};
+legLoc = {'northwest','northwest','northwest'};
+% ylimAdj = [1e6];
 
 for p = 1:length(Types) % separate plot for each plastic type
     Type = Types{p};
@@ -72,10 +74,12 @@ for p = 1:length(Types) % separate plot for each plastic type
 
     pltName = ['plt_' Type];
     assignin('base', pltName, figure)
-    set(evalin('base', pltName), {'Units', 'Position'}, {'inches', [0 0 6 * nVariables, 6]})
+%     set(evalin('base', pltName), {'Units', 'Position'}, {'inches', [0 0 6 * nVariables, 6]})
+    set(evalin('base', pltName), {'Units', 'Position'}, {'inches', [0 0 6, 7.2]})
 
     for i = 1:nVariables
-        subplot(1, nVariables, i)
+%         subplot(1, nVariables, i)
+        subplot(2, 2, i)
         d_ = d(strcmp(d.Variable, Variables{i}),:);
         x = d_.Value;
         g = categorical(d_.Source);
@@ -86,6 +90,10 @@ for p = 1:length(Types) % separate plot for each plastic type
             set(b(j), {'BoxFaceColor', 'BoxLineColor', 'MarkerColor', 'BoxFaceAlpha'}, ...
                 {k, k, k, alpha})
         end
+
+%         % adjust scale to fit legend
+%         set(gca, 'YLim', [0, ylimAdj(i)])
+
         set(gca, {'XTick', 'YScale'}, {[], 'log'})
         pu = useUnit.Unit{strcmp(useUnit.Variable, Variables{i})};
 
@@ -97,15 +105,45 @@ for p = 1:length(Types) % separate plot for each plastic type
             case 'massDensity', ylab = ['mass density (', pu, ')'];
         end
         ylabel(ylab)
-        legend('Location', 'northwest');
+
+%         legend('Location', 'northwest');
+%         legend('Location', legLoc{i});
+%         lp = leg.Position;
+%         set(leg, 'Position', [0, lp(2), lp(3), lp(4)])
+
     end
+    subplot(2,2,4)
+
+    x = d.Value;
+    g = categorical(d.Source);
+    b = boxchart(x, 'GroupByColor', g);
+    bs = arrayfun(@(z) z.DisplayName, b, 'UniformOutput', false);
+    for j = 1:length(bs)
+        k = Cols.Col(strcmp(Cols.Source, bs{j}),:);
+        set(b(j), {'BoxFaceColor', 'BoxLineColor', 'MarkerColor', 'BoxFaceAlpha'}, ...
+            {k, k, k, alpha})
+    end
+
+    yl = get(gca, 'YLim');
+    set(gca, 'YLim', [2*yl(2), 3*yl(2)])
+    legend('Location', 'northwest')
+    set(gca, 'Visible', 'off')
+
     switch Type
         case 'total', sgtitle('Total microplastic: in situ samples')
         otherwise, sgtitle(['Microplastic ' Type 's: in situ samples'])
     end
-
 end
 
+
+% save plots
+for p = 1:length(Types)
+    Type = Types{p};
+    filename = ['plastic_boxplot_' Type '_colouredBySource.png'];
+    filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
+    pltName = ['plt_' Type];
+    exportgraphics(evalin('base', pltName), filepath)
+end
 
 
 
@@ -204,4 +242,17 @@ cellfun(@(z) set(z, 'Visible', 'off'), pt) % remove dummy points from plot
 filename = 'plastic_mapPlot_SouthernOcean_colouredBySource.png';
 filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
 exportgraphics(plt, filepath)
+
+
+%% Combine map and boxplot into single figure -- I can't find a good way to this... the montage loses resolution
+
+plt_cmb = figure;
+filepath2 = fullfile(baseDirectory, 'MatLab', 'plots', ['plastic_boxplot_' Types{2} '_colouredBySource.png']);
+montage({filepath, filepath2}, 'size', [1 NaN], 'ThumbnailSize', [], 'Interpolation', 'bilinear')
+
+% save plot
+filename = 'plastic_samples_combine_map_and_boxplot.png';
+filepath = fullfile(baseDirectory, 'MatLab', 'plots', filename);
+exportgraphics(plt_cmb, filepath)
+
 

@@ -123,17 +123,18 @@ v.horizGridIndex = repmat(reshape(1:(v.nlon * v.nlat), [v.nlon, v.nlat]), ...
 longrid = repmat(v.longrid, [1, v.nlat+1]);
 latgrid = repmat(reshape(v.latgrid, 1, []), [v.nlon+1, 1]);
 Area = areaquad(latgrid(1:end-1,1:end-1), longrid(1:end-1,1:end-1), ...
-    latgrid(2:end,2:end), longrid(2:end,2:end));
+    latgrid(2:end,2:end), longrid(2:end,2:end)); % area as fraction of unit sphere area
 h = 4 * pi .* (earthRadius - v.depthgrid) .^ 2;
 h = repmat(reshape(h, 1, 1, []), v.nlon, v.nlat, 1);
-AreaEarth = h .* Area;
+AreaEarth = h .* Area; % area [m^2] of our grid cells
 v.area = AreaEarth;
 
 % Volume of each grid cell
 Area = repmat(Area, [1 1 length(v.depth)]);
 Volume = 4 / 3 * pi .* Area;
 h = abs(diff((earthRadius - v.depthgrid) .^ 3));
-VolumeEarth = Volume .* repmat(reshape(h, 1, 1, []), v.nlon, v.nlat, 1);
+h = repmat(reshape(h, 1, 1, []), v.nlon, v.nlat, 1);
+VolumeEarth = h .* Volume; % volume [m^3] of our grid cells
 v.volume = VolumeEarth;
 
 
