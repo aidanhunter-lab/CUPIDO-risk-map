@@ -1,26 +1,52 @@
-function dvdt = risk_map_model(~, y, domain, pars, forc)
+function dvdt = risk_map_model(~, y, domain, pars, forcing)
 % Differential equations describing flux of faecal pellet carbon.
 
 %% Initial conditions
-CFP = y; % Total faecal pellet carbon (g C / vol)
+CFP = y; % Total faecal pellet carbon [g C]
 
 %% Production
 % p = production(Z,P);
+
+% A = 0.5 .* (domain.area(1:end-1) + domain.area(2:end)); % average cross-sectional area [m^2] of grid cell
+
+krill = forcing.krill .* domain.volume; % total krill [number of individuals] in grid cell -- should be a vector over depth, where only the uppermost layer is populated
+
+
+% Convert number of individuals into faecal pellet production. I could use
+% some assumption of average size of krill, or use the length data. It's
+% probably best to use the length data, but for starters just make some
+% assumption about averge size...
+% This will involve converting krill abundance from from numbers per m2
+% into numbers per grid cell using the domain cell areas
+
+% faecal pellet production if a function of krill biomass...
+
+krillDryWtMean = 10^-3 .* krill .* exp(forcing.krillDryWtMeanLog); % total krill [g dry mass] in grid cell
+
+FPprod = pars.FPprod; % mm^3 / h / g dry mass
+FPprod = 10^-3 ./ 3600 .* FPprod; % cm^3 / s / g dry mass
+FPprod = pars.fpCm_summer .* FPprod; % g C / s / g dry mass
+
+p = FPprod .* krillDryWtMean; % g C / s
+p(isnan(p)) = 0;
+
 
 %% Remineralisation
 % r = remineralisation(M);
 
 %% Sinking
 % s = sinking(M);
-w = sink_speed(pars.shape, 1e-3 * forc.density_seawater, pars.rho_p, pars.mu, pars.g, 'L', pars.L, 'D', pars.D);
+w = sink_speed(pars.shape, 1e-3 * forcing.density_seawater, pars.rho_f, ...
+    pars.mu, pars.g, 'L', pars.L, 'D', pars.D); % [cm / s]
+w = 10^-2 .* w; % [m / s]
 
-
-s = sink_flux(CFP, w, diff(100 * domain.depthgrid));
+% s = sink_flux(CFP, w, diff(100 * domain.depthgrid));
+s = sink_flux(CFP, w, diff(domain.depthgrid)); % [g C / s]
 
 
 %% Total flux
 % dvdt = p - r - s;
-dvdt = s;
+dvdt = p + s;
 
 end
 

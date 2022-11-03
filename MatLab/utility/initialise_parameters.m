@@ -5,6 +5,31 @@ function pars = initialise_parameters(domain, varargin)
 % argument name-value pair.
 extractVarargin(varargin)
 
+if ~exist('polymer', 'var')
+    polymer = 'Low density Polyethylene'; % see parsFromFile (below) for options
+end
+
+%% Load parameters
+if ~exist('loadParsFromFile', 'var')
+    loadParsFromFile = true;
+end
+if ~exist('parsFileName', 'var')
+    parsFileName = 'parameters.csv';
+end
+switch loadParsFromFile, case true
+    if exist(parsFileName, 'file') == 2
+        parsFromFile = readtable(parsFileName);
+    else
+        parsFromFile = [];
+    end
+    otherwise
+        parsFromFile = [];
+end
+if isempty(parsFromFile)
+    warning(['Parameters have not been loaded from file! Is ' parsFileName ' saved the data directory?'])
+    loadParsFromFile = false;
+end
+
 %% Modelled time steps
 if ~exist('dt_out', 'var')
     % time step (s) of returned results
@@ -26,13 +51,12 @@ end
 pars.dt_out = dt_out;
 pars.dt_max = dt_max;
 
-
 %% Physical parameters
 pars.mu = 0.00189 * 1e1;  % seawater viscosity, g / cm / s. [1 N s / m^2 = 1 Pa s = 10 g / cm / s]
 pars.g = 9.81 * 1e2;      % acceleration due to gravity, cm / s^2. [1 m / s^2 = 10^2 cm / s^2]
 
 % See Atkinson et al., 2012, for krill faecal pellet properties
-pars.rho_p = 1116 * 1e-3; % faecal pellet density, g / cm^3. [1 kg / m^3 = 10^-3 g / cm^3]
+pars.rho_f = 1116 * 1e-3; % faecal pellet density, g / cm^3. [1 kg / m^3 = 10^-3 g / cm^3]
 % pars.rho_p = 1220 * 1e-3; % value from Komar 1980 
 
 % For now, let's assume that faecal pellets are either cylindrical OR
@@ -63,21 +87,43 @@ end
 % samples (original units: mg C / mm^3)
 switch pars.shape
     case 'cylinder'
-        pars.fpCm_summer = 0.03 * 1e3;   % mean mg C / cm^3
-        pars.fpCsd_summer = 0.006 * 1e3; % standard deviation
-        pars.fpCm_winter = 0.018 * 1e3;
-        pars.fpCsd_winter = 0.006 * 1e3;
+        pars.fpCm_summer = 0.03;   % mean g C / cm^3
+        pars.fpCsd_summer = 0.006; % standard deviation
+        pars.fpCm_winter = 0.018;
+        pars.fpCsd_winter = 0.006;
     case 'ellipsoid'
-        pars.fpCm_summer = 0.052 * 1e3;
-        pars.fpCsd_summer = 0.005 * 1e3;
-        pars.fpCm_winter = 0.034 * 1e3;
-        pars.fpCsd_winter = 0.006 * 1e3;
+        pars.fpCm_summer = 0.052;
+        pars.fpCsd_summer = 0.005;
+        pars.fpCm_winter = 0.034;
+        pars.fpCsd_winter = 0.006;
     case 'sphere'
-        pars.fpCm_summer = 0.035 * 1e3;
-        pars.fpCsd_summer = 0.004 * 1e3;
-        pars.fpCm_winter = 0.027 * 1e3;
-        pars.fpCsd_winter = 0.008 * 1e3;
+        pars.fpCm_summer = 0.035;
+        pars.fpCsd_summer = 0.004;
+        pars.fpCm_winter = 0.027;
+        pars.fpCsd_winter = 0.008;
 end
 
 
+%% Krill size conversions
+switch loadParsFromFile, case true
+    pars.W_dry_a = parsFromFile.Value(strcmp(parsFromFile.Parameter, 'W_dry_a'),:); % mg dry / mm
+    pars.W_dry_b = parsFromFile.Value(strcmp(parsFromFile.Parameter, 'W_dry_b'),:);
+    pars.W_wet_a = parsFromFile.Value(strcmp(parsFromFile.Parameter, 'W_wet_a'),:); % mg wet / mm
+    pars.W_wet_b = parsFromFile.Value(strcmp(parsFromFile.Parameter, 'W_wet_b'),:);
+    pars.W_dry2c = parsFromFile.Value(strcmp(parsFromFile.Parameter, 'W_dry2c') & ...
+        strcmp(parsFromFile.Group, 'Summer'),:); % mg C / mg dry
+end
+
+%% Faecal pellet production rate
+switch loadParsFromFile, case true
+    pars.FPprod = parsFromFile.Value(strcmp(parsFromFile.Parameter, 'FPprod')); % mm^3 / h / g dry mass
+end
+
+
+%% Plastic properties
+switch loadParsFromFile, case true
+    pars.Vp = parsFromFile.Value(strcmp(parsFromFile.Parameter, 'V_m'),:); % mum^3 / particle
+    pars.rho_p = parsFromFile.Value(strcmp(parsFromFile.Parameter, 'rho_m') & ...
+        strcmp(parsFromFile.Group, polymer));
+end
 

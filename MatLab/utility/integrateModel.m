@@ -36,10 +36,6 @@ end
 init = structfun(@(z) permute(z, [3, 1, 2]), init, 'UniformOutput', false);
 init = structfun(@(z) z(:,:), init, 'UniformOutput', false);
 init = cell2mat(struct2cell(init));
-% yy = reshape(permute(init_, [2, 1]), [nColumns, domain.ndepth, nvars]);
-% yy = reshape(permute(yy, [3, 2, 1]), nvars, domain.ndepth, domain.nlon, domain.nlat);
-% yy = permute(yy, [1, 3, 4, 2]);
-
 
 % Reconfigure structure of forcing data for use in the parfor loop
 forc_ = forc;
@@ -48,6 +44,19 @@ forcDims = structfun(@(z) ndims(z), forc);
 forc = rmfield(forc, fields(~ismember(forcDims, [3, 4])));
 forc = structfun(@(z) permute(z, [3, 4, 1, 2]), forc, 'UniformOutput', false);
 forc = structfun(@(z) z(:,:,:), forc, 'UniformOutput', false);
+
+% Reconfigure structure of domain
+Domain = domain;
+fields = fieldnames(Domain);
+domDims = structfun(@(z) ndims(z), Domain);
+domSize = structfun(@(z) size(z), Domain, 'UniformOutput', false);
+fields2reshape = domDims == 3 | (domDims == 2 & structfun(@(z) ~any(z == 1), domSize));
+nfields2reshape = sum(fields2reshape);
+reshapedFields = fields(fields2reshape);
+domainBase = rmfield(Domain, fields(fields2reshape));
+domain_ = rmfield(Domain, fields(~fields2reshape));
+domain_ = structfun(@(z) permute(z, [3, 1, 2]) , domain_, 'UniformOutput', false);
+domain_ = structfun(@(z) z(:,:), domain_, 'UniformOutput', false);
 
 % Pre-allocate output array -- construction styled for compatibiliy with
 % parallel loop
@@ -71,7 +80,7 @@ OUT = repmat(xx, 1, nColumns);
 % Loop through valid horizontal grid cells
 
 % Index valid horizontal grid cells
-ind = domain.horizGridIndex(:,:,1) .* ~isLand;
+ind = Domain.horizGridIndex(:,:,1) .* ~isLand;
 ind(ind == 0) = [];
 nvalid = length(ind);
 OUT_ = OUT(:,ind);
@@ -79,6 +88,14 @@ init_ = init(:,ind);
 % Loop through each water column
 parfor i = 1:nvalid
     ii = ind(i);
+    % Domain
+    domain = domainBase;
+    dom = structfun(@(z) z(:,ii), domain_, 'UniformOutput', false);
+    f = reshapedFields;
+    for j = 1:nfields2reshape
+        domain.(f{j}) = dom.(f{j});
+    end
+%     domain = structfun(@(z) z(:,ii), domain_, 'UniformOutput', false);
     % Forcing data
     Forcing = structfun(@(z) z(:,:,ii), forc, 'UniformOutput', false);
     % Initial state
@@ -132,9 +149,9 @@ x = permute(x, [1, 4, 5, 2, 3]);
 out = x;
 
 % Optional output struct stores solution in more readable format
-outStruct.lon = domain.lon;
-outStruct.lat = domain.lat;
-outStruct.depth = domain.depth;
+outStruct.lon = Domain.lon;
+outStruct.lat = Domain.lat;
+outStruct.depth = Domain.depth;
 % Include output times
 initTime = datevec(forc_.time(1));
 initTime(3) = 1;
