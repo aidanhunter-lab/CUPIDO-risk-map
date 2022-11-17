@@ -1,4 +1,5 @@
 library(shiny)
+library(sp)
 library(sf)
 library(ggplot2)
 library(gtable)
@@ -53,14 +54,14 @@ xy = matrix(unlist(DATA_sf$geometry), 2, nrow(DATA))
 DATA$x = xy[1,]
 DATA$y = xy[2,]
 
-# Set (minimum) size of plot bounding box
-bbox_map = st_bbox(nc)
-bbox_dat = st_bbox(DATA_sf)
-bbox = setNames(c(min(bbox_map$xmin, bbox_dat$xmin),
-                  min(bbox_map$ymin, bbox_dat$ymin),
-                  max(bbox_map$xmax, bbox_dat$xmax),
-                  max(bbox_map$ymax, bbox_dat$ymax)), names(bbox_map))
-aspectRatio = diff(bbox[c(1,3)]) / diff(bbox[c(2,4)])
+# # Set (minimum) size of plot bounding box
+# bbox_map = st_bbox(nc)
+# bbox_dat = st_bbox(DATA_sf)
+# bbox = setNames(c(min(bbox_map$xmin, bbox_dat$xmin),
+#                   min(bbox_map$ymin, bbox_dat$ymin),
+#                   max(bbox_map$xmax, bbox_dat$xmax),
+#                   max(bbox_map$ymax, bbox_dat$ymax)), names(bbox_map))
+# aspectRatio = diff(bbox[c(1,3)]) / diff(bbox[c(2,4)])
 
 # Load research station data ----------------------------------------------
 filename = 'COMNAP_Antarctic_Facilities_Master.csv'
@@ -76,6 +77,62 @@ STATIONS_sf = st_transform(STATIONS_sf, crs_use)
 xy = matrix(unlist(STATIONS_sf$geometry), 2, nrow(STATIONS))
 STATIONS$x = xy[1,]
 STATIONS$y = xy[2,]
+
+
+
+
+# Load krill data ---------------------------------------------------------
+
+filename = 'krill_data_mapped.csv'
+filepath = 'MatLab/temp/'
+KRILL = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+
+# Data pre-processing -----------------------------------------------------
+KRILL <- KRILL[!is.nan(KRILL$value),] # omit missing data
+# Mean abundance across months for each grid cell
+KRILL_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, KRILL, 'mean')
+KRILL_allMonths$month <- 'all'
+KRILL_allMonths <- KRILL_allMonths[,c(1:4,6,5)]
+KRILL <- rbind(KRILL, KRILL_allMonths)
+
+# I think this function is too complicated -- maybe only need call to Polygon function, and not the Polygons function...
+createPolygons <- function(dat){
+  # Returns list of polygons describing lon/lat bounding box for each row of dat
+  n = nrow(dat)
+  lapply(1:n, FUN = function(z){
+    x = dat[z,]
+    Polygons(
+      list(
+        Polygon(
+          cbind(
+            c(x$lonmin, x$lonmax, x$lonmax, x$lonmin, x$lonmin),
+            c(x$latmin, x$latmin, x$latmax, x$latmax, x$latmin)
+          ))), paste0('row', z)
+    )}
+  )
+}
+
+krill_poly <- createPolygons(KRILL) # generate polygons
+krill_poly <- SpatialPolygons(krill_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
+krill_poly <- st_as_sf(krill_poly)
+krill_poly <- st_transform(krill_poly, crs = crs_use) # convert coordinates
+krill_poly$month <- KRILL$month
+krill_poly$value <- KRILL$value
+
+# create a discrete colour scheme based on krill (log scale) abundance (value column)
+ncols <- 10
+clims <- 2 ^ {1:ncols-1}
+clims[1] <- 0
+colgroup <- paste(clims[1:{ncols-1}], clims[2:ncols], sep = '-')
+colgroup[ncols] <- paste0('>', clims[ncols])
+# colgroup[ncols+1] <- 'no data'
+clims[ncols+1] <- Inf
+for(i in 1:ncols){
+  j <- clims[i] <=  krill_poly$value & krill_poly$value < clims[i+1]
+  krill_poly$colourgroup[j] = colgroup[i]
+}
+# krill_poly$colourgroup[is.na(krill_poly$value)] <- colgroup[ncols+1]
+krill_poly$colourgroup <- factor(krill_poly$colourgroup, levels = colgroup)
 
 
 # Plotting parameters -----------------------------------------------------
@@ -101,7 +158,15 @@ sources <- levels(DATA$Source)
 nsources <- length(sources)
 pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
 
-
+# Set (minimum) size of plot bounding box
+bbox_map <- st_bbox(nc)
+bbox_dat <- st_bbox(DATA_sf)
+bbox_krill <- st_bbox(krill_poly)
+bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin),
+                   min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin),
+                   max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax),
+                   max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax)), names(bbox_map))
+aspectRatio = diff(bbox[c(1,3)]) / diff(bbox[c(2,4)])
 
 
 
@@ -157,6 +222,16 @@ ui <- fluidPage(
                     "Depot" = "Depot"),
                   multiple = TRUE, selected = c("Station")),
 
+      # Input: background layers ----
+      radioButtons("background", "Background data:",
+                   c("None" = "none",
+                     "Krill (all months)" = "all",
+                     "Krill (Jan)" = "1",
+                     "Krill (Feb)" = "2",
+                     "Krill (Mar)" = "3"),
+                   selected = 'none'),
+
+      
       # # Input: plot value transformation ----
       # radioButtons("tran", "Scale:",
       #              c("Natural" = "norm",
@@ -165,7 +240,7 @@ ui <- fluidPage(
       # # Input: Checkbox for whether outliers should be included ----
       # checkboxInput("outliers", "Show outliers", TRUE),
       
-      width = 4
+      width = 3
       
     ),
     
@@ -178,7 +253,7 @@ ui <- fluidPage(
       plotOutput('blank', width = '100%', height = '1px'),
       plotOutput('plt'), #, inline = T)
       
-      width = 8
+      width = 9
       
       # br(),
       # 
@@ -234,13 +309,21 @@ server <- function(input, output, session) {
       )
     )
   })
+
+  # Filter the krill data
+  filtered_krill_data = reactive({
+    return(
+      subset(krill_poly, month == input$background)
+    )
+  })
   
-  # # Filter plot colours according to data source
-  # Colours <- reactive({
-  #   return(
-  #     subset(pltColours, Source %in% levels(dat_plastic$Source))
-  #   )
-  # })
+  background_dat <-reactive({
+    if(input$background %in% c('all','1','2','3')){
+      return('krill')
+    }else{
+      return('none')
+    }
+  })
   
   # Filter plot symbols based on sample & station types
   Symbols <- reactive({
@@ -273,15 +356,40 @@ server <- function(input, output, session) {
     
     dat_plastic <- filtered_plastic_data()
     dat_stations <- filtered_station_data()
+    dat_krill <- filtered_krill_data()
+    background <- background_dat()
     symbols <- Symbols()
     
+    # Background layer
+    anyBackground <- input$background != 'none'
+    switch(background,
+           krill = {
+             plt_background <- 
+               ggplot() +
+               geom_sf(data = dat_krill, aes(fill = colourgroup)) +
+               scale_fill_viridis_d(option = 'plasma') +
+               guides(fill = guide_legend(title = bquote(atop(Krill, individuals / m^2))))
+           }
+    )
+
     # Coastline
-    plt_map <- 
-      ggplot() + 
-      geom_sf(data = nc,
-              aes(fill = surface),
-              show.legend = FALSE) +
-      scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
+    if(background == 'none'){
+      plt_map <- 
+        ggplot() + 
+        geom_sf(data = nc,
+                aes(fill = surface),
+                show.legend = FALSE) +
+        scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
+    }else{
+      plt_map <- 
+        plt_background +
+        new_scale('fill') +
+        geom_sf(data = nc,
+                aes(fill = surface),
+                show.legend = FALSE) +
+        scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
+    }
+
     
     # Research stations
     plt_stations <- 
@@ -311,6 +419,7 @@ server <- function(input, output, session) {
              fill = guide_legend(override.aes = list(shape = c(21))))
       # guides(fill = guide_legend(override.aes = list(shape = c(21))))
     
+    
     # Extract legends
     leg_stations <- gtable_filter(ggplot_gtable(ggplot_build(plt_stations)), "guide-box") 
     leg_stations_grob <- grobTree(leg_stations)
@@ -320,13 +429,17 @@ server <- function(input, output, session) {
     
     # Combine plot layers
     plt_no_legend <- 
-      ggplot() + 
       
-      # Coastline
-      geom_sf(data = nc,
-              aes(fill = surface),
-              show.legend = FALSE) +
-      scale_fill_manual(values = c('grey','skyblue','skyblue','grey')) +
+      # Coastline & (optional) background
+      plt_map +
+      
+      # ggplot() + 
+      
+      # # Coastline
+      # geom_sf(data = nc,
+      #         aes(fill = surface),
+      #         show.legend = FALSE) +
+      # scale_fill_manual(values = c('grey','skyblue','skyblue','grey')) +
       
       scale_shape_manual(values = setNames(symbols$symbol, symbols$Type)) +
       
@@ -388,41 +501,7 @@ server <- function(input, output, session) {
   },
 height = blankheight, width = blankwidth)
   
-  
-  
-  
-  
-  #   output$plt = renderPlot({
-  #     plt = ggplot() + 
-  #       # Coastline
-  #       geom_sf(data = nc, aes(fill = surface)) +
-  #       scale_fill_manual(values = c('grey','skyblue','skyblue','grey')) +
-  #       guides(fill = 'none') +
-  #       new_scale_fill() +
-  #       # plastic samples
-  #       geom_sf(data = dat(),
-  #               aes(colour = Source, fill = Source, shape = SampleType),
-  #               alpha = 0.7, size = 4,
-  #               show.legend = "point") +
-  #       scale_colour_brewer(type = 'qual', palette = 'Dark2', aesthetics = c('colour', 'fill')) +
-  #       guides(shape = guide_legend(title = 'Sample type')) +
-  #       # new_scale_colour() +
-  #      new_scale_fill() +
-#       # research stations
-#       geom_sf(data = filtered_station_data(),
-#               aes(fill = Type),
-#               alpha = 0.7, size = 3,
-#               show.legend = "point") +
-#       scale_colour_brewer(type = 'qual', palette = 'Set3', aesthetics = 'fill') +
-# #      guides(shape = guide_legend(title = 'Sample type')) +
-#       # guides(shape = guide_legend(title = 'Sample type'), fill = 'none') +
-#       coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax'])) +
-#       theme_void()
-#     plt
-#   },
-#   height = blankheight, width = blankwidth)
 
-  
 
   # output$summary <- renderPrint({
   #   summary(dat())
