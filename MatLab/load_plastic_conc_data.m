@@ -339,28 +339,55 @@ Data.Cozar_2014 = Cozar_2014;
 
 %% adventurescience.org
 
-ind = strcmp(plastics.Source, sources{contains(sources, 'adventure')});
-dat = plastics(ind,:);
+% I can extract adventurescience.org measures from data table provided by
+% Waller, or I can load the values I extracted myself. Let's use my more
+% recent extraction, although this lacks some of information provided in
+% Waller's table.
 
-dat = removevars(dat, {'Class'});
-dat.Station = (1:height(dat))';
+source = 'AdventureScience';
+filepath = fullfile(dataDirectory, source);
 
-dat = movevars(dat, {'Station', 'Size'}, 'Before', 'Location');
-dat = movevars(dat, {'Value', 'Unit'}, 'After', 'Location');
-dat = movevars(dat, {'Longitude', 'Latitude'}, 'After', 'Unit');
+filename = 'plastic samples.csv';
+abundance = readtable(fullfile(filepath, filename));
 
-dat.Value = 1000 .* dat.Value; % convert particles/L -> particles/m^3
-dat.Unit = repmat({'particles/m3'}, height(dat), 1);
-dat.Size = strrep(dat.Size, 'M', 'm');
+abundance.Sampling_Method = repmat({'Sample bottle'}, height(abundance), 1);
+abundance.Depth = repmat({'<1m'}, height(abundance), 1);
 
-adventurescience.abundance = dat;
+adventurescience.abundance = abundance;
 
 Type = {'particle'};
 Value = 100;
 Unit = {'percent'};
-adventurescience.categories = table(Type, Value, Unit);
+categories = table(Type, Value, Unit);
+
+adventurescience.categories = categories;
 
 Data.adventurescience = adventurescience;
+
+
+% See commented code below for extracting adventurescience data from Waller's table
+% ind = strcmp(plastics.Source, sources{contains(sources, 'adventure')});
+% dat = plastics(ind,:);
+% 
+% dat = removevars(dat, {'Class'});
+% dat.Station = (1:height(dat))';
+% 
+% dat = movevars(dat, {'Station', 'Size'}, 'Before', 'Location');
+% dat = movevars(dat, {'Value', 'Unit'}, 'After', 'Location');
+% dat = movevars(dat, {'Longitude', 'Latitude'}, 'After', 'Unit');
+% 
+% dat.Value = 1000 .* dat.Value; % convert particles/L -> particles/m^3
+% dat.Unit = repmat({'particles/m3'}, height(dat), 1);
+% dat.Size = strrep(dat.Size, 'M', 'm');
+% 
+% adventurescience.abundance = dat;
+% 
+% Type = {'particle'};
+% Value = 100;
+% Unit = {'percent'};
+% adventurescience.categories = table(Type, Value, Unit);
+% 
+% Data.adventurescience = adventurescience;
 
 
 %% Cunningham 2020 (sediment)
@@ -413,7 +440,70 @@ Cunningham_2020.properties = properties;
 Data.Cunningham_2020 = Cunningham_2020;
 
 
-% Munari 2017 (sediment)
+%% Munari 2017 (sediment)
+
+source = 'Munari_2017';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'plastic abundance fractioned by size_table 4.csv';
+abundance_size = readtable(fullfile(filepath, filename));
+
+filename = 'plastic abundance fractioned by type and location_table 2.csv';
+abundance_type = readtable(fullfile(filepath, filename));
+
+filename = 'sample coords and depth_table 1.csv';
+stations = readtable(fullfile(filepath, filename));
+
+% convert coords from degree-minute into decimal degrees
+lon = stations.Longtide_E;
+lat = stations.Latitude_S;
+lon = cell2mat(cellfun(@(z) str2double(z(1:3)) + str2double(z(5:end)) / 60, ...
+    lon, 'UniformOutput', false));
+lat = cell2mat(cellfun(@(z) -(str2double(z(1:3)) + str2double(z(5:end)) / 60), ...
+    lat, 'UniformOutput', false));
+stations.Longitude = lon;
+stations.Latitude = lat;
+stations = removevars(stations, {'Longtide_E','Latitude_S'});
+
+sampleTime = datetime(2015,1,15); % samples collected in Jan 2015
+stations.Date = repmat(sampleTime, height(stations), 1);
+
+abundance_type.Properties.VariableNames{'Site'} = 'Station';
+abundance_size.Properties.VariableNames{'Site'} = 'Station';
+
+abundance_type = join(abundance_type, stations);
+abundance_size = join(abundance_size, stations);
+
+abundance_type = movevars(abundance_type, {'Longitude','Latitude','Depth_m', 'Date'}, 'After', 'Station');
+abundance_size = movevars(abundance_size, {'Longitude','Latitude','Depth_m', 'Date'}, 'After', 'Station');
+
+abundance = abundance_type;
+
+% s = unique(abundance.Station, 'stable');
+m = reshape(abundance.Mean, 3, []);
+m = sum(m);
+abundance = removevars(abundance, {'Plastic','Mean','StdDev'});
+abundance = unique(abundance, 'stable');
+abundance.Mean = m(:);
+abundance = movevars(abundance, 'Mean', 'Before', 'Unit');
+
+Munari_2017.abundance = abundance;
+Munari_2017.size = abundance_size;
+Munari_2017.category = abundance_type;
+
+Data.Munari_2017 = Munari_2017;
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
