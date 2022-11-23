@@ -231,7 +231,7 @@ Jones_Williams_2020.zooplankton = zoo;
 Data.Jones_Williams_2020 = Jones_Williams_2020;
 
 %% Zhang 2022
-% Really good, useful paper, but the data is not tabled sp I'll need to
+% Really good, useful paper, but the data is not tabled so I'll need to
 % extract it from their written results and figures... This  will take a
 % while but it's worth it for samples from the eastern side of Antarctica
 
@@ -339,36 +339,176 @@ Data.Cozar_2014 = Cozar_2014;
 
 %% adventurescience.org
 
-ind = strcmp(plastics.Source, sources{contains(sources, 'adventure')});
-dat = plastics(ind,:);
+% I can extract adventurescience.org measures from data table provided by
+% Waller, or I can load the values I extracted myself. Let's use my more
+% recent extraction, although this lacks some of information provided in
+% Waller's table.
 
-dat = removevars(dat, {'Class'});
-dat.Station = (1:height(dat))';
+source = 'AdventureScience';
+filepath = fullfile(dataDirectory, source);
 
-dat = movevars(dat, {'Station', 'Size'}, 'Before', 'Location');
-dat = movevars(dat, {'Value', 'Unit'}, 'After', 'Location');
-dat = movevars(dat, {'Longitude', 'Latitude'}, 'After', 'Unit');
+filename = 'plastic samples.csv';
+abundance = readtable(fullfile(filepath, filename));
 
-dat.Value = 1000 .* dat.Value; % convert particles/L -> particles/m^3
-dat.Unit = repmat({'particles/m3'}, height(dat), 1);
-dat.Size = strrep(dat.Size, 'M', 'm');
+abundance.Sampling_Method = repmat({'Sample bottle'}, height(abundance), 1);
+abundance.Depth = repmat({'<1m'}, height(abundance), 1);
 
-adventurescience.abundance = dat;
+adventurescience.abundance = abundance;
 
 Type = {'particle'};
 Value = 100;
 Unit = {'percent'};
-adventurescience.categories = table(Type, Value, Unit);
+categories = table(Type, Value, Unit);
+
+adventurescience.categories = categories;
 
 Data.adventurescience = adventurescience;
+
+
+% See commented code below for extracting adventurescience data from Waller's table
+% ind = strcmp(plastics.Source, sources{contains(sources, 'adventure')});
+% dat = plastics(ind,:);
+% 
+% dat = removevars(dat, {'Class'});
+% dat.Station = (1:height(dat))';
+% 
+% dat = movevars(dat, {'Station', 'Size'}, 'Before', 'Location');
+% dat = movevars(dat, {'Value', 'Unit'}, 'After', 'Location');
+% dat = movevars(dat, {'Longitude', 'Latitude'}, 'After', 'Unit');
+% 
+% dat.Value = 1000 .* dat.Value; % convert particles/L -> particles/m^3
+% dat.Unit = repmat({'particles/m3'}, height(dat), 1);
+% dat.Size = strrep(dat.Size, 'M', 'm');
+% 
+% adventurescience.abundance = dat;
+% 
+% Type = {'particle'};
+% Value = 100;
+% Unit = {'percent'};
+% adventurescience.categories = table(Type, Value, Unit);
+% 
+% Data.adventurescience = adventurescience;
+
+
+%% Cunningham 2020 (sediment)
+
+source = 'Cunningham_2020';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'microplastic abundance_tableS1.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+filename = 'microplastic properties_tableS2.csv';
+properties = readtable(fullfile(filepath, filename));
+
+filename = 'relative abundance of polymers_figure 2C.csv';
+rel_abundance = readtable(fullfile(filepath, filename));
+
+filename = 'sample locations_table1.csv';
+stations = readtable(fullfile(filepath, filename));
+
+filename = 'plastic type.csv';
+categories = readtable(fullfile(filepath, filename));
+
+
+abundance.Properties.VariableNames{'Measure'} = 'Replicate';
+
+stations.Year = nan(height(stations), 1);
+stations.Year(contains(stations.Core, 'AP')) = 2017;
+stations.Year(contains(stations.Core, {'SS', 'SG'}) & ...
+    ~ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
+stations.Year(ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
+
+abundance = join(abundance, stations); % merge lat-lon and depth info into main table
+abundance = movevars(abundance, {'Year', 'Longitude', 'Latitude', 'Depth_m'}, 'After', 'MUC_ID');
+abundance = movevars(abundance, 'Unit', 'After', 'Mean');
+
+rel_abundance.Properties.VariableNames([1,3]) = {'Plastic', 'Value'};
+
+Cunningham_2020.abundance = abundance;
+Cunningham_2020.polymers = rel_abundance;
+Cunningham_2020.categories = categories;
+Cunningham_2020.properties = properties;
+
+% I NEED TO GET THE SAMPLE DATES FOR THESE SEDIMENT DATA -- IT'S NOT
+% ENTIRELY CLEAR FROM THE PAPER SO I SHOULD EMAIL CUNNINGHAM TO ASK.
+% HOWEVER, IT DOES LOOK AS THOUGH THE ANTARCTIC PENINSULA SAMPLES ARE FROM
+% 2017 (JR17003A), THE SOUTH SANDWICH ISLANDS AND SOUTH GEORGIA SAMPLES ARE
+% FROM 2019 (PS119 AND M134). NOTE THE DIFFERENCE IN SAMPLE ID AT THE
+% BOTTOM OF TABLE 1 -- THIS MAY INDICATE THE DIFFERENT CRUISES IN 2019.
+
+Data.Cunningham_2020 = Cunningham_2020;
+
+
+%% Munari 2017 (sediment)
+
+source = 'Munari_2017';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'plastic abundance fractioned by size_table 4.csv';
+abundance_size = readtable(fullfile(filepath, filename));
+
+filename = 'plastic abundance fractioned by type and location_table 2.csv';
+abundance_type = readtable(fullfile(filepath, filename));
+
+filename = 'sample coords and depth_table 1.csv';
+stations = readtable(fullfile(filepath, filename));
+
+% convert coords from degree-minute into decimal degrees
+lon = stations.Longtide_E;
+lat = stations.Latitude_S;
+lon = cell2mat(cellfun(@(z) str2double(z(1:3)) + str2double(z(5:end)) / 60, ...
+    lon, 'UniformOutput', false));
+lat = cell2mat(cellfun(@(z) -(str2double(z(1:3)) + str2double(z(5:end)) / 60), ...
+    lat, 'UniformOutput', false));
+stations.Longitude = lon;
+stations.Latitude = lat;
+stations = removevars(stations, {'Longtide_E','Latitude_S'});
+
+sampleTime = datetime(2015,1,15); % samples collected in Jan 2015
+stations.Date = repmat(sampleTime, height(stations), 1);
+
+abundance_type.Properties.VariableNames{'Site'} = 'Station';
+abundance_size.Properties.VariableNames{'Site'} = 'Station';
+
+abundance_type = join(abundance_type, stations);
+abundance_size = join(abundance_size, stations);
+
+abundance_type = movevars(abundance_type, {'Longitude','Latitude','Depth_m', 'Date'}, 'After', 'Station');
+abundance_size = movevars(abundance_size, {'Longitude','Latitude','Depth_m', 'Date'}, 'After', 'Station');
+
+abundance = abundance_type;
+
+% s = unique(abundance.Station, 'stable');
+m = reshape(abundance.Mean, 3, []);
+m = sum(m);
+abundance = removevars(abundance, {'Plastic','Mean','StdDev'});
+abundance = unique(abundance, 'stable');
+abundance.Mean = m(:);
+abundance = movevars(abundance, 'Mean', 'Before', 'Unit');
+
+Munari_2017.abundance = abundance;
+Munari_2017.size = abundance_size;
+Munari_2017.category = abundance_type;
+
+Data.Munari_2017 = Munari_2017;
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 
 % Suaria 2020
 
-% Cunningham 2020 (sediment)
-% Munari 2017 (sediment)
 
 % Studies cited in Waller 2017
 % Eriksen 2014 (Gloabl study -- possibly poor data for Southern Ocean)
