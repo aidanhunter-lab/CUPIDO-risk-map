@@ -231,7 +231,7 @@ Jones_Williams_2020.zooplankton = zoo;
 Data.Jones_Williams_2020 = Jones_Williams_2020;
 
 %% Zhang 2022
-% Really good, useful paper, but the data is not tabled sp I'll need to
+% Really good, useful paper, but the data is not tabled so I'll need to
 % extract it from their written results and figures... This  will take a
 % while but it's worth it for samples from the eastern side of Antarctica
 
@@ -363,12 +363,62 @@ adventurescience.categories = table(Type, Value, Unit);
 Data.adventurescience = adventurescience;
 
 
+%% Cunningham 2020 (sediment)
+
+source = 'Cunningham_2020';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'microplastic abundance_tableS1.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+filename = 'microplastic properties_tableS2.csv';
+properties = readtable(fullfile(filepath, filename));
+
+filename = 'relative abundance of polymers_figure 2C.csv';
+rel_abundance = readtable(fullfile(filepath, filename));
+
+filename = 'sample locations_table1.csv';
+stations = readtable(fullfile(filepath, filename));
+
+filename = 'plastic type.csv';
+categories = readtable(fullfile(filepath, filename));
+
+
+abundance.Properties.VariableNames{'Measure'} = 'Replicate';
+
+stations.Year = nan(height(stations), 1);
+stations.Year(contains(stations.Core, 'AP')) = 2017;
+stations.Year(contains(stations.Core, {'SS', 'SG'}) & ...
+    ~ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
+stations.Year(ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
+
+abundance = join(abundance, stations); % merge lat-lon and depth info into main table
+abundance = movevars(abundance, {'Year', 'Longitude', 'Latitude', 'Depth_m'}, 'After', 'MUC_ID');
+abundance = movevars(abundance, 'Unit', 'After', 'Mean');
+
+rel_abundance.Properties.VariableNames([1,3]) = {'Plastic', 'Value'};
+
+Cunningham_2020.abundance = abundance;
+Cunningham_2020.polymers = rel_abundance;
+Cunningham_2020.categories = categories;
+Cunningham_2020.properties = properties;
+
+% I NEED TO GET THE SAMPLE DATES FOR THESE SEDIMENT DATA -- IT'S NOT
+% ENTIRELY CLEAR FROM THE PAPER SO I SHOULD EMAIL CUNNINGHAM TO ASK.
+% HOWEVER, IT DOES LOOK AS THOUGH THE ANTARCTIC PENINSULA SAMPLES ARE FROM
+% 2017 (JR17003A), THE SOUTH SANDWICH ISLANDS AND SOUTH GEORGIA SAMPLES ARE
+% FROM 2019 (PS119 AND M134). NOTE THE DIFFERENCE IN SAMPLE ID AT THE
+% BOTTOM OF TABLE 1 -- THIS MAY INDICATE THE DIFFERENT CRUISES IN 2019.
+
+Data.Cunningham_2020 = Cunningham_2020;
+
+
+% Munari 2017 (sediment)
+
 
 
 % Suaria 2020
 
-% Cunningham 2020 (sediment)
-% Munari 2017 (sediment)
 
 % Studies cited in Waller 2017
 % Eriksen 2014 (Gloabl study -- possibly poor data for Southern Ocean)
