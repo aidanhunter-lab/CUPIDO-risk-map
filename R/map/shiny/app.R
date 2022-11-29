@@ -8,6 +8,11 @@ library(gridExtra)
 library(cowplot)
 library(ggnewscale)
 library(RColorBrewer)
+# library(plotly) # doesn't work with layering grobs...
+library(ggiraph) # this is good for interactivity, but cannot be converted to grobs for layout...
+# library(ggpubr) # maybe this package's 'ggarrange' function can help.
+
+# library(shinybrowser) # get browser dimension & other info
 
 # getwd()
 setwd('~/Documents/Git Repos/CUPIDO-risk-map')
@@ -48,6 +53,48 @@ sourceYear <- suppressWarnings(
 )
 DATA$Source <- factor(DATA$Source, levels = sources[order(sourceYear)])
 
+# Columns for interactive (mouse scrolling) labels
+west_ind <- DATA$Longitude < 0
+east_ind <- !west_ind
+lon_lab <- abs(round(DATA$Longitude, 2))
+lon_lab[west_ind] <- paste(lon_lab[west_ind], 'W')
+lon_lab[east_ind] <- paste(lon_lab[east_ind], 'E')
+lat_lab <- paste(abs(round(DATA$Latitude, 2)), 'S')
+coord_lab <- paste0('(', lon_lab, ', ', lat_lab, ')')
+
+DATA$Variable <- as.character(DATA$Variable)
+DATA$Variable[DATA$Variable == 'massDensity'] <- 'mass density'
+
+DATA$tooltip <- paste0('Location: ', coord_lab, '\n ',
+                       'Plastic ',  DATA$Variable, ' = ', signif(DATA$Value,2), ' ', DATA$Unit)
+
+DATA$data_id <- 1:nrow(DATA)
+
+#d <- subset(DATA, Source == 'Cincinelli (2017)')
+# try using flextables -- https://github.com/davidgohel/ggiraph/issues/175
+
+
+# ts_county_cases_sf <- ts_county_cases %>% 
+#   filter(date=="2020-03-27",
+#          state=="Texas") %>% 
+#   left_join(sf_counties, by=c("fips"="GEOID")) %>% 
+#   sf::st_as_sf()
+# 
+# # flextable part
+# fun_flextable <- function(dat){
+#   ft <- flextable(dat, col_keys = c("county", "cases", "deaths"), 
+#                   defaults = list(fontname = "Roboto"))
+#   ft <- bold(ft, part = "header", bold = TRUE)
+#   ft <- color(ft, color = "orange", part = "all")
+#   ft <- set_table_properties(ft, layout = "autofit")
+#   as.character(htmltools_value(ft, ft.shadow = FALSE))
+# }
+# temp_dat <- as.data.frame(ts_county_cases_sf)[,c("county", "cases", "deaths")]
+# temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
+# ts_county_cases_sf$tooltip <- map_chr(temp_dat, fun_flextable)
+
+
+
 
 # Mapping coordinates
 DATA_sf = st_as_sf(DATA, coords = c("Longitude", "Latitude"), crs = crs_world)
@@ -56,14 +103,7 @@ xy = matrix(unlist(DATA_sf$geometry), 2, nrow(DATA))
 DATA$x = xy[1,]
 DATA$y = xy[2,]
 
-# # Set (minimum) size of plot bounding box
-# bbox_map = st_bbox(nc)
-# bbox_dat = st_bbox(DATA_sf)
-# bbox = setNames(c(min(bbox_map$xmin, bbox_dat$xmin),
-#                   min(bbox_map$ymin, bbox_dat$ymin),
-#                   max(bbox_map$xmax, bbox_dat$xmax),
-#                   max(bbox_map$ymax, bbox_dat$ymax)), names(bbox_map))
-# aspectRatio = diff(bbox[c(1,3)]) / diff(bbox[c(2,4)])
+
 
 
 # Load research station data ----------------------------------------------
@@ -73,6 +113,48 @@ STATIONS = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
 
 # Data pre-processing ----
 STATIONS$Type = reorder(STATIONS$Type, rep(1, nrow(STATIONS)), sum, decreasing = TRUE)
+
+# Define tooltip variable for interactive info...
+
+# Attribute values cannot contain single quotes "'", so remove them... I want to
+# find a way to include these...
+STATIONS$Official_Name <- gsub("'", "", STATIONS$Official_Name)
+stationTypes <- levels(STATIONS$Type)
+STATIONS$order <- 1:nrow(STATIONS)
+
+sl <- lapply(stationTypes, FUN = function(z){
+  n <- gsub(z, '', STATIONS$Official_Name[STATIONS$Type == z])
+  o <- STATIONS$order[STATIONS$Type == z]
+  matrix(c(o,n), ncol = 2)
+})
+d <- as.data.frame(do.call('rbind', sl))
+d <- d[order(as.numeric(d[,1])),]
+STATIONS$Official_Name <- d[,2]
+# remove spaces at end of names
+n <- nchar(STATIONS$Official_Name)
+i <- substr(STATIONS$Official_Name, n, n) == ' '  
+w <- any(i)
+while(w){
+  STATIONS$Official_Name[i] <- substr(STATIONS$Official_Name[i], 1, n[i] - 1)
+  n <- nchar(STATIONS$Official_Name)
+  i <- substr(STATIONS$Official_Name, n, n) == ' '  
+  w <- any(i)
+}
+# remove spaces at start of names
+n <- nchar(STATIONS$Official_Name)
+i <- substr(STATIONS$Official_Name, 1, 1) == ' '  
+w <- any(i)
+while(w){
+  STATIONS$Official_Name[i] <- substr(STATIONS$Official_Name[i], 2, n[i])
+  n <- nchar(STATIONS$Official_Name)
+  i <- substr(STATIONS$Official_Name, 1, 1) == ' '  
+  w <- any(i)
+}
+STATIONS$Official_Name <- gsub('- ', ' ', STATIONS$Official_Name)
+
+STATIONS$tooltip <- paste0(STATIONS$Official_Name, ' ', STATIONS$Type, '\n ',
+                           'Primary operator: ', STATIONS$Operator_primary, '\n ',
+                           'Peak population size = ', STATIONS$Peak_Population)
 
 # Mapping coordinates
 STATIONS_sf = st_as_sf(STATIONS, coords = c("Longitude_DD", "Latitude_DD"), crs = crs_world)
@@ -206,120 +288,432 @@ bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin),
                    min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin),
                    max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax),
                    max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax)), names(bbox_map))
-aspectRatio = diff(bbox[c(1,3)]) / diff(bbox[c(2,4)])
+aspectRatio = unname(diff(bbox[c(1,3)]) / diff(bbox[c(2,4)]))
 
+linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
+
+
+# Plotting function -------------------------------------------------------
+
+# Following the examples in https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html
+# try defining the plot function outside the server function, here in the preamble.
+
+make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6){
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # Function to generate map plot, called from inside the server function after
+  # data have been filtered by user selected inputs.
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # Inputs:
+  # dat        = list of all required (reactively filtered) data sets
+  # background = character specifying which background layer to plot
+  # components = 'main', 'legend' or 'all' to output the map, the legend, or a list of both
+  # alpha      = point transparency
+  # Output:
+  # A ggplot object containing interactive geoms compatible with girafe
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  dat_background = dat$background
+  dat_plastic = dat$plastic
+  dat_stations = dat$stations
+  symbols = dat$symbols
+  
+  anyPlastic <- nrow(dat_plastic) > 0
+  anyStations <- nrow(dat_stations) > 0
+  anyBackground <- background != 'none'
+  
+  switch(components,
+         
+         main = {
+           
+           # Background layer
+           switch(background,
+                  krill = {
+                    plt_background <-
+                      ggplot() +
+                      geom_sf(data = dat_background, aes(fill = colourgroup)) +
+                      scale_fill_viridis_d(option = 'plasma',
+                                           name = bquote(atop(Krill, individuals / m^2)))
+                  },
+                  chl = {
+                    plt_background <-
+                      ggplot() +
+                      geom_sf(data = dat_background, aes(fill = value)) +
+                      scale_fill_viridis_c(option = 'viridis', trans = 'log10',
+                                           name = bquote(atop(Chlorophyll, mg / m^3)))
+                  }
+           )
+           
+           # Coastline
+           if(background == 'none'){
+             plt_map <-
+               ggplot() +
+               geom_sf(data = nc,
+                       aes(fill = surface),
+                       show.legend = FALSE) +
+               scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
+           }else{
+             plt_map <-
+               plt_background +
+               new_scale('fill') +
+               geom_sf(data = nc,
+                       aes(fill = surface),
+                       show.legend = FALSE) +
+               scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
+           }
+           
+           # Combine plot layers
+           if(anyStations | anyPlastic){
+             plt_map <- plt_map +
+               scale_shape_manual(values = setNames(symbols$symbol, symbols$Type))
+           }
+           
+           # Research stations
+           if(anyStations){
+             plt_map <- plt_map +
+               geom_sf_interactive(data = dat_stations,
+                                   aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
+                                   alpha = alpha, size = 4, stroke = 1, show.legend = FALSE) +
+               # geom_sf(data = dat_stations,
+               #         aes(shape = Type, colour = Seasonality),
+               #         alpha = 1, size = 4, stroke = 1, show.legend = FALSE) +
+               scale_colour_manual(values = c('forestgreen','firebrick'))
+           }
+           
+           # Plastic samples
+           if(anyPlastic){
+             plt_map <- plt_map +
+               new_scale('fill') +
+               # geom_sf(data = dat_plastic,
+               #         aes(fill = Source, shape = SampleType),
+               #         alpha = 1, size = 4, show.legend = FALSE) +
+               geom_sf_interactive(data = dat_plastic,
+                                   aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
+                                   alpha = alpha, size = 4, show.legend = FALSE) +
+               scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
+           }
+           
+           plt_map <- plt_map +
+             coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax'])) +
+             theme_void()
+           
+           output_plot <- ggdraw(plt_map)
+           return(output_plot)
+           
+         },
+         
+         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         
+         legend = {
+           
+           # Research stations
+           if(anyStations){
+             plt_stations <-
+               ggplot() +
+               geom_sf(data = dat_stations,
+                       aes(shape = Type, colour = Seasonality),
+                       alpha = 1, size = 4, stroke = 1) +
+               scale_colour_manual(values = c('forestgreen','firebrick')) +
+               scale_shape_manual(values = symbols$symbol[symbols$Class == 'ResearchStation']) +
+               guides(shape = guide_legend(title = 'Facility'),
+                      colour = guide_legend(override.aes = list(colour = c('forestgreen','firebrick'), shape = 3)))
+           }
+           
+           # Plastic samples
+           if(anyPlastic){
+             plt_plastic_samples <-
+               ggplot() +
+               geom_sf(data = dat_plastic,
+                       aes(fill = Source, shape = SampleType),
+                       alpha = 1, size = 4) +
+               # geom_sf_interactive(data = dat_plastic,
+               #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
+               #                     alpha = 1, size = 4) +
+               scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
+               scale_shape_manual(values = symbols$symbol[symbols$Class == 'PlasticSample']) +
+               guides(shape = guide_legend(title = 'Sample type'),
+                      fill = guide_legend(override.aes = list(shape = c(21))))
+           }
+           
+           # Extract legends and make subplot
+           if(anyStations & anyPlastic){
+             leg_plastic <- get_legend(plt_plastic_samples)
+             leg_stations <- get_legend(plt_stations)
+             output_legend <- ggdraw(plot_grid(leg_plastic, leg_stations,
+                                               ncol = 1, align = 'v'))
+           }else{
+             if(anyPlastic){
+               leg_plastic <- get_legend(plt_plastic_samples)
+               output_legend <- ggdraw(plot_grid(leg_plastic, NULL,
+                                                 ncol = 1, align = 'v'))
+             }else{
+               if(anyStations){
+                 leg_stations <- get_legend(plt_stations)
+                 output_legend <- ggdraw(plot_grid(leg_stations, NULL,
+                                                   ncol = 1, align = 'v'))
+               }else{
+                 output_legend <-ggdraw(plot_grid(NULL, NULL,
+                                                  ncol = 1))
+               }}}
+           
+           return(output_legend)
+           
+         },
+         
+         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         # components = 'all' is not necessary and included only for completeness
+         #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         all = {
+           
+           # Background layer
+           switch(background,
+                  krill = {
+                    plt_background <-
+                      ggplot() +
+                      geom_sf(data = dat_background, aes(fill = colourgroup)) +
+                      scale_fill_viridis_d(option = 'plasma',
+                                           name = bquote(atop(Krill, individuals / m^2)))
+                  },
+                  chl = {
+                    plt_background <-
+                      ggplot() +
+                      geom_sf(data = dat_background, aes(fill = value)) +
+                      scale_fill_viridis_c(option = 'viridis', trans = 'log10',
+                                           name = bquote(atop(Chlorophyll, mg / m^3)))
+                  }
+           )
+           
+           # Coastline
+           if(background == 'none'){
+             plt_map <-
+               ggplot() +
+               geom_sf(data = nc,
+                       aes(fill = surface),
+                       show.legend = FALSE) +
+               scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
+           }else{
+             plt_map <-
+               plt_background +
+               new_scale('fill') +
+               geom_sf(data = nc,
+                       aes(fill = surface),
+                       show.legend = FALSE) +
+               scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
+           }
+           
+           # Research stations
+           if(anyStations){
+             plt_stations <-
+               ggplot() +
+               geom_sf(data = dat_stations,
+                       aes(shape = Type, colour = Seasonality),
+                       alpha = 1, size = 4, stroke = 1) +
+               scale_colour_manual(values = c('forestgreen','firebrick')) +
+               scale_shape_manual(values = symbols$symbol[symbols$Class == 'ResearchStation']) +
+               guides(shape = guide_legend(title = 'Facility'),
+                      colour = guide_legend(override.aes = list(colour = c('forestgreen','firebrick'), shape = 3)))
+           }
+           
+           # Plastic samples
+           if(anyPlastic){
+             plt_plastic_samples <-
+               ggplot() +
+               geom_sf(data = dat_plastic,
+                       aes(fill = Source, shape = SampleType),
+                       alpha = 1, size = 4) +
+               # geom_sf_interactive(data = dat_plastic,
+               #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
+               #                     alpha = 1, size = 4) +
+               scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
+               scale_shape_manual(values = symbols$symbol[symbols$Class == 'PlasticSample']) +
+               guides(shape = guide_legend(title = 'Sample type'),
+                      fill = guide_legend(override.aes = list(shape = c(21))))
+           }
+           
+           if(anyStations | anyPlastic){
+             plt_map <- plt_map +
+               scale_shape_manual(values = setNames(symbols$symbol, symbols$Type))
+           }
+           
+           # Research stations
+           if(anyStations){
+             plt_map <- plt_map +
+               geom_sf_interactive(data = dat_stations,
+                                   aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
+                                   alpha = alpha, size = 4, stroke = 1, show.legend = FALSE) +
+               # geom_sf(data = dat_stations,
+               #         aes(shape = Type, colour = Seasonality),
+               #         alpha = 1, size = 4, stroke = 1, show.legend = FALSE) +
+               scale_colour_manual(values = c('forestgreen','firebrick'))
+           }
+           
+           # Plastic samples
+           if(anyPlastic){
+             plt_map <- plt_map +
+               new_scale('fill') +
+               # geom_sf(data = dat_plastic,
+               #         aes(fill = Source, shape = SampleType),
+               #         alpha = 1, size = 4, show.legend = FALSE) +
+               geom_sf_interactive(data = dat_plastic,
+                                   aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
+                                   alpha = alpha, size = 4, show.legend = FALSE) +
+               scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
+           }
+           
+           # Make main plot
+           plt_map <- plt_map +
+             coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax'])) +
+             theme_void()
+           
+           output_plot <- ggdraw(plt_map)
+           
+           
+           # Extract legends and make subplot
+           if(anyStations & anyPlastic){
+             leg_plastic <- get_legend(plt_plastic_samples)
+             leg_stations <- get_legend(plt_stations)
+             output_legend <- ggdraw(plot_grid(leg_plastic, leg_stations,
+                                               ncol = 1, align = 'v'))
+           }else{
+             if(anyPlastic){
+               leg_plastic <- get_legend(plt_plastic_samples)
+               output_legend <- ggdraw(plot_grid(leg_plastic, NULL,
+                                                 ncol = 1, align = 'v'))
+             }else{
+               if(anyStations){
+                 leg_stations <- get_legend(plt_stations)
+                 output_legend <- ggdraw(plot_grid(leg_stations, NULL,
+                                                   ncol = 1, align = 'v'))
+               }else{
+                 output_legend <-ggdraw(plot_grid(NULL, NULL,
+                                                  ncol = 1))
+               }}}
+           
+           return(
+             list(plot = output_plot, legend = output_legend)
+           )
+           
+         }
+  )
+  
+}
 
 
 
 # Define UI for plastic data map app ----
 ui <- fluidPage(
   
+  # tags$body(tags$div(id="ppitest", style="width:1in;visible:hidden;padding:0px")),
+  # 
+  # tags$script('$(document).on("shiny:connected", function(e) {
+  #                                   var w = window.innerWidth;
+  #                                   var h = window.innerHeight;
+  #                                   var d =  document.getElementById("ppitest").offsetWidth;
+  #                                   var obj = {width: w, height: h, dpi: d};
+  #                                   Shiny.onInputChange("pltChange", obj);
+  #                               });
+  #                               $(window).resize(function(e) {
+  #                                   var w = $(this).width();
+  #                                   var h = $(this).height();
+  #                                   var d =  document.getElementById("ppitest").offsetWidth;
+  #                                   var obj = {width: w, height: h, dpi: d};
+  #                                   Shiny.onInputChange("pltChange", obj);
+  #                               });
+  #                           '),
+  
   # App title ----
   titlePanel("Mapping Southern Ocean Plastic Data"),
   
-  # fluidRow(
-  #   column(12,
-  
-  # Sidebar layout with input and output definitions ----
-  sidebarLayout(
-    
-    # Sidebar panel for inputs ----
-    sidebarPanel(
-      
-      # Input: year range -------------------------------------------------------
-      sliderInput("YearRange", "Years:",
-                  min = min(DATA$Year, na.rm = TRUE) , max = max(DATA$Year, na.rm = TRUE),
-                  value = range(DATA$Year, na.rm = TRUE), step = 1, sep = ''),
-      
-      # Input: measurement variable ----
-      selectInput("Variable", "Measurement:",
-                  c("Concentration (pieces/m3)" = "concentration",
-                    "Density (pieces/km2)" = "density",
-                    "Mass density (g/km2)" = "massDensity"),
-                  multiple = TRUE, selected = c("concentration", "density", "massDensity")),
-      
-      # Input: plastic type ----
-      # I NEED TO THINK ABOUT HOW TO HANDLE THE TOTAL COLUMN... OMIT IT FOR NOW
-      # BUT MAYBE INCLUDE IT LATER WHEN GRAPHING DATA...
-      selectInput("Type", "Plastic type:",
-                  c("Fragment" = "fragment",
-                    "Fibre" = "fibre",
-                    "Film" = "film"),
-                  multiple = TRUE, selected = c("fragment", "fibre", "film")),
-      
-      # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
-      selectInput("SampleType", "Sample type:",
-                  c("Near-surface" = "surface",
-                    "Subsurface" = "subsurface"),
-                  multiple = TRUE, selected = c("surface")),
-      
-      # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
-      selectInput("StationType", "Facility:",
-                  c("Station" = "Station",
-                    "Camp" = "Camp",
-                    "Refuge" = "Refuge",
-                    "Airfield" = "Airfield Camp",
-                    "Laboratory" = "Laboratory",
-                    "Depot" = "Depot"),
-                  multiple = TRUE, selected = c("Station")),
+  fluidRow(
+    column(width = 3,
+           # Input: year range -------------------------------------------------------
+           sliderInput("YearRange", "Years:",
+                       min = min(DATA$Year, na.rm = TRUE) , max = max(DATA$Year, na.rm = TRUE),
+                       value = range(DATA$Year, na.rm = TRUE), step = 1, sep = ''),
 
-      # Input: background layers ----
-      radioButtons("background", "Background data:",
-                   c("None" = "none",
-                     "Krill (Jan--Mar)" = "krill_all",
-                     "Krill (Jan)" = "krill_1",
-                     "Krill (Feb)" = "krill_2",
-                     "Krill (Mar)" = "krill_3",
-                     "Chlorophyll (Jan--Mar)" = "chl_all",
-                     "Chlorophyll (Jan)" = "chl_1",
-                     "Chlorophyll (Feb)" = "chl_2",
-                     "Chlorophyll (Mar)" = "chl_3"
-                     ),
-                   selected = 'none'),
+           # Input: measurement variable ----
+           selectInput("Variable", "Measurement:",
+                       c("Concentration (pieces/m3)" = "concentration",
+                         "Density (pieces/km2)" = "density",
+                         "Mass density (g/km2)" = "mass density"),
+                       multiple = TRUE, selected = c("concentration", "density", "mass density")),
 
-      
-      # # Input: plot value transformation ----
-      # radioButtons("tran", "Scale:",
-      #              c("Natural" = "norm",
-      #                "Log" = "log")),
-      
-      # # Input: Checkbox for whether outliers should be included ----
-      # checkboxInput("outliers", "Show outliers", TRUE),
-      
-      width = 3
-      
+           # Input: plastic type ----
+           # I NEED TO THINK ABOUT HOW TO HANDLE THE TOTAL COLUMN... OMIT IT FOR NOW
+           # BUT MAYBE INCLUDE IT LATER WHEN GRAPHING DATA...
+           selectInput("Type", "Plastic type:",
+                       c("Fragment" = "fragment",
+                         "Fibre" = "fibre",
+                         "Film" = "film"),
+                       multiple = TRUE, selected = c("fragment", "fibre", "film")),
+
+           # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
+           selectInput("SampleType", "Sample type:",
+                       c("Near-surface" = "surface",
+                         "Subsurface" = "subsurface"),
+                       multiple = TRUE, selected = c("surface")),
+
+           # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
+           selectInput("StationType", "Facility:",
+                       c("Station" = "Station",
+                         "Camp" = "Camp",
+                         "Refuge" = "Refuge",
+                         "Airfield" = "Airfield Camp",
+                         "Laboratory" = "Laboratory",
+                         "Depot" = "Depot"),
+                       multiple = TRUE, selected = c("Station")),
+
+           # Input: background layers ----
+           radioButtons("background", "Background data:",
+                        c("None" = "none",
+                          "Krill (Jan--Mar)" = "krill_all",
+                          "Krill (Jan)" = "krill_1",
+                          "Krill (Feb)" = "krill_2",
+                          "Krill (Mar)" = "krill_3",
+                          "Chlorophyll (Jan--Mar)" = "chl_all",
+                          "Chlorophyll (Jan)" = "chl_1",
+                          "Chlorophyll (Feb)" = "chl_2",
+                          "Chlorophyll (Mar)" = "chl_3"
+                        ),
+                        selected = 'none')
+
+
+           # # Input: plot value transformation ----
+           # radioButtons("tran", "Scale:",
+           #              c("Natural" = "norm",
+           #                "Log" = "log")),
+
+           # # Input: Checkbox for whether outliers should be included ----
+           # checkboxInput("outliers", "Show outliers", TRUE),
+
+           # width = 3
     ),
     
     # Main panel for displaying outputs ----
-    mainPanel(
-
-      # Output: Plot of the requested variable against mpg ----
-      # h3("Data plot"),
-      
-      plotOutput('blank', width = '100%', height = '1px'),
-      plotOutput('plt'), #, inline = T)
-      
-      width = 9
-      
-      # br(),
-      # 
-      # # Output: Verbatim text for data summary ----
-      # h3("Data summary"),
-      # verbatimTextOutput("summary")
-      # 
-      # br(),
-      # 
-      # # Output: HTML table with requested number of observations ----
-      # 
-      #   h3("Raw data"),
-      #   tableOutput("view")
-        
-
+    column(width = 7, offset = 0, style='padding:0px;',
+           tags$body(tags$div(id="ppitest", style="width:1in;visible:hidden;padding:0px")),
+           tags$script('$(document).on("shiny:connected", function(e) {
+                                    var d =  document.getElementById("ppitest").offsetWidth;
+                                    Shiny.onInputChange("dpi", d);
+                                });
+                                $(window).resize(function(e) {
+                                    var d =  document.getElementById("ppitest").offsetWidth;
+                                    Shiny.onInputChange("dpi", d);
+                                });
+                            '),
+           fillCol(
+             # h3("Data plot"),
+             plotOutput('blank', width = '100%', height = '1px'),
+             ggiraphOutput('plt')
+           )
+    ),
+    
+    column(width = 2, offset = 0, style='padding:0px;',
+           linebreaks(8), # add whitespace above legends
+           plotOutput('legend')
     )
     
   )
-  #   )
-  # )
 )
 
 # Define server logic to plot various variables against mpg ----
@@ -327,21 +721,22 @@ server <- function(input, output, session) {
   
   # Function returning filtered data specified by Shiny inputs
   filter_plastic_data = reactive({
-    return(
-      subset(DATA,
-             input$YearRange[1] <= Year & Year <= input$YearRange[2] &
-               DATA$Variable %in% input$Variable &
-               DATA$Type %in% input$Type &
-               DATA$SampleType %in% input$SampleType
+      return(
+        subset(DATA,
+               input$YearRange[1] <= Year & Year <= input$YearRange[2] &
+                 DATA$Variable %in% input$Variable &
+                 DATA$Type %in% input$Type &
+                 DATA$SampleType %in% input$SampleType
+        )
       )
-    )
   })
   
   # Subset data required for map overlay and transform to correct CRS
   filtered_plastic_data = reactive({
     # Filter
-    d = unique(subset(filter_plastic_data(), select = c(Source, Station, SampleType, Longitude, Latitude)))
+    # d = unique(subset(filter_plastic_data(), select = c(Source, Station, SampleType, Longitude, Latitude))) # DO WE NEED TO OMIT DATA COLUMNS???
     # Transform
+    d <- unique(filter_plastic_data())
     d = st_as_sf(d, coords = c("Longitude", "Latitude"), crs = crs_world)
     d = st_transform(d, crs_use)
     return(d)
@@ -349,18 +744,24 @@ server <- function(input, output, session) {
   
   # Filter the research station data
   filtered_station_data = reactive({
-    return(
-      subset(STATIONS_sf,
+      return(
+        subset(STATIONS_sf,
                STATIONS_sf$Type %in% input$StationType
+        )
       )
-    )
+  })
+  
+  # Get background type
+  which_background <- reactive({
+      backgroundOptions <- c('none', 'krill', 'chl')
+      t <- sapply(backgroundOptions, FUN = function(z) grepl(z, input$background))
+      background <- names(which(t)) # get the chosen background
+      return(background)
   })
   
   # Filter background data
   filtered_background_dat <- reactive({
-    backgroundOptions <- c('none', 'krill', 'chl')
-    t <- sapply(backgroundOptions, FUN = function(z) grepl(z, input$background))
-    background <- names(which(t)) # get the chosen background
+    background <- which_background()
     background_dat <- switch(background,
                              krill = krill_poly,
                              chl = chl_poly
@@ -369,233 +770,80 @@ server <- function(input, output, session) {
       m <- strsplit(input$background, '_')[[1]][2] # get the chosen month
       background_dat <- subset(background_dat, month == m) # filter by month
     }
-    return(list(background, background_dat))
+    return(background_dat)
   })
   
   # Filter plot symbols based on sample & station types
   Symbols <- reactive({
-    return(
-      subset(pltSymbols, Type %in% c(input$SampleType, input$StationType))
-    )
-  })
-  
-  # Create blank plot to specify sizing/aspect ratio
-  output$blank = renderPlot({
-   ggplot(data.frame(x = 1), aes(NA, NA)) + geom_blank() + theme_void()
-  })
-  
-  blankwidth = reactive({
-    # this is the magic that makes it work
-    bw = session$clientData$output_blank_width
-    return(0.85 * bw)
-#    if (bw > 400) 400 else bw
-  })
-  
-  blankheight <- reactive({
-    blankwidth() / aspectRatio
-  })
-  
-  
-  # Build up the plot layer by layer, extracting each legend separately, then
-  # piece it together.
-  
-  output$plt <- renderPlot({
-    
-    dat_plastic <- filtered_plastic_data()
-    dat_stations <- filtered_station_data()
-    background_info <- filtered_background_dat()
-    background <- background_info[[1]]
-    dat_background <- background_info[[2]]
-    symbols <- Symbols()
-    
-    # dat_plastic <- DATA_sf
-    # dat_stations <- STATIONS_sf
-    # dat_krill <- krill_poly
-    # dat_chl <- chl_poly
-    # background <- 'chl'
-    # symbols <- pltSymbols
-    
-    anyPlastic <- nrow(dat_plastic) > 0
-    anyStations <- nrow(dat_stations) > 0
-    
-    # Background layer
-    anyBackground <- input$background != 'none'
-    switch(background,
-           krill = {
-             plt_background <- 
-               ggplot() +
-               geom_sf(data = dat_background, aes(fill = colourgroup)) +
-               scale_fill_viridis_d(option = 'plasma',
-                                    name = bquote(atop(Krill, individuals / m^2)))
-               # guides(fill = guide_legend(title = bquote(atop(Krill, individuals / m^2))))
-           },
-           chl = {
-             plt_background <- 
-               ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
-               scale_fill_viridis_c(option = 'viridis', trans = 'log10',
-                                    name = bquote(atop(Chlorophyll, mg / m^3)))
-           }
-    )
-    
-    # Coastline
-    if(background == 'none'){
-      plt_map <- 
-        ggplot() + 
-        geom_sf(data = nc,
-                aes(fill = surface),
-                show.legend = FALSE) +
-        scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
-    }else{
-      plt_map <- 
-        plt_background +
-        new_scale('fill') +
-        geom_sf(data = nc,
-                aes(fill = surface),
-                show.legend = FALSE) +
-        scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
-    }
-
-    
-    # Research stations
-    if(anyStations){
-      plt_stations <- 
-        ggplot() +
-        geom_sf(data = dat_stations,
-                aes(shape = Type, colour = Seasonality),
-                alpha = 1, size = 4, stroke = 1) +
-        scale_colour_manual(values = c('forestgreen','firebrick')) +
-        scale_shape_manual(values = symbols$symbol[symbols$Class == 'ResearchStation']) +
-        # scale_shape_manual(values = Symbols()$symbol[Symbols()$Class == 'ResearchStation']) +
-        # scale_shape_manual(values = c(3,4,8,7,9,10)) +
-        # guides(shape = guide_legend(title = 'Facility', override.aes = list(shape = unique(dat_stations$symbol))),
-        #        colour = guide_legend(override.aes = list(colour = c('forestgreen','firebrick'))))
-        guides(shape = guide_legend(title = 'Facility'), 
-               colour = guide_legend(override.aes = list(colour = c('forestgreen','firebrick'), shape = 3)))
-    }
-    
-    # Plastic samples
-    if(anyPlastic){
-      plt_plastic_samples <- 
-        ggplot() +
-        geom_sf(data = dat_plastic,
-                aes(fill = Source, shape = SampleType),
-                alpha = 1, size = 4) +
-        scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
-        #      scale_colour_brewer(type = 'qual', palette = 'Set1', aesthetics = c('fill')) +
-        scale_shape_manual(values = symbols$symbol[symbols$Class == 'PlasticSample']) +
-        guides(shape = guide_legend(title = 'Sample type'),
-               fill = guide_legend(override.aes = list(shape = c(21))))
-      # guides(fill = guide_legend(override.aes = list(shape = c(21))))
-    }
-    
-    # Extract legends
-    if(anyStations){
-      leg_stations <- gtable_filter(ggplot_gtable(ggplot_build(plt_stations)), "guide-box") 
-      leg_stations_grob <- grobTree(leg_stations)
-    }
-    
-    if(anyPlastic){
-      leg_plastic_samples <- gtable_filter(ggplot_gtable(ggplot_build(plt_plastic_samples)), "guide-box") 
-      leg_plastic_samples_grob <- grobTree(leg_plastic_samples)
-    }
-    
-    # Combine plot layers
-    plt_no_legend <- 
-      
-      # Coastline & (optional) background
-      plt_map
-      
-      # ggplot() + 
-      
-      # # Coastline
-      # geom_sf(data = nc,
-      #         aes(fill = surface),
-      #         show.legend = FALSE) +
-      # scale_fill_manual(values = c('grey','skyblue','skyblue','grey')) +
-      
-    if(anyStations | anyPlastic){
-      plt_no_legend <- plt_no_legend +
-        scale_shape_manual(values = setNames(symbols$symbol, symbols$Type))
-    }
-      
-    # Research stations
-    if(anyStations){
-      plt_no_legend <- plt_no_legend +
-      geom_sf(data = dat_stations,
-              aes(shape = Type, colour = Seasonality),
-              alpha = 1, size = 4, stroke = 1, show.legend = FALSE) +
-        scale_colour_manual(values = c('forestgreen','firebrick'))
-        # scale_shape_manual(values = symbols$symbol) +
-        # scale_shape_manual(values = symbols$symbol[symbols$Class == 'ResearchStation']) +
-        # scale_shape_manual(values = Symbols()$symbol) + # IT'S CRUCIAL TO ENSURE THAT THE FACTOR ORDER IS CONSISTENT BETWEEN DATA SETS AND THE SYMBOLS DATA SET
-        #      scale_shape_manual(values = c(3,4,8,7,9,10,21:25)) + # 1st 6 values for stations, remaining values for plastic samples
-    }
-      
-    # Plastic samples
-    if(anyPlastic){
-      plt_no_legend <- plt_no_legend +
-      new_scale('fill') +
-        geom_sf(data = dat_plastic,
-                aes(fill = Source, shape = SampleType),
-                alpha = 1, size = 4, show.legend = FALSE) +
-        scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
-      # scale_colour_brewer(type = 'qual', palette = 'Set1', aesthetics = c('fill')) +
-      # scale_shape_manual(values = symbols$symbol[symbols$Class == 'PlasticSample']) +
-    }
-      
-    plt_no_legend <- plt_no_legend +
-      coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax'])) +
-      theme_void()
-    
-    # Combine legends
-    legs <- 
-      ggplot(data = data.frame(x = 0:1, y = 0:1)) +
-      geom_blank(aes(x = x, y = y)) + 
-      theme_minimal() + 
-      ylab(NULL) + xlab(NULL) +
-      theme(
-        axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank() 
+      return(
+        subset(pltSymbols, Type %in% c(input$SampleType, input$StationType))
       )
-    if(anyPlastic){
-      legs <- legs +
-        annotation_custom(leg_plastic_samples_grob, xmin = 0.5, xmax = 0.5, ymin = 0.5, ymax = 1)
-    }
-    if(anyStations){
-      legs <- legs +
-        annotation_custom(leg_stations_grob, xmin = 0.35, xmax = 0.35, ymin = 0, ymax = 0.5) 
-    }
-
-    # Use cowplot package to arrange plot
-    # plt <- ggdraw(plt_no_legend, clip = 'on')# + 
-    plt <- ggdraw() + 
-      draw_plot(plt_no_legend, 0, 0, 0.7, 1)
-    if(anyPlastic){
-      plt <- plt +
-        draw_plot(leg_plastic_samples_grob, 0.7, 0, 0.15, 1)
-    }
-    if(anyStations){
-      plt <- plt +
-        draw_plot(leg_stations_grob, 0.85, 0, 0.15, 1)
-    }
-   plt
-    
-    
-    # # Use gridExtra package to arrange plot 
-    # # Output plot
-    # plt <- arrangeGrob(plt_no_legend, legs, ncol=2, widths=c(0.8, 0.2))
-    # 
-    # grid.newpage()
-    # grid.draw(plt)    
-    
-  },
-height = blankheight, width = blankwidth)
+  })
   
+  # Group all data in a named list
+  listData <- reactive({
+    plastic <- filtered_plastic_data()
+    stations <- filtered_station_data()
+    background <- filtered_background_dat()
+    symbols <- Symbols()
+    return(
+      list(background = background, stations = stations, plastic = plastic, symbols = symbols)
+    )
+  })
+  
+    # Create blank plot to specify sizing/aspect ratio
+    output$blank = renderPlot({
+     ggplot(data.frame(x = 1, y = 1), aes(x, y)) + geom_point() + theme_void()
+    })
 
+    blankwidth = reactive({
+      # this is the magic that makes it work
+      bw = session$clientData$output_blank_width
+      return(5/4 * bw) # the sizing on girafe functions is weird, this scaling by 5/4 is a bit of a hack method...
+    })
 
+    blankheight <- reactive({
+      blankwidth() / aspectRatio
+    })
+  
+  
+  plot_main <- reactive({
+    return(
+      make_plot(listData(), which_background(), 'main')
+    )
+  })
+
+  plot_legend <- reactive({
+    return(
+      make_plot(listData(), which_background(), 'legend')
+    )
+  })
+
+  output$plt <- renderGirafe({
+    p <- plot_main()
+    w <- blankwidth()
+    h <- blankheight()
+    x <- girafe(code = print(p),
+                options = list(opts_sizing(rescale = FALSE),
+                               opts_zoom(min = 0.5, max = 10),
+                               opts_hover(css = "opacity:1.0;stroke-width:2;r:6pt;cursor:pointer;", reactive = TRUE),
+                               opts_hover_inv(css = "opacity:0.2;cursor:pointer;"),
+                               # opts_hover(css = "fill:#FF3333;stroke:black;cursor:pointer;", reactive = TRUE)),
+                               opts_selection(type = "multiple", css = "opacity:1.0;stroke-width:2;r:6pt;")),
+                width_svg = (w / {input$dpi}),
+                height_svg = (h / {input$dpi})
+    )
+    x
+  }
+  )
+  
+  output$legend <- renderPlot({
+    p <- plot_legend()
+    p
+  }
+  )
+  
+  
   # output$summary <- renderPrint({
   #   summary(dat())
   # })
