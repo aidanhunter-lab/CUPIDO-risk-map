@@ -35,9 +35,23 @@ for i = 1:nsources
 end
 switch onScreenDisplay, case true, disp(units); end
 
-% Volumetric concentration 'pieces/m^3' is most common unit; some data use
-% area density 'pieces/km^2'
+% Measurement units may depend on sample type (sediment samples may be
+% different).
+uSampleTypes = [];
+for i = 1:nsources
+    source = sources{i};
+    d = dat.(source).abundance;
+    uSampleTypes = unique([uSampleTypes; d.SampleType], 'stable');
+    sampleTypes.(source) = unique(d.SampleType, 'stable')';
+end
+
+% Volumetric concentration 'pieces/m^3' is most common unit for seawater 
+% samples; some data use area density 'pieces/km^2', some use mass density
+% 'g/km^2'.
 varOpts = {'concentration', 'density', 'massDensity'}; %, 'all'}; % filtering options
+
+
+
 Units.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
 Units.density = {'pieces/km2', 'items/km2', 'number/km2'};
 Units.massDensity = {'g/km2'};
@@ -61,6 +75,36 @@ for i = 1:nsources
     d = d(~strcmp(d.Variable, ''),:);
     dat.(source).abundance = d;
 end
+
+
+
+
+
+
+% varOpts = {'concentration', 'density', 'massDensity'}; %, 'all'}; % filtering options
+% Units.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
+% Units.density = {'pieces/km2', 'items/km2', 'number/km2'};
+% Units.massDensity = {'g/km2'};
+% Units_ = struct2cell(Units);
+% useUnit = cellfun(@(z) z(1), Units_);
+% 
+% % Include a Variable column in each data set to indicate measurement type,
+% % omitting rows with units not listed in Units
+% for i = 1:nsources
+%     source = sources{i};
+%     d = dat.(source).abundance;
+%     for j = height(d):-1:1
+%         k = cellfun(@(z) ismember(d.Unit{j}, z), Units_);
+%         if any(k)
+%             d.Variable(j) = varOpts(k);
+%             d.Unit(j) = useUnit(k);
+%         else
+%             d.Variable(j) = {''};
+%         end
+%     end
+%     d = d(~strcmp(d.Variable, ''),:);
+%     dat.(source).abundance = d;
+% end
 
 %% Regularise the data and combine into a single table
 for i = 1:nsources

@@ -39,7 +39,8 @@ dat_tot = join(abundance, stations);
 % dat_tot.Type = repmat({'total'}, height(dat_tot), 1);
 
 dat_tot.Date = repmat(datetime({'01-Jan-2010', '28-Feb-2010'}), height(dat_tot), 1);
-
+dat_tot.SampleType = repmat({'seawater'}, height(dat_tot), 1);
+dat_tot = movevars(dat_tot, 'SampleType', 'Before', 'Sample');
 
 % % Plastic categories (fibre, fragment, other)
 % dat_cat = dat_tot; dat_cat(1:end,:) = [];
@@ -105,6 +106,8 @@ categories = unique(categories);
 categories.Value = repmat(100, height(categories), 1);
 categories.Unit = repmat({'percent'}, height(categories), 1);
 abundance.Type = [];
+abundance.SampleType = repmat({'seawater'}, height(abundance), 1);
+abundance = movevars(abundance, 'SampleType', 'Before', 'Station');
 
 Isobe_2017.abundance = abundance;
 Isobe_2017.categories = categories;
@@ -147,6 +150,8 @@ abn_type = movevars(abn_type, 'Value', 'Before', 'Unit');
 abn_type = movevars(abn_type, 'SizeRange', 'Before', 'Value');
 
 dat_tot.Date = repmat(datetime({'01-Feb-2017', '28-Feb-2017'}), height(dat_tot), 1);
+dat_tot.SampleType = repmat({'seawater'}, height(dat_tot), 1);
+dat_tot = movevars(dat_tot, 'SampleType', 'Before', 'Station');
 
 % Store all output in a struct
 Lacerda_2019.abundance = dat_tot;
@@ -207,6 +212,9 @@ dat = mplastic;
 dat.Value = mplastic.Value + mfibre.Value;
 dat.Type = [];
 
+dat.SampleType = repmat({'seawater'}, height(dat), 1);
+dat = movevars(dat, 'SampleType', 'Before', 'Station');
+
 categories = dat;
 categories(3:3:height(categories),:) = [];
 categories.Value = nan(height(categories), 1);
@@ -227,8 +235,8 @@ Jones_Williams_2020.abundance = dat;
 Jones_Williams_2020.categories = categories;
 Jones_Williams_2020.zooplankton = zoo;
 
-
 Data.Jones_Williams_2020 = Jones_Williams_2020;
+
 
 %% Zhang 2022
 % Really good, useful paper, but the data is not tabled so I'll need to
@@ -260,7 +268,8 @@ types.Properties.VariableNames(:,1:2) = {'Depth','Type'};
 types.Type(strcmp(types.Type, 'Line/Fibre')) = {'Fibre'};
 
 stations.Date = repmat(datetime({'01-Dec-2017', '31-Jan-2018'}), height(stations), 1);
-
+stations.SampleType = repmat({'seawater'}, height(stations), 1);
+stations = movevars(stations, 'SampleType', 'Before', 'Depth');
 
 Zhang_2022.abundance = stations;
 Zhang_2022.abundance_stats = stats;
@@ -299,6 +308,9 @@ dat.Unit(strcmp(dat.Unit, 'g km-2')) = {'g/km2'};
 dat.Unit(strcmp(dat.Unit, 'Particles km-2')) = {'pieces/km2'};
 dat.Size = strrep(dat.Size, 'M', 'm');
 
+dat.SampleType = repmat({'seawater'}, height(dat), 1);
+dat = movevars(dat, 'SampleType', 'Before', 'Station');
+
 Eriksen_2014.abundance = dat;
 
 % These are measurements of particles
@@ -325,13 +337,15 @@ dat.Unit(strcmp(dat.Unit, 'g km-2')) = {'g/km2'};
 dat.Size = strrep(dat.Size, 'M', 'm');
 
 dat.Date = repmat(datetime({'01-Dec-2012', '28-Feb-2013'}), height(dat), 1);
-
-Cozar_2014.abundance = dat;
+dat.SampleType = repmat({'seawater'}, height(dat), 1);
+dat = movevars(dat, 'SampleType', 'Before', 'Station');
 
 % Are these measurements of particles? check reference paper
 Type = {'particle'};
 Value = 100;
 Unit = {'percent'};
+
+Cozar_2014.abundance = dat;
 Cozar_2014.categories = table(Type, Value, Unit);
 
 Data.Cozar_2014 = Cozar_2014;
@@ -353,13 +367,17 @@ abundance = readtable(fullfile(filepath, filename));
 abundance.Sampling_Method = repmat({'Sample bottle'}, height(abundance), 1);
 abundance.Depth = repmat({'<1m'}, height(abundance), 1);
 
-adventurescience.abundance = abundance;
+abundance.SampleType(strcmp(abundance.Type, 'marine')) = {'seawater'};
+abundance.SampleType(strcmp(abundance.Type, 'freshwater')) = {'freshwater'};
+abundance.Type = [];
+abundance = movevars(abundance, 'SampleType', 'Before', 'Sample');
 
 Type = {'particle'};
 Value = 100;
 Unit = {'percent'};
 categories = table(Type, Value, Unit);
 
+adventurescience.abundance = abundance;
 adventurescience.categories = categories;
 
 Data.adventurescience = adventurescience;
@@ -422,6 +440,8 @@ stations.Year(ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
 abundance = join(abundance, stations); % merge lat-lon and depth info into main table
 abundance = movevars(abundance, {'Year', 'Longitude', 'Latitude', 'Depth_m'}, 'After', 'MUC_ID');
 abundance = movevars(abundance, 'Unit', 'After', 'Mean');
+abundance.SampleType = repmat({'sediment'}, height(abundance), 1);
+abundance = movevars(abundance, 'SampleType', 'Before', 'Core');
 
 rel_abundance.Properties.VariableNames([1,3]) = {'Plastic', 'Value'};
 
@@ -487,6 +507,9 @@ abundance = unique(abundance, 'stable');
 abundance.Mean = m(:);
 abundance = movevars(abundance, 'Mean', 'Before', 'Unit');
 
+abundance.SampleType = repmat({'sediment'}, height(abundance), 1);
+abundance = movevars(abundance, 'SampleType', 'Before', 'Location');
+
 Munari_2017.abundance = abundance;
 Munari_2017.size = abundance_size;
 Munari_2017.category = abundance_type;
@@ -522,5 +545,3 @@ Data.Munari_2017 = Munari_2017;
 % See Belcher (2019) for krill POC modelling (defo read this)
 % See Bohdan for lit review on plastic abundance
 
-% Isobe (2017) has method for converting surface MP concentration into
-% total water concentration
