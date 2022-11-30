@@ -12,6 +12,8 @@ library(RColorBrewer)
 library(ggiraph) # this is good for interactivity, but cannot be converted to grobs for layout...
 # library(ggpubr) # maybe this package's 'ggarrange' function can help.
 
+library(reshape2)
+
 # library(shinybrowser) # get browser dimension & other info
 
 # getwd()
@@ -34,8 +36,8 @@ DATA = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
 
 # Data pre-processing ----
 # Date format
-DATA$Date_1 = as.Date(DATA$Date_1, '%d-%b-%Y')
-DATA$Date_2 = as.Date(DATA$Date_2, '%d-%b-%Y')
+DATA$Date_1 = as.character(as.Date(DATA$Date_1, '%d-%b-%Y'))
+DATA$Date_2 = as.character(as.Date(DATA$Date_2, '%d-%b-%Y'))
 # Include Year column
 DATA$Year = as.integer(substr(DATA$Date_1, 1, 4))
 
@@ -65,9 +67,12 @@ coord_lab <- paste0('(', lon_lab, ', ', lat_lab, ')')
 DATA$Variable <- as.character(DATA$Variable)
 DATA$Variable[DATA$Variable == 'massDensity'] <- 'mass density'
 
+plastic_units <- unique(DATA[,c('Variable','Unit')])
+DATA <- subset(DATA, select = - Unit)
+
+# this may need need moved to inside plotting function, or somewhere after filtering
 DATA$tooltip <- paste0('Location: ', coord_lab, '\n ',
                        'Plastic ',  DATA$Variable, ' = ', signif(DATA$Value,2), ' ', DATA$Unit)
-
 DATA$data_id <- 1:nrow(DATA)
 
 #d <- subset(DATA, Source == 'Cincinelli (2017)')
@@ -94,14 +99,12 @@ DATA$data_id <- 1:nrow(DATA)
 # ts_county_cases_sf$tooltip <- map_chr(temp_dat, fun_flextable)
 
 
-
-
 # Mapping coordinates
 DATA_sf = st_as_sf(DATA, coords = c("Longitude", "Latitude"), crs = crs_world)
 DATA_sf = st_transform(DATA_sf, crs_use)
-xy = matrix(unlist(DATA_sf$geometry), 2, nrow(DATA))
-DATA$x = xy[1,]
-DATA$y = xy[2,]
+# xy = matrix(unlist(DATA_sf$geometry), 2, nrow(DATA))
+# DATA$x = xy[1,]
+# DATA$y = xy[2,]
 
 
 
@@ -284,10 +287,11 @@ pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
 bbox_map <- st_bbox(nc)
 bbox_dat <- st_bbox(DATA_sf)
 bbox_krill <- st_bbox(krill_poly)
-bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin),
-                   min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin),
-                   max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax),
-                   max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax)), names(bbox_map))
+bbox_chl <- st_bbox(chl_poly)
+bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin, bbox_chl$xmin),
+                   min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin, bbox_chl$ymin),
+                   max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax, bbox_chl$xmax),
+                   max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax, bbox_chl$ymax)), names(bbox_map))
 aspectRatio = unname(diff(bbox[c(1,3)]) / diff(bbox[c(2,4)]))
 
 linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
@@ -319,6 +323,52 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
   anyPlastic <- nrow(dat_plastic) > 0
   anyStations <- nrow(dat_stations) > 0
   anyBackground <- background != 'none'
+  
+  if(anyPlastic){
+    plastic_categories <- unique(dat_plastic$Type)
+    plastic_measures <- unique(dat_plastic$Variable)
+    # Recast data for plotting and defining reactive tooltip info
+    dat_plastic_recast <- dcast(dat_plastic,
+                                Source + Station + Location + SampleType + Depth + Longitude + Latitude +
+                                  Date_1 + Date_2 + Year ~ Type + Variable, fun.aggregate = mean, value.var = 'Value')
+    dat_plastic_recast$data_id <- 1:nrow(dat_plastic_recast)
+    # Transform to correct CRS
+    dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c("Longitude", "Latitude"), crs = crs_world)
+    dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
+
+    fun_flextable <- function(x){
+      anyMeasures <- any(!is.na(x))
+      if(anyMeasures){
+        # Arrange data frame
+        y <-suppressMessages(melt(x))
+        y <- y[!is.na(y$value),]
+        l <- strsplit(as.character(y$variable), '_')
+        y$`Plastic type` <- sapply(l, function(z) z[1])
+        y$Measure <- sapply(l, function(z) z[2])
+        w <- outer(plastic_units$Variable, y$Measure, '==')
+        y$Value <- sapply(1:nrow(y), function(z) paste(y$value[z], plastic_units$Unit[w[,z]]))
+        # Create flextable
+        ft <- flextable(y, col_keys = c("Plastic type", "Measure", "Value"))#, 
+#                        defaults = list(fontname = "Roboto"))
+        ft <- bold(ft, part = "header", bold = TRUE)
+        # ft <- color(ft, color = "orange", part = "all")
+        ft <- set_table_properties(ft, layout = "autofit")
+        as.character(htmltools_value(ft, ft.shadow = FALSE))
+      }else{
+        y <- data.frame(Measure = 'none')
+        ft <- flextable(y, col_keys = c("Plastic type", "Measure", "Value"), 
+                        defaults = list(fontname = "Roboto"))
+        ft <- bold(ft, part = "header", bold = TRUE)
+        ft <- set_table_properties(ft, layout = "autofit")
+        as.character(htmltools_value(ft, ft.shadow = FALSE))
+      }
+    }
+    longVars <- c('Source', 'Station', 'Location', 'SampleType', 'Depth',
+                  'Date_1', 'Date_2', 'Year', 'geometry', 'data_id')
+    temp_dat <- as.data.frame(dat_plastic_recast)[,!names(dat_plastic_recast) %in% longVars]
+    temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
+    dat_plastic_recast$tooltip <- map_chr(temp_dat, fun_flextable)
+  }
   
   switch(components,
          
@@ -385,7 +435,7 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
                # geom_sf(data = dat_plastic,
                #         aes(fill = Source, shape = SampleType),
                #         alpha = 1, size = 4, show.legend = FALSE) +
-               geom_sf_interactive(data = dat_plastic,
+               geom_sf_interactive(data = dat_plastic_recast,
                                    aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
                                    alpha = alpha, size = 4, show.legend = FALSE) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
@@ -422,7 +472,7 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
            if(anyPlastic){
              plt_plastic_samples <-
                ggplot() +
-               geom_sf(data = dat_plastic,
+               geom_sf(data = dat_plastic_recast,
                        aes(fill = Source, shape = SampleType),
                        alpha = 1, size = 4) +
                # geom_sf_interactive(data = dat_plastic,
@@ -518,7 +568,7 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
            if(anyPlastic){
              plt_plastic_samples <-
                ggplot() +
-               geom_sf(data = dat_plastic,
+               geom_sf(data = dat_plastic_recast,
                        aes(fill = Source, shape = SampleType),
                        alpha = 1, size = 4) +
                # geom_sf_interactive(data = dat_plastic,
@@ -554,7 +604,7 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
                # geom_sf(data = dat_plastic,
                #         aes(fill = Source, shape = SampleType),
                #         alpha = 1, size = 4, show.legend = FALSE) +
-               geom_sf_interactive(data = dat_plastic,
+               geom_sf_interactive(data = dat_plastic_recast,
                                    aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
                                    alpha = alpha, size = 4, show.legend = FALSE) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
@@ -602,24 +652,6 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
 
 # Define UI for plastic data map app ----
 ui <- fluidPage(
-  
-  # tags$body(tags$div(id="ppitest", style="width:1in;visible:hidden;padding:0px")),
-  # 
-  # tags$script('$(document).on("shiny:connected", function(e) {
-  #                                   var w = window.innerWidth;
-  #                                   var h = window.innerHeight;
-  #                                   var d =  document.getElementById("ppitest").offsetWidth;
-  #                                   var obj = {width: w, height: h, dpi: d};
-  #                                   Shiny.onInputChange("pltChange", obj);
-  #                               });
-  #                               $(window).resize(function(e) {
-  #                                   var w = $(this).width();
-  #                                   var h = $(this).height();
-  #                                   var d =  document.getElementById("ppitest").offsetWidth;
-  #                                   var obj = {width: w, height: h, dpi: d};
-  #                                   Shiny.onInputChange("pltChange", obj);
-  #                               });
-  #                           '),
   
   # App title ----
   titlePanel("Mapping Southern Ocean Plastic Data"),
@@ -719,8 +751,8 @@ ui <- fluidPage(
 # Define server logic to plot various variables against mpg ----
 server <- function(input, output, session) {
   
-  # Function returning filtered data specified by Shiny inputs
-  filter_plastic_data = reactive({
+  # Filter plastic data according to Shiny inputs
+  filtered_plastic_data = reactive({
       return(
         subset(DATA,
                input$YearRange[1] <= Year & Year <= input$YearRange[2] &
@@ -731,16 +763,16 @@ server <- function(input, output, session) {
       )
   })
   
-  # Subset data required for map overlay and transform to correct CRS
-  filtered_plastic_data = reactive({
-    # Filter
-    # d = unique(subset(filter_plastic_data(), select = c(Source, Station, SampleType, Longitude, Latitude))) # DO WE NEED TO OMIT DATA COLUMNS???
-    # Transform
-    d <- unique(filter_plastic_data())
-    d = st_as_sf(d, coords = c("Longitude", "Latitude"), crs = crs_world)
-    d = st_transform(d, crs_use)
-    return(d)
-  })
+  # # Subset data required for map overlay and transform to correct CRS
+  # filter_plastic_data = reactive({
+  #   # Filter
+  #   # d = unique(subset(subset_plastic_data(), select = c(Source, Station, SampleType, Longitude, Latitude))) # DO WE NEED TO OMIT DATA COLUMNS???
+  #   # Transform
+  #   d <- subset_plastic_data()
+  #   d = st_as_sf(d, coords = c("Longitude", "Latitude"), crs = crs_world)
+  #   d = st_transform(d, crs_use)
+  #   return(d)
+  # })
   
   # Filter the research station data
   filtered_station_data = reactive({
@@ -825,6 +857,7 @@ server <- function(input, output, session) {
     h <- blankheight()
     x <- girafe(code = print(p),
                 options = list(opts_sizing(rescale = FALSE),
+                               opts_tooltip(css = "padding:5px;background:white;border-radius:2px 2px 2px 2px;"),
                                opts_zoom(min = 0.5, max = 10),
                                opts_hover(css = "opacity:1.0;stroke-width:2;r:6pt;cursor:pointer;", reactive = TRUE),
                                opts_hover_inv(css = "opacity:0.2;cursor:pointer;"),
