@@ -13,6 +13,9 @@ library(ggiraph) # this is good for interactivity, but cannot be converted to gr
 # library(ggpubr) # maybe this package's 'ggarrange' function can help.
 
 library(reshape2)
+library(flextable) # for displaying tables when mouse hovers over mapped data points
+# library(tidyverse)
+library(DT)
 
 # library(shinybrowser) # get browser dimension & other info
 
@@ -38,10 +41,26 @@ DATA = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
 # Date format
 DATA$Date_1 = as.character(as.Date(DATA$Date_1, '%d-%b-%Y'))
 DATA$Date_2 = as.character(as.Date(DATA$Date_2, '%d-%b-%Y'))
+DATA$Date_1[is.na(DATA$Date_1)] = ''
+DATA$Date_2[is.na(DATA$Date_2)] = ''
+# Date column shows specific sample date or a date range
+DATA$`Sample Date` <- sapply(1:nrow(DATA), function(z){
+  d1 <- DATA$Date_1[z]
+  d2 <- DATA$Date_2[z]
+  if(d1 != '' & d2 != ''){
+    paste0(d1, '\n', '-> ', d2)} else{
+      if(d1 != '' & d2 == ''){
+        d1} else{
+          'not specified'}}
+})
+
 # Include Year column
 DATA$Year = as.integer(substr(DATA$Date_1, 1, 4))
 
-# Create sample type data column
+DATA <- subset(DATA, select = -c(Date_1, Date_2))
+
+# Create sample type data column (THIS WILL BE MODIFIED WHEN I USE LARGER, NEWER TABLE)
+DATA$Depth <- as.character(DATA$Depth)
 DATA$SampleType[DATA$Depth %in% c('5m','<1m','surface')] = 'surface'
 DATA$SampleType[DATA$Depth %in% c('subsurface')] = 'subsurface'
 DATA$SampleType = factor(DATA$SampleType, levels = c('surface', 'subsurface'))
@@ -55,7 +74,7 @@ sourceYear <- suppressWarnings(
 )
 DATA$Source <- factor(DATA$Source, levels = sources[order(sourceYear)])
 
-# Columns for interactive (mouse scrolling) labels
+# Column for interactive (mouse scrolling) labelling of position
 west_ind <- DATA$Longitude < 0
 east_ind <- !west_ind
 lon_lab <- abs(round(DATA$Longitude, 2))
@@ -63,6 +82,7 @@ lon_lab[west_ind] <- paste(lon_lab[west_ind], 'W')
 lon_lab[east_ind] <- paste(lon_lab[east_ind], 'E')
 lat_lab <- paste(abs(round(DATA$Latitude, 2)), 'S')
 coord_lab <- paste0('(', lon_lab, ', ', lat_lab, ')')
+DATA$Coordinates <- coord_lab
 
 DATA$Variable <- as.character(DATA$Variable)
 DATA$Variable[DATA$Variable == 'massDensity'] <- 'mass density'
@@ -70,10 +90,20 @@ DATA$Variable[DATA$Variable == 'massDensity'] <- 'mass density'
 plastic_units <- unique(DATA[,c('Variable','Unit')])
 DATA <- subset(DATA, select = - Unit)
 
-# this may need need moved to inside plotting function, or somewhere after filtering
-DATA$tooltip <- paste0('Location: ', coord_lab, '\n ',
-                       'Plastic ',  DATA$Variable, ' = ', signif(DATA$Value,2), ' ', DATA$Unit)
-DATA$data_id <- 1:nrow(DATA)
+# Include a data_id variable
+#head(DATA)
+DATA$order <- 1:nrow(DATA)
+d <- unique(DATA[c('Source','Station')])
+d$data_id <- paste('sample', 1:nrow(d))
+
+DATA <- merge(DATA, d, sort = FALSE)
+DATA <- DATA[,names(DATA) != 'order']
+
+
+# # this may need need moved to inside plotting function, or somewhere after filtering
+# DATA$tooltip <- paste0('Location: ', coord_lab, '\n ',
+#                        'Plastic ',  DATA$Variable, ' = ', signif(DATA$Value,2), ' ', DATA$Unit)
+# DATA$data_id <- 1:nrow(DATA)
 
 #d <- subset(DATA, Source == 'Cincinelli (2017)')
 # try using flextables -- https://github.com/davidgohel/ggiraph/issues/175
@@ -102,12 +132,6 @@ DATA$data_id <- 1:nrow(DATA)
 # Mapping coordinates
 DATA_sf = st_as_sf(DATA, coords = c("Longitude", "Latitude"), crs = crs_world)
 DATA_sf = st_transform(DATA_sf, crs_use)
-# xy = matrix(unlist(DATA_sf$geometry), 2, nrow(DATA))
-# DATA$x = xy[1,]
-# DATA$y = xy[2,]
-
-
-
 
 # Load research station data ----------------------------------------------
 filename = 'COMNAP_Antarctic_Facilities_Master.csv'
@@ -158,6 +182,8 @@ STATIONS$Official_Name <- gsub('- ', ' ', STATIONS$Official_Name)
 STATIONS$tooltip <- paste0(STATIONS$Official_Name, ' ', STATIONS$Type, '\n ',
                            'Primary operator: ', STATIONS$Operator_primary, '\n ',
                            'Peak population size = ', STATIONS$Peak_Population)
+
+STATIONS$Record_ID <- paste('facility', STATIONS$Record_ID)
 
 # Mapping coordinates
 STATIONS_sf = st_as_sf(STATIONS, coords = c("Longitude_DD", "Latitude_DD"), crs = crs_world)
@@ -263,7 +289,10 @@ chl_poly$value <- CHL$value
 # Plotting parameters -----------------------------------------------------
 # Plot symbols - store in separate data frame
 # Research stations use line-based symbols (crosses/hatches)
-pltShapes <- c(3,4,8,7,9,10,12,13,14,11)
+# pltShapes <- c(3,4,8,7,9,10,12,13,14,11)
+
+pltShapes <- c(1, 0, 5, 2, 6, 19) 
+
 stationTypes <- levels(STATIONS$Type)
 nstationTypes <- length(stationTypes)
 pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
@@ -299,10 +328,46 @@ linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
 
 # Plotting function -------------------------------------------------------
 
-# Following the examples in https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html
-# try defining the plot function outside the server function, here in the preamble.
+# Some nice examples, worth a look, presented here https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html
 
-make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6){
+# Options for flextables
+set_flextable_defaults(
+  font.size = 10,
+  font.family = 'Roboto',
+  theme_fun = 'theme_vanilla'
+)
+
+fun_flextable <- function(x, pu, singleRowVars){
+  # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
+  # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
+  anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
+  if(anyMeasures){
+    # Arrange data frame
+    x <-suppressMessages(melt(x, id.vars = singleRowVars))
+    x <- x[!is.na(x$value),]
+    l <- strsplit(as.character(x$variable), '_')
+    x$`Plastic type` <- sapply(l, function(z) z[1])
+    x$Measure <- sapply(l, function(z) z[2])
+    w <- outer(pu$Variable, x$Measure, '==')
+    n <- nrow(x)
+    x$Value <- sapply(1:n, function(z) paste(x$value[z], pu$Unit[w[,z]]))
+    if(n > 1) x[singleRowVars][2:n,] <- ''
+    # Create flextable
+    ft <- flextable(x, col_keys = c(singleRowVars, "Plastic type", "Measure", "Value"))#, 
+    ft <- bold(ft, part = "header", bold = TRUE)
+    ft <- set_table_properties(ft, layout = "autofit")
+    as.character(htmltools_value(ft, ft.shadow = FALSE))
+  }else{
+    x <- cbind(x[singleRowVars], Measure = 'none')
+    ft <- flextable(x)#, 
+    ft <- bold(ft, part = "header", bold = TRUE)
+    ft <- set_table_properties(ft, layout = "autofit")
+    as.character(htmltools_value(ft, ft.shadow = FALSE))
+  }
+}
+
+
+make_plot <- function(dat, background = 'none', components = 'all', ptSize = 6, legPtSize = 4, alpha = 0.6){#, pu = plastic_units){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
@@ -323,52 +388,6 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
   anyPlastic <- nrow(dat_plastic) > 0
   anyStations <- nrow(dat_stations) > 0
   anyBackground <- background != 'none'
-  
-  if(anyPlastic){
-    plastic_categories <- unique(dat_plastic$Type)
-    plastic_measures <- unique(dat_plastic$Variable)
-    # Recast data for plotting and defining reactive tooltip info
-    dat_plastic_recast <- dcast(dat_plastic,
-                                Source + Station + Location + SampleType + Depth + Longitude + Latitude +
-                                  Date_1 + Date_2 + Year ~ Type + Variable, fun.aggregate = mean, value.var = 'Value')
-    dat_plastic_recast$data_id <- 1:nrow(dat_plastic_recast)
-    # Transform to correct CRS
-    dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c("Longitude", "Latitude"), crs = crs_world)
-    dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
-
-    fun_flextable <- function(x){
-      anyMeasures <- any(!is.na(x))
-      if(anyMeasures){
-        # Arrange data frame
-        y <-suppressMessages(melt(x))
-        y <- y[!is.na(y$value),]
-        l <- strsplit(as.character(y$variable), '_')
-        y$`Plastic type` <- sapply(l, function(z) z[1])
-        y$Measure <- sapply(l, function(z) z[2])
-        w <- outer(plastic_units$Variable, y$Measure, '==')
-        y$Value <- sapply(1:nrow(y), function(z) paste(y$value[z], plastic_units$Unit[w[,z]]))
-        # Create flextable
-        ft <- flextable(y, col_keys = c("Plastic type", "Measure", "Value"))#, 
-#                        defaults = list(fontname = "Roboto"))
-        ft <- bold(ft, part = "header", bold = TRUE)
-        # ft <- color(ft, color = "orange", part = "all")
-        ft <- set_table_properties(ft, layout = "autofit")
-        as.character(htmltools_value(ft, ft.shadow = FALSE))
-      }else{
-        y <- data.frame(Measure = 'none')
-        ft <- flextable(y, col_keys = c("Plastic type", "Measure", "Value"), 
-                        defaults = list(fontname = "Roboto"))
-        ft <- bold(ft, part = "header", bold = TRUE)
-        ft <- set_table_properties(ft, layout = "autofit")
-        as.character(htmltools_value(ft, ft.shadow = FALSE))
-      }
-    }
-    longVars <- c('Source', 'Station', 'Location', 'SampleType', 'Depth',
-                  'Date_1', 'Date_2', 'Year', 'geometry', 'data_id')
-    temp_dat <- as.data.frame(dat_plastic_recast)[,!names(dat_plastic_recast) %in% longVars]
-    temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
-    dat_plastic_recast$tooltip <- map_chr(temp_dat, fun_flextable)
-  }
   
   switch(components,
          
@@ -410,6 +429,9 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
                scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
            }
            
+           plt_map <- plt_map +
+             theme_void()
+           
            # Combine plot layers
            if(anyStations | anyPlastic){
              plt_map <- plt_map +
@@ -421,7 +443,7 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
              plt_map <- plt_map +
                geom_sf_interactive(data = dat_stations,
                                    aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
-                                   alpha = alpha, size = 4, stroke = 1, show.legend = FALSE) +
+                                   alpha = alpha, size = ptSize, stroke = 1, show.legend = FALSE) +
                # geom_sf(data = dat_stations,
                #         aes(shape = Type, colour = Seasonality),
                #         alpha = 1, size = 4, stroke = 1, show.legend = FALSE) +
@@ -435,15 +457,15 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
                # geom_sf(data = dat_plastic,
                #         aes(fill = Source, shape = SampleType),
                #         alpha = 1, size = 4, show.legend = FALSE) +
-               geom_sf_interactive(data = dat_plastic_recast,
+               geom_sf_interactive(data = dat_plastic,
                                    aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
-                                   alpha = alpha, size = 4, show.legend = FALSE) +
+                                   alpha = alpha, size = ptSize, show.legend = FALSE) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
            }
            
            plt_map <- plt_map +
-             coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax'])) +
-             theme_void()
+             coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax']))# +
+             # theme_void()
            
            output_plot <- ggdraw(plt_map)
            return(output_plot)
@@ -461,27 +483,29 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
                ggplot() +
                geom_sf(data = dat_stations,
                        aes(shape = Type, colour = Seasonality),
-                       alpha = 1, size = 4, stroke = 1) +
+                       alpha = 1, size = ptSize, stroke = 1) +
                scale_colour_manual(values = c('forestgreen','firebrick')) +
                scale_shape_manual(values = symbols$symbol[symbols$Class == 'ResearchStation']) +
-               guides(shape = guide_legend(title = 'Facility'),
-                      colour = guide_legend(override.aes = list(colour = c('forestgreen','firebrick'), shape = 3)))
+               theme(legend.key = element_blank()) +
+               guides(shape = guide_legend(title = 'Facility', override.aes = list(size = legPtSize)),
+                      colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
            }
            
            # Plastic samples
            if(anyPlastic){
              plt_plastic_samples <-
                ggplot() +
-               geom_sf(data = dat_plastic_recast,
+               geom_sf(data = dat_plastic,
                        aes(fill = Source, shape = SampleType),
-                       alpha = 1, size = 4) +
+                       alpha = 1, size = ptSize) +
                # geom_sf_interactive(data = dat_plastic,
                #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
                #                     alpha = 1, size = 4) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
                scale_shape_manual(values = symbols$symbol[symbols$Class == 'PlasticSample']) +
-               guides(shape = guide_legend(title = 'Sample type'),
-                      fill = guide_legend(override.aes = list(shape = c(21))))
+               theme(legend.key = element_blank()) +
+               guides(shape = guide_legend(title = 'Sample type', override.aes = list(size = legPtSize)),
+                      fill = guide_legend(override.aes = list(shape = c(21), size = legPtSize)))
            }
            
            # Extract legends and make subplot
@@ -557,28 +581,33 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
                ggplot() +
                geom_sf(data = dat_stations,
                        aes(shape = Type, colour = Seasonality),
-                       alpha = 1, size = 4, stroke = 1) +
+                       alpha = 1, size = ptSize, stroke = 1) +
                scale_colour_manual(values = c('forestgreen','firebrick')) +
                scale_shape_manual(values = symbols$symbol[symbols$Class == 'ResearchStation']) +
-               guides(shape = guide_legend(title = 'Facility'),
-                      colour = guide_legend(override.aes = list(colour = c('forestgreen','firebrick'), shape = 3)))
+               theme(legend.key = element_blank()) +
+               guides(shape = guide_legend(title = 'Facility', override.aes = list(size = legPtSize)),
+                      colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
            }
            
            # Plastic samples
            if(anyPlastic){
              plt_plastic_samples <-
                ggplot() +
-               geom_sf(data = dat_plastic_recast,
+               geom_sf(data = dat_plastic,
                        aes(fill = Source, shape = SampleType),
-                       alpha = 1, size = 4) +
+                       alpha = 1, size = ptSize) +
                # geom_sf_interactive(data = dat_plastic,
                #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
                #                     alpha = 1, size = 4) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
                scale_shape_manual(values = symbols$symbol[symbols$Class == 'PlasticSample']) +
-               guides(shape = guide_legend(title = 'Sample type'),
-                      fill = guide_legend(override.aes = list(shape = c(21))))
+               theme(legend.key = element_blank()) +
+               guides(shape = guide_legend(title = 'Sample type', override.aes = list(size = legPtSize)),
+                      fill = guide_legend(override.aes = list(shape = c(21), size = legPtSize)))
            }
+           
+           plt_map <- plt_map +
+             theme_void()
            
            if(anyStations | anyPlastic){
              plt_map <- plt_map +
@@ -590,7 +619,7 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
              plt_map <- plt_map +
                geom_sf_interactive(data = dat_stations,
                                    aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
-                                   alpha = alpha, size = 4, stroke = 1, show.legend = FALSE) +
+                                   alpha = alpha, size = ptSize, stroke = 1, show.legend = FALSE) +
                # geom_sf(data = dat_stations,
                #         aes(shape = Type, colour = Seasonality),
                #         alpha = 1, size = 4, stroke = 1, show.legend = FALSE) +
@@ -604,16 +633,16 @@ make_plot <- function(dat, background = 'none', components = 'all', alpha = 0.6)
                # geom_sf(data = dat_plastic,
                #         aes(fill = Source, shape = SampleType),
                #         alpha = 1, size = 4, show.legend = FALSE) +
-               geom_sf_interactive(data = dat_plastic_recast,
+               geom_sf_interactive(data = dat_plastic,
                                    aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
-                                   alpha = alpha, size = 4, show.legend = FALSE) +
+                                   alpha = alpha, size = ptSize, show.legend = FALSE) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
            }
            
            # Make main plot
            plt_map <- plt_map +
-             coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax'])) +
-             theme_void()
+             coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax']))# +
+             # theme_void()
            
            output_plot <- ggdraw(plt_map)
            
@@ -658,71 +687,74 @@ ui <- fluidPage(
   
   fluidRow(
     column(width = 3,
-           # Input: year range -------------------------------------------------------
-           sliderInput("YearRange", "Years:",
-                       min = min(DATA$Year, na.rm = TRUE) , max = max(DATA$Year, na.rm = TRUE),
-                       value = range(DATA$Year, na.rm = TRUE), step = 1, sep = ''),
-
-           # Input: measurement variable ----
-           selectInput("Variable", "Measurement:",
-                       c("Concentration (pieces/m3)" = "concentration",
-                         "Density (pieces/km2)" = "density",
-                         "Mass density (g/km2)" = "mass density"),
-                       multiple = TRUE, selected = c("concentration", "density", "mass density")),
-
-           # Input: plastic type ----
-           # I NEED TO THINK ABOUT HOW TO HANDLE THE TOTAL COLUMN... OMIT IT FOR NOW
-           # BUT MAYBE INCLUDE IT LATER WHEN GRAPHING DATA...
-           selectInput("Type", "Plastic type:",
-                       c("Fragment" = "fragment",
-                         "Fibre" = "fibre",
-                         "Film" = "film"),
-                       multiple = TRUE, selected = c("fragment", "fibre", "film")),
-
-           # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
-           selectInput("SampleType", "Sample type:",
-                       c("Near-surface" = "surface",
-                         "Subsurface" = "subsurface"),
-                       multiple = TRUE, selected = c("surface")),
-
-           # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
-           selectInput("StationType", "Facility:",
-                       c("Station" = "Station",
-                         "Camp" = "Camp",
-                         "Refuge" = "Refuge",
-                         "Airfield" = "Airfield Camp",
-                         "Laboratory" = "Laboratory",
-                         "Depot" = "Depot"),
-                       multiple = TRUE, selected = c("Station")),
-
-           # Input: background layers ----
-           radioButtons("background", "Background data:",
-                        c("None" = "none",
-                          "Krill (Jan--Mar)" = "krill_all",
-                          "Krill (Jan)" = "krill_1",
-                          "Krill (Feb)" = "krill_2",
-                          "Krill (Mar)" = "krill_3",
-                          "Chlorophyll (Jan--Mar)" = "chl_all",
-                          "Chlorophyll (Jan)" = "chl_1",
-                          "Chlorophyll (Feb)" = "chl_2",
-                          "Chlorophyll (Mar)" = "chl_3"
-                        ),
-                        selected = 'none')
-
-
-           # # Input: plot value transformation ----
-           # radioButtons("tran", "Scale:",
-           #              c("Natural" = "norm",
-           #                "Log" = "log")),
-
-           # # Input: Checkbox for whether outliers should be included ----
-           # checkboxInput("outliers", "Show outliers", TRUE),
-
-           # width = 3
+           wellPanel(
+             # Input: year range -------------------------------------------------------
+             sliderInput("YearRange", "Years:",
+                         min = min(DATA$Year, na.rm = TRUE) , max = max(DATA$Year, na.rm = TRUE),
+                         value = range(DATA$Year, na.rm = TRUE), step = 1, sep = ''),
+             
+             # Input: measurement variable ----
+             selectInput("Variable", "Measurement:",
+                         c("Concentration (pieces/m3)" = "concentration",
+                           "Density (pieces/km2)" = "density",
+                           "Mass density (g/km2)" = "mass density"),
+                         multiple = TRUE, selected = c("concentration", "density", "mass density")),
+             
+             # Input: plastic type ----
+             # I NEED TO THINK ABOUT HOW TO HANDLE THE TOTAL COLUMN... OMIT IT FOR NOW
+             # BUT MAYBE INCLUDE IT LATER WHEN GRAPHING DATA...
+             selectInput("Type", "Plastic type:",
+                         c("Fragment" = "fragment",
+                           "Fibre" = "fibre",
+                           "Film" = "film"),
+                         multiple = TRUE, selected = c("fragment", "fibre", "film")),
+             
+             # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
+             selectInput("SampleType", "Sample type:",
+                         c("Near-surface" = "surface",
+                           "Subsurface" = "subsurface"),
+                         multiple = TRUE, selected = c("surface", "subsurface")),
+             
+             # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
+             selectInput("StationType", "Facility:",
+                         c("Station" = "Station",
+                           "Camp" = "Camp",
+                           "Refuge" = "Refuge",
+                           "Airfield" = "Airfield Camp",
+                           "Laboratory" = "Laboratory",
+                           "Depot" = "Depot"),
+                         multiple = TRUE, selected = c("Station", "Camp", "Refuge", "Airfield Camp", "Laboratory", "Depot")),
+             
+             # Input: background layers ----
+             radioButtons("background", "Background data:",
+                          c("None" = "none",
+                            "Krill (Jan--Mar)" = "krill_all",
+                            "Krill (Jan)" = "krill_1",
+                            "Krill (Feb)" = "krill_2",
+                            "Krill (Mar)" = "krill_3",
+                            "Chlorophyll (Jan--Mar)" = "chl_all",
+                            "Chlorophyll (Jan)" = "chl_1",
+                            "Chlorophyll (Feb)" = "chl_2",
+                            "Chlorophyll (Mar)" = "chl_3"
+                          ),
+                          selected = 'none')
+             
+             
+             # # Input: plot value transformation ----
+             # radioButtons("tran", "Scale:",
+             #              c("Natural" = "norm",
+             #                "Log" = "log")),
+             
+             # # Input: Checkbox for whether outliers should be included ----
+             # checkboxInput("outliers", "Show outliers", TRUE),
+             
+             # width = 3
+             
+           )
     ),
     
     # Main panel for displaying outputs ----
-    column(width = 7, offset = 0, style='padding:0px;',
+    column(width = 7, #offset = 0, style='padding:0px;',
            tags$body(tags$div(id="ppitest", style="width:1in;visible:hidden;padding:0px")),
            tags$script('$(document).on("shiny:connected", function(e) {
                                     var d =  document.getElementById("ppitest").offsetWidth;
@@ -733,18 +765,37 @@ ui <- fluidPage(
                                     Shiny.onInputChange("dpi", d);
                                 });
                             '),
-           fillCol(
-             # h3("Data plot"),
-             plotOutput('blank', width = '100%', height = '1px'),
-             ggiraphOutput('plt')
-           )
+           # h3("Data plot"),
+           plotOutput('blank', width = '100%', height = '1px'),
+           ggiraphOutput('plt')
     ),
     
     column(width = 2, offset = 0, style='padding:0px;',
            linebreaks(8), # add whitespace above legends
            plotOutput('legend')
     )
-    
+  ),
+  
+  fluidRow(
+    column(width = 12, #offset = 3,
+           
+           wellPanel(
+             h4("Selected plastic data"),
+             dataTableOutput("datatab_plastic")
+           )
+           
+    )
+  ),
+  
+  fluidRow(
+    column(width = 12,
+           
+           wellPanel(
+             h4("Selected facilities"),
+             dataTableOutput("datatab_stations")
+           )
+           
+    )
   )
 )
 
@@ -763,16 +814,30 @@ server <- function(input, output, session) {
       )
   })
   
-  # # Subset data required for map overlay and transform to correct CRS
-  # filter_plastic_data = reactive({
-  #   # Filter
-  #   # d = unique(subset(subset_plastic_data(), select = c(Source, Station, SampleType, Longitude, Latitude))) # DO WE NEED TO OMIT DATA COLUMNS???
-  #   # Transform
-  #   d <- subset_plastic_data()
-  #   d = st_as_sf(d, coords = c("Longitude", "Latitude"), crs = crs_world)
-  #   d = st_transform(d, crs_use)
-  #   return(d)
-  # })
+  transformed_plastic_data <- reactive({
+    d <- filtered_plastic_data()
+    anyPlastic <- nrow(d) > 0
+    if(anyPlastic){
+      dat_plastic_recast <- dcast(d,
+                                  data_id + Source + Station + Location + SampleType + Depth + Longitude + Latitude + Coordinates +
+                                    `Sample Date` + Year ~ Type + Variable, fun.aggregate = mean, value.var = 'Value')
+      # Transform to correct CRS
+      dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c("Longitude", "Latitude"), crs = crs_world)
+      dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
+      # Define interactive tooltip using flextable
+      omitVars <- c('Source', 'Station', 'Location', 'SampleType',
+                    'Year', 'geometry', 'data_id')
+      temp_dat <- as.data.frame(dat_plastic_recast)[!names(dat_plastic_recast) %in% omitVars]
+      temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
+      singleRowVars <- c('Sample Date', 'Coordinates', 'Depth')
+      dat_plastic_recast$tooltip <-  sapply(temp_dat, function(z) fun_flextable(z, plastic_units, singleRowVars))
+      return(
+        dat_plastic_recast
+      )
+    }else{
+      return(d)
+    }
+  })
   
   # Filter the research station data
   filtered_station_data = reactive({
@@ -814,7 +879,8 @@ server <- function(input, output, session) {
   
   # Group all data in a named list
   listData <- reactive({
-    plastic <- filtered_plastic_data()
+    # plastic <- filtered_plastic_data()
+    plastic <- transformed_plastic_data()
     stations <- filtered_station_data()
     background <- filtered_background_dat()
     symbols <- Symbols()
@@ -851,18 +917,22 @@ server <- function(input, output, session) {
     )
   })
 
+  
   output$plt <- renderGirafe({
     p <- plot_main()
     w <- blankwidth()
     h <- blankheight()
     x <- girafe(code = print(p),
                 options = list(opts_sizing(rescale = FALSE),
-                               opts_tooltip(css = "padding:5px;background:white;border-radius:2px 2px 2px 2px;"),
+                               # opts_tooltip(css = "padding:5px;background:white;border-radius:2px 2px 2px 2px;font-size:12pt;"),
+                               opts_tooltip(css = "background:white;"),
                                opts_zoom(min = 0.5, max = 10),
-                               opts_hover(css = "opacity:1.0;stroke-width:2;r:6pt;cursor:pointer;", reactive = TRUE),
+                               opts_hover(css = "opacity:1.0;stroke-width:4;cursor:pointer;", reactive = TRUE),
+                               # opts_hover(css = "opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;cursor:pointer;", reactive = TRUE),
                                opts_hover_inv(css = "opacity:0.2;cursor:pointer;"),
                                # opts_hover(css = "fill:#FF3333;stroke:black;cursor:pointer;", reactive = TRUE)),
-                               opts_selection(type = "multiple", css = "opacity:1.0;stroke-width:2;r:6pt;")),
+                               opts_selection(type = "multiple", css = "opacity:1.0;stroke-width:4;")),
+                             # opts_selection(type = "multiple", css = "opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;")),
                 width_svg = (w / {input$dpi}),
                 height_svg = (h / {input$dpi})
     )
@@ -876,7 +946,58 @@ server <- function(input, output, session) {
   }
   )
   
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
+  # Display table of selected plastic data
+  
+  # output$hover_data <- renderPrint({
+  #   input$plt_hovered
+  # })
+  
+  selected_data <- reactive({
+    input$plt_selected
+  })
+
+  output$datatab_plastic <- renderDataTable({
+    # d <- DATA
+    d <- filtered_plastic_data()
+    d <- d[d$data_id %in% selected_data(),]
+    if(nrow(d) < 1) return(NULL)
+    d <- subset(d, select = -c(Stat, Year, Coordinates, data_id))
+    # d <- subset(d, select = -c(Stat, Year, Coordinates))
+    row.names(d) <- NULL
+    d <- datatable(d,
+                   options = list(
+                     paging = FALSE, searching = FALSE # ,fillContainer = TRUE,
+                    # bPaginate = FALSE,  searching = FALSE, fillContainer = TRUE
+                     # autoWidth = TRUE
+                   ))
+    d
+  })
+
+  output$datatab_stations <- renderDataTable({
+    d <- filtered_station_data()
+    d <- as.data.frame(d)
+    d <- d[d$Record_ID %in% selected_data(),]
+    if(nrow(d) < 1) return(NULL)
+    d <- subset(d, select = -c(Record_ID, Elevation_Datum, tooltip, geometry, order, Webcam_URL))
+    # d <- subset(d, select = -c(Elevation_Datum, tooltip, geometry, order, Webcam_URL))
+    row.names(d) <- NULL
+    d <- datatable(d,
+                   options = list(
+                     paging = FALSE, searching = FALSE, autoWidth = TRUE, scrollX = TRUE
+                   ))
+    d
+  })
+  
+  
+      
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  
+  
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  # Potential extra plots of data distributions...
+  #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # output$summary <- renderPrint({
   #   summary(dat())
   # })
