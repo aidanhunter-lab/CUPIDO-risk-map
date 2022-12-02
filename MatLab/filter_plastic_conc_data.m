@@ -18,6 +18,10 @@ else
     filename = outputFilename;
 end
 
+if ~exist('returnOnlyMicroplasticMeasures', 'var')
+    returnOnlyMicroplasticMeasures = false;
+end
+
 %% Directories
 project = 'CUPIDO-risk-map';
 thisFile = which('filter_plastic_conc_data.m');
@@ -48,20 +52,35 @@ end
 % Volumetric concentration 'pieces/m^3' is most common unit for seawater 
 % samples; some data use area density 'pieces/km^2', some use mass density
 % 'g/km^2'.
-varOpts = {'concentration', 'density', 'massDensity'}; %, 'all'}; % filtering options
+varOpts_water = {'concentration', 'density', 'massDensity'}; %, 'all'}; % filtering options
+varOpts_sediment = {'concentration', 'density'};
 
+Units.water.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
+Units.water.density = {'pieces/km2', 'items/km2', 'number/km2'};
+Units.water.massDensity = {'g/km2'};
+Units.sediment.concentration = {'pieces/g'};
+Units.sediment.density = {'pieces/m2'};
 
-
-Units.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
-Units.density = {'pieces/km2', 'items/km2', 'number/km2'};
-Units.massDensity = {'g/km2'};
-Units_ = struct2cell(Units);
-useUnit = cellfun(@(z) z(1), Units_);
+Units_water = struct2cell(Units.water);
+useUnit_water = cellfun(@(z) z(1), Units_water);
+Units_sediment = struct2cell(Units.sediment);
+useUnit_sediment = cellfun(@(z) z(1), Units_sediment);
 
 % Include a Variable column in each data set to indicate measurement type,
 % omitting rows with units not listed in Units
 for i = 1:nsources
     source = sources{i};
+    sampleType = sampleTypes.(source);
+    if contains(sampleType, 'water')
+        Units_ = Units_water;
+        useUnit = useUnit_water;
+        varOpts = varOpts_water;
+    end
+    if contains(sampleType, 'sediment')
+        Units_ = Units_sediment;
+        useUnit = useUnit_sediment;
+        varOpts = varOpts_sediment;
+    end
     d = dat.(source).abundance;
     for j = height(d):-1:1
         k = cellfun(@(z) ismember(d.Unit{j}, z), Units_);
@@ -76,39 +95,10 @@ for i = 1:nsources
     dat.(source).abundance = d;
 end
 
-
-
-
-
-
-% varOpts = {'concentration', 'density', 'massDensity'}; %, 'all'}; % filtering options
-% Units.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
-% Units.density = {'pieces/km2', 'items/km2', 'number/km2'};
-% Units.massDensity = {'g/km2'};
-% Units_ = struct2cell(Units);
-% useUnit = cellfun(@(z) z(1), Units_);
-% 
-% % Include a Variable column in each data set to indicate measurement type,
-% % omitting rows with units not listed in Units
-% for i = 1:nsources
-%     source = sources{i};
-%     d = dat.(source).abundance;
-%     for j = height(d):-1:1
-%         k = cellfun(@(z) ismember(d.Unit{j}, z), Units_);
-%         if any(k)
-%             d.Variable(j) = varOpts(k);
-%             d.Unit(j) = useUnit(k);
-%         else
-%             d.Variable(j) = {''};
-%         end
-%     end
-%     d = d(~strcmp(d.Variable, ''),:);
-%     dat.(source).abundance = d;
-% end
-
 %% Regularise the data and combine into a single table
 for i = 1:nsources
     source = sources{i};
+%     sampleType = sampleTypes.(source);
     d = dat.(source).abundance;
     fields = d.Properties.VariableNames;
     % Regularise the Station variable
@@ -116,7 +106,8 @@ for i = 1:nsources
     if any(j), fields{j} = 'Station'; end
     j = ismember('Station', fields);
     if ~j
-        k = contains(fields, 'Sample');
+        k = strcmp(fields, 'Sample') | strcmp(fields, 'sample') | ... 
+            strcmp(fields, 'SampleID') | strcmp(fields, 'MUC_ID');
         if any(k)
             if sum(k) == 1
                 fields{k} = 'Station';
@@ -187,7 +178,7 @@ for i = 1:nsources
     d = movevars(d, 'Latitude', 'After', 'Longitude');
     fields = d.Properties.VariableNames;
     % Regularise Depth
-    j = ismember(fields, {'Depth', 'depth', 'Dep', 'dep'});
+    j = ismember(fields, {'Depth', 'depth', 'Dep', 'dep', 'Depth_m', 'depth_m'});
     if ~any(j)
         d.Depth = cell(height(d), 1);
     else
@@ -236,18 +227,21 @@ for i = 1:nsources
         d.Properties.VariableNames{j} = 'Value';
     end
     d = movevars(d, 'Value', 'After', 'Stat');
+    d = movevars(d, 'SampleType', 'Before', 'Station');
     dat.(source).abundance = d;
 end
 
-% Only use microplastic measures
-for i = 1:nsources
-    source = sources{i};
-    d = dat.(source).abundance;
-    fields = d.Properties.VariableNames;
-    j = ismember(fields, {'Size','size'});
-    if ~any(j), continue; end
-    j = ismember(d{:,j}, {'Micro', 'micro'});
-    dat.(source).abundance = d(j,:);
+% Only use microplastic measures?
+switch returnOnlyMicroplasticMeasures, case true
+    for i = 1:nsources
+        source = sources{i};
+        d = dat.(source).abundance;
+        fields = d.Properties.VariableNames;
+        j = ismember(fields, {'Size','size'});
+        if ~any(j), continue; end
+        j = ismember(d{:,j}, {'Micro', 'micro'});
+        dat.(source).abundance = d(j,:);
+    end
 end
 
 % Include a "Source" column in each abundance data set
@@ -269,6 +263,9 @@ end
 % and max measurements at each station. This is usually because the data
 % were reported as within some range [min, max]. Let's estimate mean values
 % for those data where only min/max is reported simply by taking midpoints.
+
+% 'M NOT KEEN ON THIS... SHOULD PROBABLY FIND A BETTER WAY TO DISPLAY THE
+% DATA AS IT IS REPORTED BY EACH SOURCE
 
 % useStat = 'max';
 useStat = 'mean';

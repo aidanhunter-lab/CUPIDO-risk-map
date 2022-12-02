@@ -282,6 +282,44 @@ Zhang_2022.colour = colours;
 Data.Zhang_2022 = Zhang_2022;
 
 
+%% Buckingham 2022
+
+source = 'Buckingham_2022';
+filepath = fullfile(dataDirectory, source);
+filename = 'SG_data_JBuckingham_v2.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+abundance.Properties.VariableNames{'Measurement'} = 'Variable';
+abundance.Properties.VariableNames{'Sample_Type'} = 'SampleType';
+abundance.Properties.VariableNames{'Sample_Method'} = 'Sample_Method';
+abundance.Properties.VariableNames{'Size_Class'} = 'SizeClass';
+
+Site = unique(abundance.Site, 'stable');
+Station = (1:length(Site))';
+Stations = table(Station, Site);
+
+size_dat = abundance(~strcmp(abundance.SizeClass, 'all'),:);
+abundance(strcmp(abundance.SizeClass, 'all'),:);
+
+abundance = join(abundance, Stations);
+abundance = movevars(abundance, 'Station', 'Before', 'Site');
+
+size_dat = join(size_dat, Stations);
+size_dat = movevars(size_dat, 'Station', 'Before', 'Site');
+
+% All measurements are fragments -- DOUBLE CHECK THIS
+Type = {'particle'};
+Value = 100;
+Unit = {'percent'};
+categories = table(Type, Value, Unit);
+
+Buckingham_2022.abundance = abundance;
+Buckingham_2022.size = size_dat;
+Buckingham_2022.categories = categories;
+
+Data.Buckingham_2022 = Buckingham_2022;
+
+
 %% Waller 2017 providews a list of plastic samples with lat-lon coords.
 source = 'Waller_2017';
 filepath = fullfile(dataDirectory, source);
@@ -349,6 +387,7 @@ Cozar_2014.abundance = dat;
 Cozar_2014.categories = table(Type, Value, Unit);
 
 Data.Cozar_2014 = Cozar_2014;
+
 
 
 %% adventurescience.org
@@ -430,12 +469,15 @@ categories = readtable(fullfile(filepath, filename));
 
 
 abundance.Properties.VariableNames{'Measure'} = 'Replicate';
+abundance.Unit = repmat({'pieces/g'}, height(abundance), 1);
 
 stations.Year = nan(height(stations), 1);
 stations.Year(contains(stations.Core, 'AP')) = 2017;
 stations.Year(contains(stations.Core, {'SS', 'SG'}) & ...
     ~ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
 stations.Year(ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
+
+stations.Depth_m = arrayfun(@(z) {num2str(z)}, stations.Depth_m);
 
 abundance = join(abundance, stations); % merge lat-lon and depth info into main table
 abundance = movevars(abundance, {'Year', 'Longitude', 'Latitude', 'Depth_m'}, 'After', 'MUC_ID');
@@ -499,20 +541,85 @@ abundance_size = movevars(abundance_size, {'Longitude','Latitude','Depth_m', 'Da
 
 abundance = abundance_type;
 
-% s = unique(abundance.Station, 'stable');
-m = reshape(abundance.Mean, 3, []);
+m = reshape(abundance.Value, 3, []);
 m = sum(m);
-abundance = removevars(abundance, {'Plastic','Mean','StdDev'});
+abundance = removevars(abundance, {'Plastic', 'Value'});
 abundance = unique(abundance, 'stable');
-abundance.Mean = m(:);
-abundance = movevars(abundance, 'Mean', 'Before', 'Unit');
+abundance.Value = m(:);
+abundance = movevars(abundance, 'Value', 'Before', 'Unit');
 
 abundance.SampleType = repmat({'sediment'}, height(abundance), 1);
 abundance = movevars(abundance, 'SampleType', 'Before', 'Location');
 
+abundance_type.Properties.VariableNames{'Plastic'} = 'Type';
+
+Station = unique(abundance.Station, 'stable');
+snew = (1:length(Station))';
+x = table(Station, snew);
+
+abundance = join(abundance, x);
+abundance = removevars(abundance, 'Station');
+abundance.Properties.VariableNames{'snew'} = 'Station';
+abundance = movevars(abundance, 'Station', 'After', 'Location');
+
+abundance_type = join(abundance_type, x);
+abundance_type = removevars(abundance_type, 'Station');
+abundance_type.Properties.VariableNames{'snew'} = 'Station';
+abundance_type = movevars(abundance_type, 'Station', 'After', 'Location');
+
+abundance_size = join(abundance_size, x);
+abundance_size = removevars(abundance_size, 'Station');
+abundance_size.Properties.VariableNames{'snew'} = 'Station';
+abundance_size = movevars(abundance_size, 'Station', 'After', 'Location');
+
+abundance.Depth_m = arrayfun(@(z) {num2str(z)}, abundance.Depth_m);
+
+x.Station = [];
+x.Station = x.snew;
+x.snew = [];
+
+Types = unique(abundance_type.Type);
+nt = length(Types);
+Station = reshape(repmat(x.Station', nt, 1), [], 1);
+AT = table(Station);
+for i = 1:height(x)
+    for j = 1:nt
+        k = strcmp(abundance_type.Stat, 'Mean') & abundance_type.Station == i & strcmp(abundance_type.Type, Types{j});
+        v = abundance_type.Value(k);
+        k0 = strcmp(abundance.Stat, 'Mean') & abundance.Station == i;
+        v0 = abundance.Value(k0);
+        p = 100 * v / v0;
+        k = find(AT.Station == i);
+        k = k(j);
+        AT.Type(k) = Types(j);
+        AT.Value(k) = p;
+    end
+end
+AT.Unit = repmat({'percent'}, height(AT), 1);
+
+Sizes = unique(abundance_size.Size);
+nt = length(Sizes);
+Station = reshape(repmat(x.Station', nt, 1), [], 1);
+ST = table(Station);
+for i = 1:height(x)
+    for j = 1:nt
+        k = strcmp(abundance_size.Variable, 'Mean') & abundance_size.Station == i & strcmp(abundance_size.Size, Sizes{j});
+        v = abundance_size.Value(k);
+        k0 = strcmp(abundance.Stat, 'Mean') & abundance.Station == i;
+        v0 = abundance.Value(k0);
+        p = 100 * v / v0;
+        k = find(ST.Station == i);
+        k = k(j);
+        ST.Size(k) = Sizes(j);
+        ST.Value(k) = p;
+    end
+end
+ST.Unit = repmat({'percent'}, height(ST), 1);
+
+
 Munari_2017.abundance = abundance;
-Munari_2017.size = abundance_size;
-Munari_2017.category = abundance_type;
+Munari_2017.size = ST;
+Munari_2017.categories = AT;
 
 Data.Munari_2017 = Munari_2017;
 
