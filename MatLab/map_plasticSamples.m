@@ -26,7 +26,9 @@ plastics = load_plastic_conc_data;
 
 %% Filter data
 
-[abundance, sources, nsources] = filter_plastic_conc_data(plastics, 'saveData', true);
+% plastics = rmfield(plastics, {'Buckingham_2022', 'Eriksen_2014', 'adventurescience', 'Cunningham_2020', 'Munari_2017'})
+
+[abundance, sources, nsources] = filter_plastic_conc_data(plastics, 'saveData', true, 'outputFilename', 'plastic_quantity_new.csv');
 
 % For each data source, the abundance field should contain the information
 % that we want to plot here -- longitude-latitude, abundance, and data 
