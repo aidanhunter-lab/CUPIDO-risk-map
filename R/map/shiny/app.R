@@ -33,7 +33,9 @@ crs_use = 3031
 
 
 # Load plastic data -----------------------------------------------------
-filename = 'plastic_quantity.csv'
+
+# filename = 'plastic_quantity.csv'
+filename = 'plastic_quantity_new.csv'
 filepath = 'data/plastic_quantity/'
 DATA = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
 
@@ -60,10 +62,42 @@ DATA$Year = as.integer(substr(DATA$Date_1, 1, 4))
 DATA <- subset(DATA, select = -c(Date_1, Date_2))
 
 # Create sample type data column (THIS WILL BE MODIFIED WHEN I USE LARGER, NEWER TABLE)
+
+# SORT OUT THE DATA GROUPINGS... SURFACE WATER, SUBSURFACE WATER, SEDIMENT
+
+head(DATA)
+
+unique(DATA$SampleType)
+
+s <- as.character(DATA$SampleType)
+marine <- s == 'seawater'
 DATA$Depth <- as.character(DATA$Depth)
-DATA$SampleType[DATA$Depth %in% c('5m','<1m','surface')] = 'surface'
-DATA$SampleType[DATA$Depth %in% c('subsurface')] = 'subsurface'
-DATA$SampleType = factor(DATA$SampleType, levels = c('surface', 'subsurface'))
+dep <- DATA$Depth
+surf <- dep %in% c('5m','<1m', '5 m', '<1 m', 'surface') | suppressWarnings(as.numeric(dep) <= 5)
+subsurf <- dep %in% c('subsurface')  | suppressWarnings(as.numeric(dep) > 5)
+surf <- marine & surf
+subsurf <- marine & subsurf
+surf[is.na(surf)] <- FALSE
+subsurf[is.na(subsurf)] <- FALSE
+s[surf] <- 'marine surface'
+s[subsurf] <- 'marine subsurface'
+DATA$SampleType <- factor(s, levels = unique(s))
+
+# ndepth <- ! DATA$Depth %in% c('5m','<1m','surface', 'subsurface') # index numeric values depth
+# if(any(ndepth)){
+#   dd <- rep(NA, length(ndepth))
+#   dd[ndepth] <- as.numeric(DATA$Depth[ndepth])
+#   surfacewater <- dd <= 5 | DATA$Depth %in% c('5m','<1m','surface')
+# }
+
+
+# DATA$SampleClass <- DATA$SampleType
+# DATA <- subset(DATA, select = -SampleType)
+# 
+# DATA$Depth <- as.character(DATA$Depth)
+# DATA$SampleType[DATA$Depth %in% c('5m','<1m','surface')] = 'surface'
+# DATA$SampleType[DATA$Depth %in% c('subsurface')] = 'subsurface'
+# DATA$SampleType = factor(DATA$SampleType, levels = c('surface', 'subsurface'))
 
 # Reorder data sources by publication date
 sources <- levels(DATA$Source)
@@ -87,7 +121,14 @@ DATA$Coordinates <- coord_lab
 DATA$Variable <- as.character(DATA$Variable)
 DATA$Variable[DATA$Variable == 'massDensity'] <- 'mass density'
 
-plastic_units <- unique(DATA[,c('Variable','Unit')])
+# plastic_units <- unique(DATA[,c('Variable','Unit')])
+plastic_units <- unique(DATA[,c('SampleType', 'Variable','Unit')])
+plastic_units$SampleType <- as.character(plastic_units$SampleType)
+plastic_units$SampleType[grepl('water', plastic_units$SampleType) | 
+                           grepl('marine', plastic_units$SampleType)] <- 'water'
+plastic_units <- unique(plastic_units)
+plastic_units$SampleType <- factor(plastic_units$SampleType, levels = unique(plastic_units$SampleType))
+
 DATA <- subset(DATA, select = - Unit)
 
 # Include a data_id variable
@@ -337,7 +378,10 @@ set_flextable_defaults(
   theme_fun = 'theme_vanilla'
 )
 
-fun_flextable <- function(x, pu, singleRowVars){
+
+#fun_flextable(z, plastic_units, singleRowVars)
+
+fun_flextable <- function(x, pu, singleRowVars, sampleType){
   # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
   # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
   anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
@@ -348,6 +392,7 @@ fun_flextable <- function(x, pu, singleRowVars){
     l <- strsplit(as.character(x$variable), '_')
     x$`Plastic type` <- sapply(l, function(z) z[1])
     x$Measure <- sapply(l, function(z) z[2])
+    pu <- pu[pu$SampleType == sampleType,]
     w <- outer(pu$Variable, x$Measure, '==')
     n <- nrow(x)
     x$Value <- sapply(1:n, function(z) paste(x$value[z], pu$Unit[w[,z]]))
@@ -513,21 +558,42 @@ make_plot <- function(dat, background = 'none', components = 'all', ptSize = 6, 
              leg_plastic <- get_legend(plt_plastic_samples)
              leg_stations <- get_legend(plt_stations)
              output_legend <- ggdraw(plot_grid(leg_plastic, leg_stations,
-                                               ncol = 1, align = 'v'))
+                                               ncol = 2, align = 'h'))
            }else{
              if(anyPlastic){
                leg_plastic <- get_legend(plt_plastic_samples)
                output_legend <- ggdraw(plot_grid(leg_plastic, NULL,
-                                                 ncol = 1, align = 'v'))
+                                                 ncol = 2, align = 'h'))
              }else{
                if(anyStations){
                  leg_stations <- get_legend(plt_stations)
                  output_legend <- ggdraw(plot_grid(leg_stations, NULL,
-                                                   ncol = 1, align = 'v'))
+                                                   ncol = 2, align = 'h'))
                }else{
                  output_legend <-ggdraw(plot_grid(NULL, NULL,
-                                                  ncol = 1))
+                                                  ncol = 2))
                }}}
+           
+           # # Extract legends and make subplot
+           # if(anyStations & anyPlastic){
+           #   leg_plastic <- get_legend(plt_plastic_samples)
+           #   leg_stations <- get_legend(plt_stations)
+           #   output_legend <- ggdraw(plot_grid(leg_plastic, leg_stations,
+           #                                     ncol = 1, align = 'v'))
+           # }else{
+           #   if(anyPlastic){
+           #     leg_plastic <- get_legend(plt_plastic_samples)
+           #     output_legend <- ggdraw(plot_grid(leg_plastic, NULL,
+           #                                       ncol = 1, align = 'v'))
+           #   }else{
+           #     if(anyStations){
+           #       leg_stations <- get_legend(plt_stations)
+           #       output_legend <- ggdraw(plot_grid(leg_stations, NULL,
+           #                                         ncol = 1, align = 'v'))
+           #     }else{
+           #       output_legend <-ggdraw(plot_grid(NULL, NULL,
+           #                                        ncol = 1))
+           #     }}}
            
            return(output_legend)
            
@@ -709,11 +775,20 @@ ui <- fluidPage(
                            "Film" = "film"),
                          multiple = TRUE, selected = c("fragment", "fibre", "film")),
              
+             # # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
+             # selectInput("SampleType", "Sample type:",
+             #             c("Near-surface" = "surface",
+             #               "Subsurface" = "subsurface"),
+             #             multiple = TRUE, selected = c("surface", "subsurface")),
+             
              # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
              selectInput("SampleType", "Sample type:",
-                         c("Near-surface" = "surface",
-                           "Subsurface" = "subsurface"),
-                         multiple = TRUE, selected = c("surface", "subsurface")),
+                         c("Sea surface" = "marine surface",
+                           "Sea subsurface" = "marine subsurface",
+                           "Freshwater" = "freshwater",
+                           "Wastewater" = "wastewater",
+                           "Sediment" = "sediment"),
+                         multiple = TRUE, selected = c("marine surface","marine subsurface","freshwater","wastewater","sediment")),
              
              # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
              selectInput("StationType", "Facility:",
@@ -802,17 +877,53 @@ ui <- fluidPage(
 # Define server logic to plot various variables against mpg ----
 server <- function(input, output, session) {
   
-  # Filter plastic data according to Shiny inputs
-  filtered_plastic_data = reactive({
-      return(
-        subset(DATA,
-               input$YearRange[1] <= Year & Year <= input$YearRange[2] &
-                 DATA$Variable %in% input$Variable &
-                 DATA$Type %in% input$Type &
-                 DATA$SampleType %in% input$SampleType
-        )
+  # Updating some Shiny inputs takes a long time because plotting the plastic
+  # data is costly. Use 'debounce' function to delay updates, preventing each
+  # individual change being rendered provided input changes are made quickly.
+  listInputs <- debounce({
+    reactive({
+      list(YearRange = input$YearRange,
+           Variable = input$Variable,
+           Type = input$Type,
+           SampleType = input$SampleType
       )
+    })
+  }, 2000)
+
+  # YearRange_d <- debounce(
+  #   reactive(input$YearRange), 2000)
+  # Variable_d <- debounce(
+  #   reactive(input$Variable), 2000)
+  # Type_d <- debounce(
+  #   reactive(input$Type), 2000)
+  # SampleType_d <- debounce(
+  #   reactive(input$SampleType), 2000)
+  
+
+  # Filter plastic data according to Shiny inputs
+  filtered_plastic_data <-reactive({
+    x <- listInputs()
+    return(
+      subset(DATA,
+             x$YearRange[1] <= Year & Year <= x$YearRange[2] &
+               DATA$Variable %in% x$Variable &
+               DATA$Type %in% x$Type &
+               DATA$SampleType %in% x$SampleType
+      )
+    )    
   })
+  
+  # filtered_plastic_data <-reactive({
+  #   return(
+  #     subset(DATA,
+  #            input$YearRange[1] <= Year & Year <= input$YearRange[2] &
+  #              DATA$Variable %in% input$Variable &
+  #              DATA$Type %in% input$Type &
+  #              DATA$SampleType %in% SampleType_d()
+  #            # DATA$SampleType %in% input$SampleType
+  #     )
+  #   )
+  # })
   
   transformed_plastic_data <- reactive({
     d <- filtered_plastic_data()
@@ -830,7 +941,10 @@ server <- function(input, output, session) {
       temp_dat <- as.data.frame(dat_plastic_recast)[!names(dat_plastic_recast) %in% omitVars]
       temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
       singleRowVars <- c('Sample Date', 'Coordinates', 'Depth')
-      dat_plastic_recast$tooltip <-  sapply(temp_dat, function(z) fun_flextable(z, plastic_units, singleRowVars))
+      sType <- as.character(dat_plastic_recast$SampleType)
+      sType[grepl('water', sType) | grepl('marine', sType)] <- 'water'
+      dat_plastic_recast$tooltip <-  sapply(1:length(temp_dat), function(z) fun_flextable(temp_dat[[z]], plastic_units, singleRowVars, sType[z]))
+      # dat_plastic_recast$tooltip <-  sapply(temp_dat, function(z) fun_flextable(z, plastic_units, singleRowVars, sType[z]))
       return(
         dat_plastic_recast
       )
@@ -872,8 +986,10 @@ server <- function(input, output, session) {
   
   # Filter plot symbols based on sample & station types
   Symbols <- reactive({
+    x <- listInputs()
       return(
-        subset(pltSymbols, Type %in% c(input$SampleType, input$StationType))
+        subset(pltSymbols, Type %in% c(x$SampleType, input$StationType))
+        # subset(pltSymbols, Type %in% c(input$SampleType, input$StationType))
       )
   })
   
