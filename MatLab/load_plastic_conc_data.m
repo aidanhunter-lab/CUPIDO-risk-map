@@ -467,23 +467,32 @@ stations = readtable(fullfile(filepath, filename));
 filename = 'plastic type.csv';
 categories = readtable(fullfile(filepath, filename));
 
+% JR17003a cruise info 
+% https://www.bodc.ac.uk/resources/inventories/cruise_inventory/reports/jr17003a.pdf
+% PS119 cruise info
+% https://www.tib.eu/en/suchen/id/awi:2f4972cb5868f267f79cd02562f3f9cbd05a15ef
+% M134 cruise info
+% https://www.bodc.ac.uk/resources/inventories/cruise_inventory/reports/meteor_m134.pdf
+
+stations.Depth_m = arrayfun(@(z) {num2str(z)}, stations.Depth_m);
 
 abundance.Properties.VariableNames{'Measure'} = 'Replicate';
 abundance.Unit = repmat({'pieces/g'}, height(abundance), 1);
 
-stations.Year = nan(height(stations), 1);
-stations.Year(contains(stations.Core, 'AP')) = 2017;
-stations.Year(contains(stations.Core, {'SS', 'SG'}) & ...
-    ~ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
-stations.Year(ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
+% stations.Year = nan(height(stations), 1);
+% stations.Year(contains(stations.Core, 'AP')) = 2017;
+% stations.Year(contains(stations.Core, {'SS', 'SG'}) & ...
+%     ~ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
+% stations.Year(ismember(stations.MUC_ID, {'1-1', '7-2'})) = 2019;
 
-stations.Depth_m = arrayfun(@(z) {num2str(z)}, stations.Depth_m);
+% stations.Depth_m = arrayfun(@(z) {num2str(z)}, stations.Depth_m);
 
 abundance = join(abundance, stations); % merge lat-lon and depth info into main table
-abundance = movevars(abundance, {'Year', 'Longitude', 'Latitude', 'Depth_m'}, 'After', 'MUC_ID');
+abundance = movevars(abundance, 'Cruise', 'Before', 'Core');
+abundance = movevars(abundance, {'Date', 'Longitude', 'Latitude', 'Depth_m'}, 'After', 'MUC_ID');
 abundance = movevars(abundance, 'Unit', 'After', 'Mean');
 abundance.SampleType = repmat({'sediment'}, height(abundance), 1);
-abundance = movevars(abundance, 'SampleType', 'Before', 'Core');
+abundance = movevars(abundance, 'SampleType', 'Before', 'Cruise');
 
 rel_abundance.Properties.VariableNames([1,3]) = {'Plastic', 'Value'};
 
@@ -491,13 +500,6 @@ Cunningham_2020.abundance = abundance;
 Cunningham_2020.polymers = rel_abundance;
 Cunningham_2020.categories = categories;
 Cunningham_2020.properties = properties;
-
-% I NEED TO GET THE SAMPLE DATES FOR THESE SEDIMENT DATA -- IT'S NOT
-% ENTIRELY CLEAR FROM THE PAPER SO I SHOULD EMAIL CUNNINGHAM TO ASK.
-% HOWEVER, IT DOES LOOK AS THOUGH THE ANTARCTIC PENINSULA SAMPLES ARE FROM
-% 2017 (JR17003A), THE SOUTH SANDWICH ISLANDS AND SOUTH GEORGIA SAMPLES ARE
-% FROM 2019 (PS119 AND M134). NOTE THE DIFFERENCE IN SAMPLE ID AT THE
-% BOTTOM OF TABLE 1 -- THIS MAY INDICATE THE DIFFERENT CRUISES IN 2019.
 
 Data.Cunningham_2020 = Cunningham_2020;
 
@@ -624,6 +626,44 @@ Munari_2017.categories = AT;
 Data.Munari_2017 = Munari_2017;
 
 
+%% Suaria 2020
+
+% There are records for microplastics (neuston nets) and for macro litter
+% (visual survey) stored in different data sets...
+% NEED TO SORT THIS OUT...
+
+source = 'Suaria_2020';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'All neuston samples table S1.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+filename = 'Visual survey table S2.csv';
+visual = readtable(fullfile(filepath, filename));
+
+filename = 'Macrolitter metadata table S3.csv';
+macro = readtable(fullfile(filepath, filename));
+
+abundance.SampleType = repmat({'seawater'}, height(abundance), 1);
+abundance.Depth = repmat({'surface'}, height(abundance), 1);
+
+abundance.SampleMethod = repmat({'neuston net 200 mu m'}, height(abundance), 1);
+
+% Adjust units from /L to /m3
+j = contains(abundance.Unit, '/L');
+abundance.Value(j) = 1e3 .* abundance.Value(j);
+abundance.Unit(j) = strrep(abundance.Unit(j), '/L', '/m3');
+
+% Set the categories -- CHECK TABLES IN THE MAIN PAPER FOR DETAIL
+Type = {'fragment'};
+Value = 100;
+Unit = {'percent'};
+categories = table(Type, Value, Unit);
+
+Suaria_2020.abundance = abundance;
+Suaria_2020.categories = categories;
+
+Data.Suaria_2020 = Suaria_2020;
 
 
 
@@ -634,10 +674,6 @@ Data.Munari_2017 = Munari_2017;
 
 
 
-
-
-
-% Suaria 2020
 
 
 % Studies cited in Waller 2017
