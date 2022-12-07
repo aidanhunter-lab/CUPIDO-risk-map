@@ -52,12 +52,14 @@ end
 % Volumetric concentration 'pieces/m^3' is most common unit for seawater 
 % samples; some data use area density 'pieces/km^2', some use mass density
 % 'g/km^2'.
-varOpts_water = {'concentration', 'density', 'massDensity'}; %, 'all'}; % filtering options
+varOpts_water = {'concentration', 'massConcentration', 'density', 'massDensity'}; %, 'all'}; % filtering options
 varOpts_sediment = {'concentration', 'density'};
 
 Units.water.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
+Units.water.massConcentration = {'g/m3'};
 Units.water.density = {'pieces/km2', 'items/km2', 'number/km2'};
 Units.water.massDensity = {'g/km2'};
+
 Units.sediment.concentration = {'pieces/g'};
 Units.sediment.density = {'pieces/m2'};
 
