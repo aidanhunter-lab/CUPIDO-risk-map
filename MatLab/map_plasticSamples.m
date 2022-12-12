@@ -22,13 +22,22 @@ area = coordsTable.Location{10};
 
 %% Load data
 
-plastics = load_plastic_conc_data;
+[plastics, plastics_table] = load_plastic_conc_data;
 
-%% Filter data
+%% Regularise & filter data
 
 % plastics = rmfield(plastics, {'Buckingham_2022', 'Eriksen_2014', 'adventurescience', 'Cunningham_2020', 'Munari_2017'})
 
-[abundance, sources, nsources] = filter_plastic_conc_data(plastics, 'saveData', true, 'outputFilename', 'plastic_quantity_new.csv');
+[abundance, sources, nsources] = filter_plastic_conc_data2(...
+    plastics, plastics_table, ...
+    'saveData', true, 'outputFilename', 'plastic_quantity_new2.csv', ...
+    'FilterByLitterCategory', false, 'FilterByLitterScale', false, ...
+    'regularisePlasticForm', true);
+
+
+% [abundance0, sources, nsources] = filter_plastic_conc_data(plastics, ...
+%     'saveData', false, 'outputFilename', 'plastic_quantity_new.csv', ...
+%     'returnOnlyMicroplasticMeasures', true);
 
 % For each data source, the abundance field should contain the information
 % that we want to plot here -- longitude-latitude, abundance, and data 

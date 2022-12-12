@@ -21,6 +21,8 @@ columnDescriptions.LitterCategory  = 'Type of litter/particle -- plastic, metal,
 columnTypes.LitterCategory         = 'cellstr';
 columnDescriptions.LitterScale     = 'Size class of litter -- nano, micro, meso, macro';
 columnTypes.LitterScale            = 'cellstr';
+columnDescriptions.PlasticForm     = 'Structure of plastic -- fragment, fibre, etc';
+columnTypes.PlasticForm            = 'cellstr';
 columnDescriptions.PlasticSize     = 'Measured size of plastic -- some numeric values, some categorical => store as character variable';
 columnTypes.PlasticSize            = 'cellstr';
 columnDescriptions.SampleAtStation = 'Logical variable: true if sample is from fixed station, false if sample derives from tow over long distance';
@@ -101,6 +103,25 @@ dat_tot = movevars(dat_tot, 'SampleType', 'Before', 'Sample');
 
 polymers.Properties.VariableNames{contains(polymers.Properties.VariableNames, 'Abundance')} = 'Value';
 
+% Merge data on plastic form
+pc = unique(categories.Type);
+dat_tot.PlasticForm = repmat({'all'}, height(dat_tot), 1);
+dat_tot_ = dat_tot;
+for i = 1:length(pc)
+    d = dat_tot_;
+    d.PlasticForm = repmat(pc(i), height(dat_tot_), 1);
+    dv = categories.Value(strcmp(categories.Type, pc(i)) & strcmp(categories.Measure, 'Mean'));
+    du = categories.Unit{strcmp(categories.Type, pc(i)) & strcmp(categories.Measure, 'Mean')};
+    switch du
+        case {'percent','Percent'}
+            d.Value = 0.01 .* dv .* d.Value;
+        case {'proportion','Proportion',''}
+            d.Value = dv .* d.Value;
+    end
+    dat_tot = vertcat(dat_tot, d);
+end
+
+
 % Regularise abundance data
 hd = height(dat_tot);
 dat_tot.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
@@ -170,6 +191,7 @@ abundance.SampleGear = repmat({'neutson net 0.35 mm'}, hd, 1);
 abundance.LitterIDMethod = repmat({'FTIR'}, hd, 1);
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = repmat({'micro'}, hd, 1);
+abundance.PlasticForm = repmat({'fragment'}, hd, 1);
 abundance.PlasticSize = cell(hd, 1); abundance.PlasticSize(:) = {''};
 abundance.SampleAtStation = true(hd, 1);
 abundance.Site = cell(hd, 1); abundance.Site(:) = {''};
@@ -229,6 +251,24 @@ abn_type = movevars(abn_type, 'SizeRange', 'Before', 'Value');
 dat_tot.Date = repmat(datetime({'01-Feb-2017', '28-Feb-2017'}), height(dat_tot), 1);
 dat_tot.SampleType = repmat({'seawater'}, height(dat_tot), 1);
 dat_tot = movevars(dat_tot, 'SampleType', 'Before', 'Station');
+
+% Merge data on plastic form
+pc = unique(abn_type.Type);
+dat_tot.PlasticForm = repmat({'all'}, height(dat_tot), 1);
+dat_tot_ = dat_tot;
+for i = 1:length(pc)
+    d = dat_tot_;
+    d.PlasticForm = repmat(pc(i), height(dat_tot_), 1);
+    dv = abn_type.Value(strcmp(abn_type.Type, pc(i)));
+    du = abn_type.Unit{strcmp(abn_type.Type, pc(i))};
+    switch du
+        case {'percent','Percent'}
+            d.Value = 0.01 .* dv .* d.Value;
+        case {'proportion','Proportion',''}
+            d.Value = dv .* d.Value;
+    end
+    dat_tot = vertcat(dat_tot, d);
+end
 
 abundance = dat_tot;
 
@@ -330,6 +370,29 @@ for i = 1:nst
     categories.Value(categories.Station == i & strcmp(categories.Type, 'microfibre')) = 100 * mf / (mp + mf);
 end
 
+
+% Merge data on plastic form
+pc = unique(categories.Type);
+dat.PlasticForm = repmat({'all'}, height(dat), 1);
+dat_ = dat;
+ns = unique(dat.Station);
+for i = 1:length(pc)
+    d = dat_;
+    d.PlasticForm = repmat(pc(i), height(dat_), 1);
+    for j = 1:length(ns)
+        k = ns(j);
+        dv = categories.Value(categories.Station == k & strcmp(categories.Type, pc{i}));
+        du = categories.Unit{categories.Station == k & strcmp(categories.Type, pc{i})};
+        switch du
+            case {'percent','Percent'}
+                d.Value(d.Station == k) = 0.01 .* dv .* d.Value(d.Station == k);
+            case {'proportion','Proportion',''}
+                d.Value(d.Station == k) = dv .* d.Value(d.Station == k);
+        end
+    end
+    dat = vertcat(dat, d);
+end
+
 abundance = dat;
 
 hd = height(abundance);
@@ -389,13 +452,36 @@ filename = 'polymers.csv';
 polymers = readtable(fullfile(filepath, filename));
 
 types.Properties.VariableNames(:,1:2) = {'Depth','Type'};
-types.Type(strcmp(types.Type, 'Line/Fibre')) = {'Fibre'};
+% types.Type(strcmp(types.Type, 'Line/Fibre')) = {'Fibre'};
 
 stations.Date = repmat(datetime({'01-Dec-2017', '31-Jan-2018'}), height(stations), 1);
 stations.SampleType = repmat({'seawater'}, height(stations), 1);
 stations = movevars(stations, 'SampleType', 'Before', 'Depth');
 
 abundance = stations;
+
+% Merge data on plastic form
+pc = unique(types.Type);
+abundance.PlasticForm = repmat({'all'}, height(abundance), 1);
+abundance_ = abundance;
+nd = unique(abundance.Depth);
+for i = 1:length(pc)
+    d = abundance_;
+    d.PlasticForm = repmat(pc(i), height(abundance_), 1);
+    for j = 1:length(nd)
+        k = nd{j};
+        dv = types.Value(strcmp(types.Depth, k) & strcmp(types.Type, pc{i}));
+        du = types.Unit{strcmp(types.Depth, k) & strcmp(types.Type, pc{i})};
+        switch du
+            case {'percent','Percent'}
+                d.Value(strcmp(d.Depth, k)) = 0.01 .* dv .* d.Value(strcmp(d.Depth, k));
+            case {'proportion','Proportion',''}
+                d.Value(strcmp(d.Depth, k)) = dv .* d.Value(strcmp(d.Depth, k));
+        end
+    end
+    abundance = vertcat(abundance, d);
+end
+
 
 hd = height(abundance);
 abundance.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
@@ -461,11 +547,12 @@ abundance.LitterScale(micromeso) = {'micro and meso'};
 size_dat = join(size_dat, Stations);
 size_dat = movevars(size_dat, 'Station', 'Before', 'Site');
 
-% All measurements are fragments -- DOUBLE CHECK THIS
+% All measurements are fragments
 Type = {'particle'};
 Value = 100;
 Unit = {'percent'};
 categories = table(Type, Value, Unit);
+
 
 hd = height(abundance);
 abundance.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
@@ -473,6 +560,7 @@ abundance.SampleGear = abundance.Sample_Method;
 abundance.LitterIDMethod = cell(hd, 1); abundance.LitterIDMethod(:) = {''};
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 % abundance.LitterScale = repmat({'micro'}, hd, 1);
+abundance.PlasticForm = repmat({'particle'}, hd, 1);
 abundance.PlasticSize = abundance.SizeClass;
 abundance.SampleAtStation = true(hd, 1);
 % abundance.Site = abundance.Location;
@@ -528,6 +616,7 @@ abundance.SampleGear = abundance.Sampling_Method;
 abundance.LitterIDMethod = cell(hd, 1); abundance.LitterIDMethod(:) = {''};
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = cell(hd, 1); abundance.LitterScale(:) = {''};
+abundance.PlasticForm = repmat({'particle'}, hd, 1);
 abundance.PlasticSize = cell(hd, 1); abundance.PlasticSize(:) = {''};
 abundance.SampleAtStation = true(hd, 1);
 abundance.Site = cell(hd, 1); abundance.Site(:) = {''};
@@ -615,6 +704,7 @@ abundance.SampleGear = abundance.Sampling_Method;
 abundance.LitterIDMethod = abundance.Identification_Method;
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = abundance.Size;
+abundance.PlasticForm = repmat({'particle'}, hd, 1);
 abundance.PlasticSize = cell(hd, 1); abundance.PlasticSize(:) = {''};
 abundance.SampleAtStation = true(hd, 1);
 abundance.Site = abundance.Location;
@@ -676,6 +766,7 @@ abundance.SampleGear = abundance.Sampling_Method;
 abundance.LitterIDMethod = abundance.Identification_Method;
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = abundance.Size;
+abundance.PlasticForm = repmat({'plastic'}, hd, 1);
 abundance.PlasticSize = cell(hd, 1); abundance.PlasticSize(:) = {''};
 abundance.SampleAtStation = true(hd, 1);
 abundance.Site = abundance.Location;
@@ -751,6 +842,24 @@ abundance.Replicate = cellfun(@(z) str2double(z), abundance.Replicate);
 
 rel_abundance.Properties.VariableNames([1,3]) = {'Plastic', 'Value'};
 
+% Merge data on plastic form
+pc = unique(categories.Type);
+abundance.PlasticForm = repmat({'all'}, height(abundance), 1);
+abundance_ = abundance;
+for i = 1:length(pc)
+    d = abundance_;
+    d.PlasticForm = repmat(pc(i), height(abundance_), 1);
+    dv = categories.Value(strcmp(categories.Type, pc{i}));
+    du = categories.Unit{strcmp(categories.Type, pc{i})};
+    switch du
+        case {'percent','Percent'}
+            d.Value = 0.01 .* dv .* d.Value;
+        case {'proportion','Proportion',''}
+            d.Value = dv .* d.Value;
+    end
+    abundance = vertcat(abundance, d);
+end
+
 hd = height(abundance);
 abundance.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
 abundance.SampleGear = repmat({'OKTOPUS multicore'}, hd, 1);
@@ -821,82 +930,24 @@ abundance_size = movevars(abundance_size, {'Longitude','Latitude','Depth_m', 'Da
 
 abundance = abundance_type;
 
-m = reshape(abundance.Value, 3, []);
-m = sum(m);
-abundance = removevars(abundance, {'Plastic', 'Value'});
-abundance = unique(abundance, 'stable');
-abundance.Value = m(:);
-abundance = movevars(abundance, 'Value', 'Before', 'Unit');
+
+Mean = reshape(abundance.Value(strcmp(abundance.Stat, 'Mean')), 3, []);
+StdDev = reshape(abundance.Value(strcmp(abundance.Stat, 'StdDev')), 3, []);
+Mean = sum(Mean); Mean = Mean(:);
+StdDev = sum(StdDev .^ 2) .^ 0.5; StdDev = StdDev(:);
+abundance_ = removevars(abundance, {'Plastic', 'Value'});
+abundance_ = unique(abundance_, 'stable');
+abundance_.Value = [Mean; StdDev];
+abundance_.Plastic = repmat({'all'}, height(abundance_), 1);
+abundance = vertcat(abundance_, abundance);
+
 
 abundance.SampleType = repmat({'sediment'}, height(abundance), 1);
 abundance = movevars(abundance, 'SampleType', 'Before', 'Location');
 
-abundance_type.Properties.VariableNames{'Plastic'} = 'Type';
-
-Station = unique(abundance.Station, 'stable');
-snew = (1:length(Station))';
-x = table(Station, snew);
-
-abundance = join(abundance, x);
-abundance = removevars(abundance, 'Station');
-abundance.Properties.VariableNames{'snew'} = 'Station';
-abundance = movevars(abundance, 'Station', 'After', 'Location');
-
-abundance_type = join(abundance_type, x);
-abundance_type = removevars(abundance_type, 'Station');
-abundance_type.Properties.VariableNames{'snew'} = 'Station';
-abundance_type = movevars(abundance_type, 'Station', 'After', 'Location');
-
-abundance_size = join(abundance_size, x);
-abundance_size = removevars(abundance_size, 'Station');
-abundance_size.Properties.VariableNames{'snew'} = 'Station';
-abundance_size = movevars(abundance_size, 'Station', 'After', 'Location');
-
-abundance.Depth_m = arrayfun(@(z) {num2str(z)}, abundance.Depth_m);
+abundance.Depth_m = cellstr(num2str(abundance.Depth_m));
 
 abundance.Variable = repmat({'density'}, height(abundance), 1);
-
-x.Station = [];
-x.Station = x.snew;
-x.snew = [];
-
-Types = unique(abundance_type.Type);
-nt = length(Types);
-Station = reshape(repmat(x.Station', nt, 1), [], 1);
-AT = table(Station);
-for i = 1:height(x)
-    for j = 1:nt
-        k = strcmp(abundance_type.Stat, 'Mean') & abundance_type.Station == i & strcmp(abundance_type.Type, Types{j});
-        v = abundance_type.Value(k);
-        k0 = strcmp(abundance.Stat, 'Mean') & abundance.Station == i;
-        v0 = abundance.Value(k0);
-        p = 100 * v / v0;
-        k = find(AT.Station == i);
-        k = k(j);
-        AT.Type(k) = Types(j);
-        AT.Value(k) = p;
-    end
-end
-AT.Unit = repmat({'percent'}, height(AT), 1);
-
-Sizes = unique(abundance_size.Size);
-nt = length(Sizes);
-Station = reshape(repmat(x.Station', nt, 1), [], 1);
-ST = table(Station);
-for i = 1:height(x)
-    for j = 1:nt
-        k = strcmp(abundance_size.Variable, 'Mean') & abundance_size.Station == i & strcmp(abundance_size.Size, Sizes{j});
-        v = abundance_size.Value(k);
-        k0 = strcmp(abundance.Stat, 'Mean') & abundance.Station == i;
-        v0 = abundance.Value(k0);
-        p = 100 * v / v0;
-        k = find(ST.Station == i);
-        k = k(j);
-        ST.Size(k) = Sizes(j);
-        ST.Value(k) = p;
-    end
-end
-ST.Unit = repmat({'percent'}, height(ST), 1);
 
 
 hd = height(abundance);
@@ -905,11 +956,12 @@ abundance.SampleGear = repmat({'Van Veen grab'}, hd, 1);
 abundance.LitterIDMethod = cell(hd, 1); abundance.LitterIDMethod(:) = {''};
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = repmat({'see size data'}, hd, 1);
+abundance.PlasticForm = abundance.Plastic;
 abundance.PlasticSize = cell(hd, 1); abundance.PlasticSize(:) = {''};
 abundance.SampleAtStation = true(hd, 1);
 abundance.Site = abundance.Location;
 abundance.SiteCategory = cell(hd, 1); abundance.SiteCategory(:) = {''};
-abundance.SampleID = cellstr(num2str(abundance.Station));
+abundance.SampleID = abundance.Station;
 abundance.Date = [abundance.Date, NaT(hd, 1)];
 abundance.Longitude_start = nan(hd, 1);
 abundance.Latitude_start = nan(hd, 1);
@@ -924,8 +976,8 @@ abundance = abundance(:,allColumns);
 
 
 Munari_2017.abundance = abundance;
-Munari_2017.size = ST;
-Munari_2017.categories = AT;
+Munari_2017.size = abundance_size;
+Munari_2017.categories = abundance_type;
 
 Data.Munari_2017 = Munari_2017;
 
@@ -970,6 +1022,40 @@ abundance.Unit(j) = strrep(abundance.Unit(j), '/L', '/m3');
 % microplastic categories
 mp_cat.Properties.VariableNames{'Category'} = 'Type';
 
+% Convert longitude to degrees east (0,360)
+w = visual.Longitude_start < 0;
+visual.Longitude_start(w) = 180 + (180 + visual.Longitude_start(w));
+w = visual.Longitude_end < 0;
+visual.Longitude_end(w) = 180 + (180 + visual.Longitude_end(w));
+w = macro.Longitude < 0;
+macro.Longitude(w) = 180 + (180 + macro.Longitude(w));
+
+% Merge sampleID info macro
+macro.SampleID = cell(height(macro), 1); macro.SampleID(:) = {''};
+v = visual(:,{'SampleID', 'Latitude_start', 'Longitude_start', 'Latitude_end', 'Longitude_end', 'Observation_point'});
+v = unique(v, 'stable');
+v.vdir = -(v.Latitude_start - v.Latitude_end) > 0; % indicate tow direction (true = north)
+v.hdir = -(v.Longitude_start - v.Longitude_end) > 0; % indicate tow direction (true = east)
+for i = 1:height(macro)
+    m = macro(i,:);
+    ilat = (v.vdir & v.Latitude_start <= m.Latitude & m.Latitude <= v.Latitude_end) | ...
+        (~v.vdir & v.Latitude_end <= m.Latitude & m.Latitude <= v.Latitude_start);
+    ilon = (v.hdir & v.Longitude_start <= m.Longitude & m.Longitude <= v.Longitude_end) | ...
+        (~v.hdir & v.Longitude_end <= m.Longitude & m.Longitude <= v.Longitude_start);
+%     io = strcmp(v.Observation_point, m.Observation_point);
+    j = ilat & ilon; % & io;
+    sj = sum(j);
+    if sj == 0, match = 'no'; elseif sj == 1, match = 'yes'; elseif sj > 1, match = 'multiple'; end
+    switch match
+        case 'yes'
+            macro.SampleID{i,:} = v.SampleID{j};
+        case 'multiple'
+            macro.SampleID{i,:} = 'multiple';
+    end
+end
+macro = macro(~strcmp(macro.SampleID, 'multiple'),:);
+macro = macro(~cellfun(@(z) isempty(z), macro.SampleID),:);
+
 % Merge the microplastic and macro-litter abundance tables
 visual.Depth = repmat({'surface'}, height(visual), 1);
 visual.Station = visual.SampleID;
@@ -994,6 +1080,45 @@ abundance.Station = cellstr(num2str(abundance.Station));
 
 abundance = abundance(:,[10 1:2 18 3 16:17 4:6 12:15 11 7 19 8:9]);
 visual = visual(:,abundance.Properties.VariableNames);
+
+
+% Merge data on plastic form -- microplastic
+pc = unique(mp_cat.Type);
+abundance.PlasticForm = repmat({'all'}, height(abundance), 1);
+abundance_ = abundance;
+for i = 1:length(pc)
+    d = abundance_;
+    d.PlasticForm = repmat(pc(i), height(abundance_), 1);
+    dv = mp_cat.Value(strcmp(mp_cat.Type, pc{i}));
+    du = mp_cat.Unit{strcmp(mp_cat.Type, pc{i})};
+    switch du
+        case {'percent','Percent'}
+            d.Value = 0.01 .* dv .* d.Value;
+        case {'proportion','Proportion',''}
+            d.Value = dv .* d.Value;
+    end
+    abundance = vertcat(abundance, d);
+end
+% % Merge data on plastic form -- macrolitter
+% pc = unique(macro.Category);
+% abundance.PlasticForm = repmat({'all'}, height(abundance), 1);
+% abundance_ = abundance;
+% for i = 1:length(pc)
+%     d = abundance_;
+%     d.PlasticForm = repmat(pc(i), height(abundance_), 1);
+%     dv = mp_cat.Value(strcmp(mp_cat.Type, pc{i}));
+%     du = mp_cat.Unit{strcmp(mp_cat.Type, pc{i})};
+%     switch du
+%         case {'percent','Percent'}
+%             d.Value = 0.01 .* dv .* d.Value;
+%         case {'proportion','Proportion',''}
+%             d.Value = dv .* d.Value;
+%     end
+%     abundance = vertcat(abundance, d);
+% end
+
+visual.PlasticForm = cell(height(visual), 1); visual.PlasticForm(:) = {''};
+
 abundance = [abundance; visual]; % merge
 
 abundance.Class(contains(abundance.Class, 'macro')) = {'macro'};
@@ -1022,9 +1147,9 @@ abundance = abundance(:,allColumns);
 
 Suaria_2020.abundance = abundance;
 Suaria_2020.categories = mp_cat;
+Suaria_2020.categories_macro = macro;
 Suaria_2020.colour = mp_cat;
 Suaria_2020.size = mp_size;
-Suaria_2020.note = 'categories, colour and size structs only applicable to microplastic, not macro-litter';
 
 Data.Suaria_2020 = Suaria_2020;
 
