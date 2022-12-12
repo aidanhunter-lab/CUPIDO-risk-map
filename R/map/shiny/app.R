@@ -19,12 +19,31 @@ library(DT)
 
 # library(shinybrowser) # get browser dimension & other info
 
+# CAN THE CODE EFFICIENCY (MAP PLOTTING SPEED) BE INCREASED BY DEFINING THE
+# TOOLTIP DATA TABLE IN THE PREAMBLE? THEN R-SHINY FILTERS WILL SUBSET THIS
+# PRE-CALCULATED TABLE, RATHER THAN RECREATING THE TOOLTIP TABLE WITH EACH NEW
+# SELECTION OF FILTERING VARIABLES...
+
+
 # getwd()
 setwd('~/Documents/Git Repos/CUPIDO-risk-map')
 
 # Load map shape file -----------------------------------------------------
 verbose <- FALSE
-nc <- st_read('data/map/add_coastline_medium_res_polygon_v7.3.shp', quiet = !verbose)
+
+# nc1 <- st_read('data/map/Antarctic coastline polygons/high res/add_coastline_high_res_polygon_v7_6.shp', quiet = !verbose)
+nc1 <- st_read('data/map/Antarctic coastline polygons/medium res/add_coastline_medium_res_polygon_v7_6.shp', quiet = !verbose)
+nc2 <- st_read('data/map/sub Antarctic coastline polygons/sub_antarctic_coastline_high_res_polygon_v1.0.shp', quiet = !verbose)
+
+# merge coastline data sets
+nc1$location = 'Antarctica'
+nc2$source <- NULL
+nc2$surface <- 'land'
+nc1 <- nc1[,c('location','surface','geometry')]
+nc2 <- nc2[,c('location','surface','geometry')]
+nc <- rbind(nc1, nc2)
+
+# nc <- st_read('data/map/add_coastline_medium_res_polygon_v7.3.shp', quiet = !verbose)
 nc$surface = factor(nc$surface, levels = unique(nc$surface))
 # Coordinate reference system
 crs_world = 4326
@@ -35,7 +54,7 @@ crs_use = 3031
 # Load plastic data -----------------------------------------------------
 
 # filename = 'plastic_quantity.csv'
-filename = 'plastic_quantity_new.csv'
+filename = 'plastic_quantity_new2.csv'
 filepath = 'data/plastic_quantity/'
 DATA = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
 
@@ -58,17 +77,9 @@ DATA$`Sample Date` <- sapply(1:nrow(DATA), function(z){
 
 # Include Year column
 DATA$Year = as.integer(substr(DATA$Date_1, 1, 4))
-
 DATA <- subset(DATA, select = -c(Date_1, Date_2))
 
-# Create sample type data column (THIS WILL BE MODIFIED WHEN I USE LARGER, NEWER TABLE)
-
-# SORT OUT THE DATA GROUPINGS... SURFACE WATER, SUBSURFACE WATER, SEDIMENT
-
-head(DATA)
-
-unique(DATA$SampleType)
-
+# Sample type -- sub/surface water, sediment, etc
 s <- as.character(DATA$SampleType)
 marine <- s == 'seawater'
 DATA$Depth <- as.character(DATA$Depth)
@@ -83,21 +94,6 @@ s[surf] <- 'marine surface'
 s[subsurf] <- 'marine subsurface'
 DATA$SampleType <- factor(s, levels = unique(s))
 
-# ndepth <- ! DATA$Depth %in% c('5m','<1m','surface', 'subsurface') # index numeric values depth
-# if(any(ndepth)){
-#   dd <- rep(NA, length(ndepth))
-#   dd[ndepth] <- as.numeric(DATA$Depth[ndepth])
-#   surfacewater <- dd <= 5 | DATA$Depth %in% c('5m','<1m','surface')
-# }
-
-
-# DATA$SampleClass <- DATA$SampleType
-# DATA <- subset(DATA, select = -SampleType)
-# 
-# DATA$Depth <- as.character(DATA$Depth)
-# DATA$SampleType[DATA$Depth %in% c('5m','<1m','surface')] = 'surface'
-# DATA$SampleType[DATA$Depth %in% c('subsurface')] = 'subsurface'
-# DATA$SampleType = factor(DATA$SampleType, levels = c('surface', 'subsurface'))
 
 # Reorder data sources by publication date
 sources <- levels(DATA$Source)
@@ -120,6 +116,7 @@ DATA$Coordinates <- coord_lab
 
 DATA$Variable <- as.character(DATA$Variable)
 DATA$Variable[DATA$Variable == 'massDensity'] <- 'mass density'
+DATA$Variable[DATA$Variable == 'massConcentration'] <- 'mass concentration'
 
 # plastic_units <- unique(DATA[,c('Variable','Unit')])
 plastic_units <- unique(DATA[,c('SampleType', 'Variable','Unit')])
@@ -134,40 +131,31 @@ DATA <- subset(DATA, select = - Unit)
 # Include a data_id variable
 #head(DATA)
 DATA$order <- 1:nrow(DATA)
-d <- unique(DATA[c('Source','Station')])
+d <- unique(DATA[c('Source', 'SampleAtStation',  'SampleID')])
+# d <- unique(DATA[c('Source','SampleID')])
 d$data_id <- paste('sample', 1:nrow(d))
 
 DATA <- merge(DATA, d, sort = FALSE)
+DATA <- DATA[order(DATA$order),]
 DATA <- DATA[,names(DATA) != 'order']
 
 
-# # this may need need moved to inside plotting function, or somewhere after filtering
-# DATA$tooltip <- paste0('Location: ', coord_lab, '\n ',
-#                        'Plastic ',  DATA$Variable, ' = ', signif(DATA$Value,2), ' ', DATA$Unit)
-# DATA$data_id <- 1:nrow(DATA)
+# More variables that may need filtering here: SampleGear, LitterIDMethod,
+# LitterCategory, LitterScale, PlasticForm, PlasticSize, Site, SiteCategory
 
-#d <- subset(DATA, Source == 'Cincinelli (2017)')
-# try using flextables -- https://github.com/davidgohel/ggiraph/issues/175
-
-
-# ts_county_cases_sf <- ts_county_cases %>% 
-#   filter(date=="2020-03-27",
-#          state=="Texas") %>% 
-#   left_join(sf_counties, by=c("fips"="GEOID")) %>% 
-#   sf::st_as_sf()
-# 
-# # flextable part
-# fun_flextable <- function(dat){
-#   ft <- flextable(dat, col_keys = c("county", "cases", "deaths"), 
-#                   defaults = list(fontname = "Roboto"))
-#   ft <- bold(ft, part = "header", bold = TRUE)
-#   ft <- color(ft, color = "orange", part = "all")
-#   ft <- set_table_properties(ft, layout = "autofit")
-#   as.character(htmltools_value(ft, ft.shadow = FALSE))
-# }
-# temp_dat <- as.data.frame(ts_county_cases_sf)[,c("county", "cases", "deaths")]
-# temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
-# ts_county_cases_sf$tooltip <- map_chr(temp_dat, fun_flextable)
+# PlasticForm is certainly important -- R shiny filtering should be among a few
+# groups (fragment, fibre, film, other/unspecified), but the data display should
+# show the original categories...
+DATA$PlasticForm_grouped <- as.character(DATA$PlasticForm)
+# unique(DATA$PlasticForm_grouped)
+fragments <- DATA$PlasticForm_grouped %in% c('fragment', 'sphere', 'particle', 'flake', 'granule', 'pellet')
+fibres <- DATA$PlasticForm_grouped %in% c('fibre', 'line', 'line/fibre', 'filament')
+film <- DATA$PlasticForm_grouped %in% c('film')
+other <- DATA$PlasticForm_grouped %in% c('other', 'foam', '')
+DATA$PlasticForm_grouped[fragments] = 'fragment'
+DATA$PlasticForm_grouped[fibres] = 'fibre'
+DATA$PlasticForm_grouped[film] = 'film'
+DATA$PlasticForm_grouped[other] = 'other/unspecified'
 
 
 # Mapping coordinates
@@ -762,18 +750,26 @@ ui <- fluidPage(
              # Input: measurement variable ----
              selectInput("Variable", "Measurement:",
                          c("Concentration (pieces/m3)" = "concentration",
+                           "Mass concentration (g/m3)" = "mass concentration",
                            "Density (pieces/km2)" = "density",
                            "Mass density (g/km2)" = "mass density"),
-                         multiple = TRUE, selected = c("concentration", "density", "mass density")),
+                         multiple = TRUE, selected = c("concentration", "mass concentration", "density", "mass density")),
              
              # Input: plastic type ----
              # I NEED TO THINK ABOUT HOW TO HANDLE THE TOTAL COLUMN... OMIT IT FOR NOW
              # BUT MAYBE INCLUDE IT LATER WHEN GRAPHING DATA...
-             selectInput("Type", "Plastic type:",
+             selectInput("PlasticForm_grouped", "Plastic form:",
                          c("Fragment" = "fragment",
                            "Fibre" = "fibre",
-                           "Film" = "film"),
-                         multiple = TRUE, selected = c("fragment", "fibre", "film")),
+                           "Film" = "film",
+                           "Other/unspecified" = 'other/unspecified'),
+                         multiple = TRUE, selected = c("fragment", "fibre", "film", "other/unspecified")),
+             
+             # selectInput("Type", "Plastic type:",
+             #             c("Fragment" = "fragment",
+             #               "Fibre" = "fibre",
+             #               "Film" = "film"),
+             #             multiple = TRUE, selected = c("fragment", "fibre", "film")),
              
              # # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
              # selectInput("SampleType", "Sample type:",
@@ -884,34 +880,39 @@ server <- function(input, output, session) {
     reactive({
       list(YearRange = input$YearRange,
            Variable = input$Variable,
-           Type = input$Type,
+           PlasticForm = input$PlasticForm_grouped,
+           # PlasticForm_grouped = input$PlasticForm_grouped,
            SampleType = input$SampleType
       )
     })
   }, 2000)
 
-  # YearRange_d <- debounce(
-  #   reactive(input$YearRange), 2000)
-  # Variable_d <- debounce(
-  #   reactive(input$Variable), 2000)
-  # Type_d <- debounce(
-  #   reactive(input$Type), 2000)
-  # SampleType_d <- debounce(
-  #   reactive(input$SampleType), 2000)
   
-
   # Filter plastic data according to Shiny inputs
   filtered_plastic_data <-reactive({
     x <- listInputs()
     return(
       subset(DATA,
              x$YearRange[1] <= Year & Year <= x$YearRange[2] &
-               DATA$Variable %in% x$Variable &
-               DATA$Type %in% x$Type &
-               DATA$SampleType %in% x$SampleType
+               Variable %in% x$Variable &
+               PlasticForm_grouped %in% x$PlasticForm &
+               SampleType %in% x$SampleType
       )
     )    
   })
+  
+  # # Filter plastic data according to Shiny inputs
+  # filtered_plastic_data <-reactive({
+  #   x <- listInputs()
+  #   return(
+  #     subset(DATA,
+  #            x$YearRange[1] <= Year & Year <= x$YearRange[2] &
+  #              DATA$Variable %in% x$Variable &
+  #              DATA$Type %in% x$Type &
+  #              DATA$SampleType %in% x$SampleType
+  #     )
+  #   )    
+  # })
   
   # filtered_plastic_data <-reactive({
   #   return(
@@ -930,13 +931,13 @@ server <- function(input, output, session) {
     anyPlastic <- nrow(d) > 0
     if(anyPlastic){
       dat_plastic_recast <- dcast(d,
-                                  data_id + Source + Station + Location + SampleType + Depth + Longitude + Latitude + Coordinates +
-                                    `Sample Date` + Year ~ Type + Variable, fun.aggregate = mean, value.var = 'Value')
+                                  data_id + Source + SampleID + Site + SampleType + Depth + Longitude + Latitude + Coordinates +
+                                    `Sample Date` + Year ~ PlasticForm + Variable, fun.aggregate = mean, value.var = 'Value')
       # Transform to correct CRS
       dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c("Longitude", "Latitude"), crs = crs_world)
       dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
       # Define interactive tooltip using flextable
-      omitVars <- c('Source', 'Station', 'Location', 'SampleType',
+      omitVars <- c('Source', 'SampleID', 'Site', 'SampleType',
                     'Year', 'geometry', 'data_id')
       temp_dat <- as.data.frame(dat_plastic_recast)[!names(dat_plastic_recast) %in% omitVars]
       temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
@@ -1079,8 +1080,8 @@ server <- function(input, output, session) {
     d <- filtered_plastic_data()
     d <- d[d$data_id %in% selected_data(),]
     if(nrow(d) < 1) return(NULL)
-    d <- subset(d, select = -c(Stat, Year, Coordinates, data_id))
-    # d <- subset(d, select = -c(Stat, Year, Coordinates))
+    # d <- subset(d, select = -c(Stat, Year, Coordinates, data_id))
+    d <- subset(d, select = -c(Year, Coordinates, data_id))
     row.names(d) <- NULL
     d <- datatable(d,
                    options = list(
