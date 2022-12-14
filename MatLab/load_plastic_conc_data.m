@@ -879,7 +879,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Depth = abundance.Depth_m;
 % abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
-abundance.Replicate = ones(hd, 1);
+% abundance.Replicate = ones(hd, 1);
 
 abundance = abundance(:,allColumns);
 
@@ -1059,7 +1059,9 @@ macro = macro(~cellfun(@(z) isempty(z), macro.SampleID),:);
 % Merge the microplastic and macro-litter abundance tables
 visual.Depth = repmat({'surface'}, height(visual), 1);
 visual.Station = visual.SampleID;
-visual.Latitude = 0.5 .* (visual.Latitude_start + visual.Latitude_end);
+% visual.Latitude = nan(height(visual), 1);
+% visual.Longitude = nan(height(visual), 1);
+visual.Latitude = 0.5 .* (visual.Latitude_start + visual.Latitude_end); % tow midpoints position data on map
 visual.Longitude = 0.5 .* (visual.Longitude_start + visual.Longitude_end);
 visual.SampleType = repmat({'seawater'}, height(visual), 1);
 visual.Measure = cell(height(visual), 1);

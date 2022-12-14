@@ -138,9 +138,9 @@ for i = 1:nsources
 
     % PlasticForm
     d.PlasticForm = lower(d.PlasticForm);
-    d.PlasticForm = strrep(d.PlasticForm, 'plastic', 'particle');
     d.PlasticForm = strrep(d.PlasticForm, 'microfibre', 'fibre');
     d.PlasticForm = strrep(d.PlasticForm, 'microplastic', 'particle');
+    d.PlasticForm = strrep(d.PlasticForm, 'plastic', 'particle');
     % The plastic forms could be regularised here, but it's probably useful
     % to retain the original descriptions for the interactive map.
 
@@ -168,6 +168,24 @@ for i = 1:nsources
     ux = [ux1; ux2];
     x = join(x, ux);
     d.SampleID = cellstr(num2str(x.SampleID_new));
+
+    % Longitude
+    % Measure as degrees east [-180,180]
+    j = d.Longitude > 180;
+    d.Longitude(j) = -(360 - d.Longitude(j));
+    j = d.Longitude_start > 180;
+    d.Longitude_start(j) = -(360 - d.Longitude_start(j));
+    j = d.Longitude_end > 180;
+    d.Longitude_end(j) = -(360 - d.Longitude_end(j));
+
+    % Latitude
+    % Measure as degrees north [-90,0]
+    j = d.Latitude > 0;
+    d.Latitude(j) = -d.Latitude(j);
+    j = d.Latitude_start > 0;
+    d.Latitude_start(j) = -d.Latitude_start(j);
+    j = d.Latitude_end > 0;
+    d.Latitude_end(j) = -d.Latitude_end(j);
 
     % Regularise Depth
     d.Depth = lower(d.Depth);
