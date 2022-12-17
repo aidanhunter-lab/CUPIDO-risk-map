@@ -28,14 +28,14 @@ library(DT)
 # getwd()
 setwd('~/Documents/Git Repos/CUPIDO-risk-map')
 
-# Load map shape file -----------------------------------------------------
+# Load map shape files -----------------------------------------------------
 verbose <- FALSE
 
 # nc1 <- st_read('data/map/Antarctic coastline polygons/high res/add_coastline_high_res_polygon_v7_6.shp', quiet = !verbose)
 nc1 <- st_read('data/map/Antarctic coastline polygons/medium res/add_coastline_medium_res_polygon_v7_6.shp', quiet = !verbose)
 nc2 <- st_read('data/map/sub Antarctic coastline polygons/sub_antarctic_coastline_high_res_polygon_v1.0.shp', quiet = !verbose)
 
-# merge coastline data sets
+# Merge coastline data sets
 nc1$location = 'Antarctica'
 nc2$source <- NULL
 nc2$surface <- 'land'
@@ -43,13 +43,64 @@ nc1 <- nc1[,c('location','surface','geometry')]
 nc2 <- nc2[,c('location','surface','geometry')]
 nc <- rbind(nc1, nc2)
 
+# Coordinate reference system
+crs_world <- 4326
+crs_use <- 3031
+# attr(crs_world, 'class') <- 'crs'
+
+# Reset coastline bounding box to map limits -- defined by most northern latitude
+latmax <- -50
+mapLimits <- data.frame(Longitude = -180:180, 
+                        Latitude = rep(latmax, 361))
+mapLimits <- st_as_sf(mapLimits, coords = 1:2, crs = crs_world)
+mapLimits <- st_transform(mapLimits, crs_use)
+attr(st_geometry(nc), 'bbox') <- st_bbox(mapLimits)
+
+# bb_nc1 <- st_bbox(nc1)
+# bb_nc2 <- st_bbox(nc2)
+# bb_nc <- setNames(
+#   c(min(bb_nc1['xmin'], bb_nc2['xmin']), min(bb_nc1['ymin'], bb_nc2['ymin']),
+#     max(bb_nc1['xmax'], bb_nc2['xmax']), max(bb_nc1['ymax'], bb_nc2['ymax'])),
+#   c('xmin','ymin','xmax','ymax'))
+# attr(bb_nc, 'class') <- 'bbox'
+# attr(st_geometry(nc), 'bbox') <- bb_nc
+
+  
 # nc <- st_read('data/map/add_coastline_medium_res_polygon_v7.3.shp', quiet = !verbose)
 nc$surface = factor(nc$surface, levels = unique(nc$surface))
-# Coordinate reference system
-crs_world = 4326
-crs_use = 3031
 
 
+# Load ecoregion shape files -----------------------------------------------------
+# verbose = TRUE
+eco <- st_read('data/marine ecoregions/data/commondata/data0/meow_ecos_expl_clipped_expl.shp', quiet = !verbose)
+
+# Filter ecoregions by province
+keepProvinces <- c(60, 61, 48, 59, 62) # 60=Scotia Sea, 61=Continental High Antarctic, 48=Magellenic, 59=Subantarctic Islands, 62=Subantarctic New Zealand
+eco <- eco[eco$PROV_CODE %in% keepProvinces,]
+
+# Change coordinate reference system
+eco <- st_transform(eco, crs_use)
+
+# Match bounding box to coastline data
+attr(st_geometry(eco), 'bbox') <- st_bbox(nc)
+
+# Crop ecoregions to map limits
+eco <- st_crop(eco, st_bbox(eco))
+
+
+
+
+# Load shipping data  -----------------------------------------------------
+
+ship <- read.table('data/shipping/McCarthy_2022/ship activity in ecoregions_figure 3', sep = ';', header = TRUE)
+
+ship$time_total <- ship$Number.of.visits * ship$Mean.time.in.ecoregion..days.
+
+# Match to spatial data on ecoregions
+ship_poly <- eco[eco$ECO_CODE_X %in% ship$Ecoregion.number,]
+ship_poly$Number.of.visits <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Number.of.visits[ship$Ecoregion.number == z])
+ship_poly$Mean.time.in.ecoregion <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Mean.time.in.ecoregion..days.[ship$Ecoregion.number == z])
+ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total[ship$Ecoregion.number == z])
 
 # Load plastic data -----------------------------------------------------
 
@@ -243,7 +294,7 @@ DATA <- DATA[,names(DATA) != 'order']
 
 
 # Mapping coordinates
-DATA_sf = st_as_sf(DATA, coords = c("Longitude", "Latitude"), crs = crs_world)
+DATA_sf = st_as_sf(DATA, coords = c('Longitude', 'Latitude'), crs = crs_world)
 DATA_sf = st_transform(DATA_sf, crs_use)
 
 # Load research station data ----------------------------------------------
@@ -299,7 +350,7 @@ STATIONS$tooltip <- paste0(STATIONS$Official_Name, ' ', STATIONS$Type, '\n ',
 STATIONS$Record_ID <- paste('facility', STATIONS$Record_ID)
 
 # Mapping coordinates
-STATIONS_sf = st_as_sf(STATIONS, coords = c("Longitude_DD", "Latitude_DD"), crs = crs_world)
+STATIONS_sf = st_as_sf(STATIONS, coords = c('Longitude_DD', 'Latitude_DD'), crs = crs_world)
 STATIONS_sf = st_transform(STATIONS_sf, crs_use)
 xy = matrix(unlist(STATIONS_sf$geometry), 2, nrow(STATIONS))
 STATIONS$x = xy[1,]
@@ -423,15 +474,19 @@ sources <- levels(DATA$Source)
 nsources <- length(sources)
 pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
 
-# Set (minimum) size of plot bounding box
+# Plot bounding box
 bbox_map <- st_bbox(nc)
+# st_bbox(eco)
 bbox_dat <- st_bbox(DATA_sf)
 bbox_krill <- st_bbox(krill_poly)
 bbox_chl <- st_bbox(chl_poly)
-bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin, bbox_chl$xmin),
-                   min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin, bbox_chl$ymin),
-                   max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax, bbox_chl$xmax),
-                   max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax, bbox_chl$ymax)), names(bbox_map))
+# bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin, bbox_chl$xmin),
+#                    min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin, bbox_chl$ymin),
+#                    max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax, bbox_chl$xmax),
+#                    max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax, bbox_chl$ymax)), names(bbox_map))
+
+bbox <- bbox_map
+
 aspectRatio = unname(diff(bbox[c(1,3)]) / diff(bbox[c(2,4)]))
 
 linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
@@ -451,12 +506,12 @@ set_flextable_defaults(
 
 # dat_plastic_recast$tooltip <-  sapply(1:length(temp_dat), function(z) fun_flextable(temp_dat[[z]], plastic_units, yvars, keepVars, sType[z]))
 # x = temp_dat[[1]]
-# pu = plastic_units
+# # pu = plastic_units
 # longVars = yvars
 # singleRowVars = keepVars
 # sampleType = sType[1]
 
-fun_flextable <- function(x, pu, longVars, singleRowVars, sampleType){
+fun_flextable <- function(x, longVars, singleRowVars, sampleType){
   # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
   # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
   anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
@@ -500,10 +555,11 @@ fun_flextable <- function(x, pu, longVars, singleRowVars, sampleType){
       x$Depth <- paste(depth, 'm')
     x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
     # Identify correct unit and create Value column
-    pu <- pu[pu$SampleType == sampleType,]
-    w <- outer(pu$Variable, x$Measure, '==')
+    # pu <- pu[pu$SampleType == sampleType,]
+    # w <- outer(pu$Variable, x$Measure, '==')
     n <- nrow(x)
-    x$Value <- sapply(1:n, function(z) paste(x$Value[z], pu$Unit[w[,z]]))
+    # x$Value <- sapply(1:n, function(z) paste(x$Value[z], pu$Unit[w[,z]]))
+    x$Value <- paste(x$Value, x$Unit)
     if(x$SampleAtStation[1]){
       singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
     }else{
@@ -515,7 +571,7 @@ fun_flextable <- function(x, pu, longVars, singleRowVars, sampleType){
       n <- names(x)[z]
       if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
       c(n,m)
-      })
+    })
     names(x) <- newnames[2,]
     singleRowVars <- newnames[2,][newnames[1,] %in% singleRowVars]
     longVars <- newnames[2,][newnames[1,] %in% longVars]
@@ -525,10 +581,10 @@ fun_flextable <- function(x, pu, longVars, singleRowVars, sampleType){
     # longVars <- gsub('`', '', longVars)
     
     # Create flextable
-    ft <- flextable(x, col_keys = c(singleRowVars, longVars, "Value"))#, 
-    # ft <- flextable(x, col_keys = c(singleRowVars, "Plastic type", "Measure", "Value"))#, 
-    ft <- bold(ft, part = "header", bold = TRUE)
-    ft <- set_table_properties(ft, layout = "autofit")
+    ft <- flextable(x, col_keys = c(singleRowVars, longVars, 'Value'))#, 
+    # ft <- flextable(x, col_keys = c(singleRowVars, 'Plastic type', 'Measure', 'Value'))#, 
+    ft <- bold(ft, part = 'header', bold = TRUE)
+    ft <- set_table_properties(ft, layout = 'autofit')
     as.character(htmltools_value(ft, ft.shadow = FALSE))
   }else{
     if(x$SampleAtStation[1]){
@@ -546,23 +602,24 @@ fun_flextable <- function(x, pu, longVars, singleRowVars, sampleType){
     # # Remove quotes from column names
     # names(x) <- gsub('`', '', names(x))
     ft <- flextable(x)#, 
-    ft <- bold(ft, part = "header", bold = TRUE)
-    ft <- set_table_properties(ft, layout = "autofit")
+    ft <- bold(ft, part = 'header', bold = TRUE)
+    ft <- set_table_properties(ft, layout = 'autofit')
     as.character(htmltools_value(ft, ft.shadow = FALSE))
   }
 }
 
 
-make_plot <- function(dat, background = 'none', components = 'all', ptSize = 6, legPtSize = 4, alpha = 0.6){#, pu = plastic_units){
+make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, components = 'all', ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75){#, pu = plastic_units){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Inputs:
-  # dat        = list of all required (reactively filtered) data sets
-  # background = character specifying which background layer to plot
-  # components = 'main', 'legend' or 'all' to output the map, the legend, or a list of both
-  # alpha      = point transparency
+  # dat               = list of all required (reactively filtered) data sets
+  # background        = character specifying which background layer to plot
+  # displayEcoregions = TRUE/FALSE: plot distinct ecoregions -- required for shipping data from McCarthy
+  # components        = 'main', 'legend' or 'all' to output the map, the legend, or a list of both
+  # alpha             = point transparency
   # Output:
   # A ggplot object containing interactive geoms compatible with girafe
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -594,11 +651,32 @@ make_plot <- function(dat, background = 'none', components = 'all', ptSize = 6, 
                       geom_sf(data = dat_background, aes(fill = value)) +
                       scale_fill_viridis_c(option = 'viridis', trans = 'log10',
                                            name = bquote(atop(Chlorophyll, mg / m^3)))
+                  },
+                  ship = {
+                    plt_background <- 
+                      ggplot() +
+                      geom_sf(data = dat_background, aes(fill = time_total)) + 
+                      scale_fill_viridis_c(option = 'mako', trans = 'log10',
+                      # scale_fill_viridis_c(option = 'cividis', trans = 'log10',
+                                           name = bquote(atop(Ship ~ time, days)))
                   }
            )
            
+           # Ecoregions
+           if(displayEcoregions){
+             if(background == 'none'){
+               plt_background <- ggplot() +
+                 geom_sf(data = eco,
+                         linewidth = polyLineWidth, colour = 'black', fill = alpha('white', 0))
+             }else{
+               plt_background <- plt_background +
+                 geom_sf(data = eco, 
+                         linewidth = polyLineWidth, colour = 'black', fill = alpha('white', 0))
+             }
+           }
+           
            # Coastline
-           if(background == 'none'){
+           if(!exists('plt_background')){
              plt_map <-
                ggplot() +
                geom_sf(data = nc,
@@ -616,8 +694,11 @@ make_plot <- function(dat, background = 'none', components = 'all', ptSize = 6, 
            }
            
            plt_map <- plt_map +
-             theme_void()
-           
+             theme_void() +
+             theme(panel.background = element_rect(fill = 'white', colour = 'white')) +
+             theme(plot.margin = unit(rep(-0.2,4), 'cm'))
+             
+
            # Combine plot layers
            if(anyStations | anyPlastic){
              plt_map <- plt_map +
@@ -887,108 +968,106 @@ make_plot <- function(dat, background = 'none', components = 'all', ptSize = 6, 
 }
 
 
-
 # Define UI for plastic data map app ----
 ui <- fluidPage(
   
-  # App title ----
-  titlePanel("Mapping Southern Ocean Plastic Data"),
+  # App title
+  titlePanel('Mapping Southern Ocean Plastic Data'),
   
   fluidRow(
     column(width = 3,
            wellPanel(
-             # Input: year range -------------------------------------------------------
-             sliderInput("YearRange", "Years:",
+             # Input: year range
+             sliderInput('YearRange', 'Years:',
                          min = min(DATA$Year, na.rm = TRUE) , max = max(DATA$Year, na.rm = TRUE),
                          value = range(DATA$Year, na.rm = TRUE), step = 1, sep = ''),
              
-             # Input: measurement variable ----
-             selectInput("Variable", "Measurement:",
-                         c("Concentration (pieces/m3)" = "concentration",
-                           "Mass concentration (g/m3)" = "mass concentration",
-                           "Density (pieces/km2)" = "density",
-                           "Mass density (g/km2)" = "mass density"),
-                         multiple = TRUE, selected = c("concentration", "mass concentration", "density", "mass density")),
+             # Input: measurement variable
+             selectInput('Variable', 'Measurement:',
+                         c('Concentration (pieces/m3)' = 'concentration',
+                           'Mass concentration (g/m3)' = 'mass concentration',
+                           'Density (pieces/km2)' = 'density',
+                           'Mass density (g/km2)' = 'mass density'),
+                         multiple = TRUE, selected = c('concentration', 'mass concentration', 'density', 'mass density')),
              
-             # Input: plastic type ----
-             selectInput("PlasticForm_grouped", "Plastic form:",
-                         c("Fragment" = "fragment",
-                           "Fibre" = "fibre",
-                           "Film" = "film",
-                           "Other/unspecified" = 'other/unspecified'),
-                         multiple = TRUE, selected = c("fragment", "fibre", "film", "other/unspecified")),
+             # Input: plastic type
+             selectInput('PlasticForm_grouped', 'Plastic form:',
+                         c('Fragment' = 'fragment',
+                           'Fibre' = 'fibre',
+                           'Film' = 'film',
+                           'Other/unspecified' = 'other/unspecified'),
+                         multiple = TRUE, selected = c('fragment', 'fibre', 'film', 'other/unspecified')),
              
-             # selectInput("Type", "Plastic type:",
-             #             c("Fragment" = "fragment",
-             #               "Fibre" = "fibre",
-             #               "Film" = "film"),
-             #             multiple = TRUE, selected = c("fragment", "fibre", "film")),
+             # selectInput('Type', 'Plastic type:',
+             #             c('Fragment' = 'fragment',
+             #               'Fibre' = 'fibre',
+             #               'Film' = 'film'),
+             #             multiple = TRUE, selected = c('fragment', 'fibre', 'film')),
              
-             # Input: plastic scale ----
-             selectInput("LitterScale", "Plastic scale:",
-                         c("Micro" = "micro",
-                           "Micro & meso" = "micro and meso",
-                           "Meso" = "meso",
-                           "Macro" = "macro",
-                           "Unspecified" = 'unspecified'),
-                         multiple = TRUE, selected = c("micro", "micro and meso", "meso", "macro", 'unspecified')),
+             # Input: plastic scale
+             selectInput('LitterScale', 'Plastic scale:',
+                         c('Micro' = 'micro',
+                           'Micro & meso' = 'micro and meso',
+                           'Meso' = 'meso',
+                           'Macro' = 'macro',
+                           'Unspecified' = 'unspecified'),
+                         multiple = TRUE, selected = c('micro', 'micro and meso', 'meso', 'macro', 'unspecified')),
              
-             # # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
-             # selectInput("SampleType", "Sample type:",
-             #             c("Near-surface" = "surface",
-             #               "Subsurface" = "subsurface"),
-             #             multiple = TRUE, selected = c("surface", "subsurface")),
+             # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment)
+             selectInput('SampleType', 'Sample type:',
+                         c('Sea surface' = 'marine surface',
+                           'Sea subsurface' = 'marine subsurface',
+                           'Freshwater' = 'freshwater',
+                           'Wastewater' = 'wastewater',
+                           'Sediment' = 'sediment'),
+                         multiple = TRUE, selected = c('marine surface','marine subsurface','freshwater','wastewater','sediment')),
              
-             # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
-             selectInput("SampleType", "Sample type:",
-                         c("Sea surface" = "marine surface",
-                           "Sea subsurface" = "marine subsurface",
-                           "Freshwater" = "freshwater",
-                           "Wastewater" = "wastewater",
-                           "Sediment" = "sediment"),
-                         multiple = TRUE, selected = c("marine surface","marine subsurface","freshwater","wastewater","sediment")),
-             
-             # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment) ----
-             selectInput("StationType", "Facility:",
-                         c("Station" = "Station",
-                           "Camp" = "Camp",
-                           "Refuge" = "Refuge",
-                           "Airfield" = "Airfield Camp",
-                           "Laboratory" = "Laboratory",
-                           "Depot" = "Depot"),
-                         multiple = TRUE, selected = c("Station", "Camp", "Refuge", "Airfield Camp", "Laboratory", "Depot")),
-             
-             # Input: background layers ----
-             radioButtons("background", "Background data:",
-                          c("None" = "none",
-                            "Krill (Jan--Mar)" = "krill_all",
-                            "Krill (Jan)" = "krill_1",
-                            "Krill (Feb)" = "krill_2",
-                            "Krill (Mar)" = "krill_3",
-                            "Chlorophyll (Jan--Mar)" = "chl_all",
-                            "Chlorophyll (Jan)" = "chl_1",
-                            "Chlorophyll (Feb)" = "chl_2",
-                            "Chlorophyll (Mar)" = "chl_3"
+             # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment)
+             selectInput('StationType', 'Facility:',
+                         c('Station' = 'Station',
+                           'Camp' = 'Camp',
+                           'Refuge' = 'Refuge',
+                           'Airfield' = 'Airfield Camp',
+                           'Laboratory' = 'Laboratory',
+                           'Depot' = 'Depot'),
+                         multiple = TRUE, selected = c('Station', 'Camp', 'Refuge', 'Airfield Camp', 'Laboratory', 'Depot')),
+
+             # Input: display ecoregions
+             checkboxInput('DisplayEcoregions','Display ecoregions',
+                           value = FALSE),
+
+             # Input: background layers
+             radioButtons('background', 'Background data:',
+                          c('None' = 'none',
+                            'Krill (Jan--Mar)' = 'krill_all',
+                            'Krill (Jan)' = 'krill_1',
+                            'Krill (Feb)' = 'krill_2',
+                            'Krill (Mar)' = 'krill_3',
+                            'Chlorophyll (Jan--Mar)' = 'chl_all',
+                            'Chlorophyll (Jan)' = 'chl_1',
+                            'Chlorophyll (Feb)' = 'chl_2',
+                            'Chlorophyll (Mar)' = 'chl_3',
+                            'Shipping activity' = 'ship'
                           ),
                           selected = 'none')
              
              
-             # # Input: plot value transformation ----
-             # radioButtons("tran", "Scale:",
-             #              c("Natural" = "norm",
-             #                "Log" = "log")),
+             # # Input: plot value transformation
+             # radioButtons('tran', 'Scale:',
+             #              c('Natural' = 'norm',
+             #                'Log' = 'log')),
              
-             # # Input: Checkbox for whether outliers should be included ----
-             # checkboxInput("outliers", "Show outliers", TRUE),
+             # # Input: Checkbox for whether outliers should be included
+             # checkboxInput('outliers', 'Show outliers', TRUE),
              
              # width = 3
              
            )
     ),
     
-    # Main panel for displaying outputs ----
+    # Main panel for displaying outputs
     column(width = 7, #offset = 0, style='padding:0px;',
-           tags$body(tags$div(id="ppitest", style="width:1in;visible:hidden;padding:0px")),
+           tags$body(tags$div(id='ppitest', style="width:1in;visible:hidden;padding:0px")),
            tags$script('$(document).on("shiny:connected", function(e) {
                                     var d =  document.getElementById("ppitest").offsetWidth;
                                     Shiny.onInputChange("dpi", d);
@@ -1013,8 +1092,8 @@ ui <- fluidPage(
     column(width = 12, #offset = 3,
            
            wellPanel(
-             h4("Selected plastic data"),
-             dataTableOutput("datatab_plastic")
+             h4('Selected plastic data'),
+             dataTableOutput('datatab_plastic')
            )
            
     )
@@ -1024,8 +1103,8 @@ ui <- fluidPage(
     column(width = 12,
            
            wellPanel(
-             h4("Selected facilities"),
-             dataTableOutput("datatab_stations")
+             h4('Selected facilities'),
+             dataTableOutput('datatab_stations')
            )
            
     )
@@ -1105,7 +1184,7 @@ server <- function(input, output, session) {
       dn <- names(d)
       # Change to wide-form -- choose variables to produce one row per data_id
       dummyGroupingVariables <- c('PlasticForm_grouped')
-      yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate') # variables to change to wide format
+      yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format
       xvars <- dn[!dn %in% c(yvars, 'Value', dummyGroupingVariables)] # everything else, apart from Value and dummy grouping variables, stays in long format
       # Handle spaces in data column names
       xvars_ <- grepl(' ', xvars)
@@ -1129,7 +1208,7 @@ server <- function(input, output, session) {
       # Statistic should maybe be on the RHS for tooltip
       
       # Transform to correct CRS
-      dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c("Longitude", "Latitude"), crs = crs_world)
+      dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c('Longitude', 'Latitude'), crs = crs_world)
       dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
       xvars <- c(xvars, 'geometry')
       # Define interactive tooltip using flextable...
@@ -1145,8 +1224,9 @@ server <- function(input, output, session) {
       sType[grepl('water', sType) | grepl('marine', sType)] <- 'water'
       # longVars <- yvars[-which(yvars == 'Variable')]
       
-      dat_plastic_recast$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(temp_dat[[z]], plastic_units, yvars, keepVars, sType[z]))
-
+      # dat_plastic_recast$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(temp_dat[[z]], plastic_units, yvars, keepVars, sType[z]))
+      dat_plastic_recast$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(x = temp_dat[[z]], longVars = yvars, singleRowVars = keepVars, sampleType = sType[z]))
+      
       return(
         dat_plastic_recast
       )
@@ -1166,7 +1246,7 @@ server <- function(input, output, session) {
   
   # Get background type
   which_background <- reactive({
-      backgroundOptions <- c('none', 'krill', 'chl')
+      backgroundOptions <- c('none', 'krill', 'chl', 'ship')
       t <- sapply(backgroundOptions, FUN = function(z) grepl(z, input$background))
       background <- names(which(t)) # get the chosen background
       return(background)
@@ -1177,14 +1257,23 @@ server <- function(input, output, session) {
     background <- which_background()
     background_dat <- switch(background,
                              krill = krill_poly,
-                             chl = chl_poly
+                             chl = chl_poly,
+                             ship = ship_poly
     ) # get background data
     if(background != 'none'){
-      m <- strsplit(input$background, '_')[[1]][2] # get the chosen month
-      background_dat <- subset(background_dat, month == m) # filter by month
+      x <- strsplit(input$background, '_')[[1]]
+      if(length(x) == 2){
+        m <- x[2] # get the chosen month
+        background_dat <- subset(background_dat, month == m) # filter by month
+      }
     }
     return(background_dat)
   })
+  
+  # Display ecoregions
+  display_ecoregions <-reactive(
+    return(input$DisplayEcoregions)
+  )
   
   # Filter plot symbols based on sample & station types
   Symbols <- reactive({
@@ -1224,16 +1313,15 @@ server <- function(input, output, session) {
       blankwidth() / aspectRatio
     })
   
-  
   plot_main <- reactive({
     return(
-      make_plot(listData(), which_background(), 'main')
+      make_plot(dat = listData(), background = which_background(), displayEcoregions = display_ecoregions(), components = 'main')
     )
   })
 
   plot_legend <- reactive({
     return(
-      make_plot(listData(), which_background(), 'legend')
+      make_plot(dat = listData(), background = which_background(), components = 'legend')
     )
   })
 
@@ -1244,15 +1332,15 @@ server <- function(input, output, session) {
     h <- blankheight()
     x <- girafe(code = print(p),
                 options = list(opts_sizing(rescale = FALSE),
-                               # opts_tooltip(css = "padding:5px;background:white;border-radius:2px 2px 2px 2px;font-size:12pt;"),
-                               opts_tooltip(css = "background:white;"),
+                               # opts_tooltip(css = 'padding:5px;background:white;border-radius:2px 2px 2px 2px;font-size:12pt;'),
+                               opts_tooltip(css = 'background:white;'),
                                opts_zoom(min = 0.5, max = 10),
-                               opts_hover(css = "opacity:1.0;stroke-width:4;cursor:pointer;", reactive = TRUE),
-                               # opts_hover(css = "opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;cursor:pointer;", reactive = TRUE),
-                               opts_hover_inv(css = "opacity:0.2;cursor:pointer;"),
-                               # opts_hover(css = "fill:#FF3333;stroke:black;cursor:pointer;", reactive = TRUE)),
-                               opts_selection(type = "multiple", css = "opacity:1.0;stroke-width:4;")),
-                             # opts_selection(type = "multiple", css = "opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;")),
+                               opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE),
+                               # opts_hover(css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;cursor:pointer;', reactive = TRUE),
+                               opts_hover_inv(css = 'opacity:0.2;cursor:pointer;'),
+                               # opts_hover(css = 'fill:#FF3333;stroke:black;cursor:pointer;', reactive = TRUE)),
+                               opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:4;')),
+                             # opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;')),
                 width_svg = (w / {input$dpi}),
                 height_svg = (h / {input$dpi})
     )
