@@ -16,24 +16,119 @@ library(reshape2)
 library(flextable) # for displaying tables when mouse hovers over mapped data points
 # library(tidyverse)
 library(DT)
-
 # library(shinybrowser) # get browser dimension & other info
 
-# CAN THE CODE EFFICIENCY (MAP PLOTTING SPEED) BE INCREASED BY DEFINING THE
-# TOOLTIP DATA TABLE IN THE PREAMBLE? THEN R-SHINY FILTERS WILL SUBSET THIS
-# PRE-CALCULATED TABLE, RATHER THAN RECREATING THE TOOLTIP TABLE WITH EACH NEW
-# SELECTION OF FILTERING VARIABLES...
-# THIS WILL REQUIRE CASTING TO WIDE-FORM THEN MELTING BACK TO LONG-FORM...
+wd_orig <- getwd()
+wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
+# setwd('~/Documents/Git Repos/CUPIDO-risk-map')
 
-# getwd()
-setwd('~/Documents/Git Repos/CUPIDO-risk-map')
+# Flextable functions -----------------------------------------------------
+# Flextable is used for creating interactive displays of data, shown as tables 
+# when the mouse is hovered over data points. The display info is stored in a
+# variable called 'tooltip'. Making flextables is code bottle-neck so it's best
+# to pre-allocate/load tooltip info.
+
+# Some nice examples, worth a look, presented here https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html
+
+# Options for flextables
+set_flextable_defaults(
+  font.size = 10,
+  font.family = 'Roboto',
+  theme_fun = 'theme_vanilla'
+)
+
+fun_flextable <- function(x, longVars, singleRowVars, sampleType){
+  # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
+  # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
+  anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
+  if(anyMeasures){
+    # Arrange data frame
+    x <-suppressMessages(melt(x, id.vars = singleRowVars)) # change to long-form
+    x <- x[!is.na(x$value),]
+    # Disentangle variables...
+    l <- strsplit(as.character(x$variable), '_')
+    y <- setNames(as.data.frame(do.call('rbind', l)), longVars)
+    x <- cbind(x, y)
+    # Create empty Value column -- this stores numeric measurement and unit
+    x$Value <- x$value
+    # Remove/compress unnecessary/redundant variables...
+    # Measurement statistics
+    if(all(c('min','max') %in% x$Statistic)){ # convert min/max into range
+      x_ <- x[x$Statistic %in% c('min', 'max'),]
+      n <- nrow(x_)
+      v <- sapply(seq(1, n, 2), function(z) paste0('[', x_$value[z], ', ', x_$value[z+1], ']'))
+      x$Value[x$Statistic == 'min'] <- v
+      x$Statistic[x$Statistic == 'min'] <- 'range'
+      x <- x[x$Statistic != 'max',]
+    }
+    if(all(c('mean','s.d.') %in% x$Statistic)){ # convert mean/s.d. into mean +- s.d.
+      x_ <- x[x$Statistic %in% c('mean', 's.d.'),]
+      n <- nrow(x_)
+      v <- sapply(seq(1, n, 2), function(z) paste0(x_$value[z], ' +- ', x_$value[z+1]))
+      x$Value[x$Statistic == 's.d.'] <- v
+      x$Statistic[x$Statistic == 's.d.'] <- 'mean +- s.d.'
+      x <- x[x$Statistic != 'mean',]
+    }
+    # Sample replicates
+    if(length(unique(x$Replicate)) == 1){
+      x <- x[,-which(names(x) == 'Replicate')]
+      longVars <- longVars[longVars != 'Replicate']}
+    # Include unit if Depth is numeric
+    depth <- suppressWarnings(as.numeric(x$Depth))
+    if(!any(is.na(depth)))
+      x$Depth <- paste(depth, 'm')
+    x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
+    n <- nrow(x)
+    x$Value <- paste(x$Value, x$Unit)
+    if(x$SampleAtStation[1]){
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
+    }else{
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
+    if(n > 1) x[singleRowVars][2:n,] <- ''
+    # Include spaces in column names
+    newnames <- sapply(1:ncol(x), function(z){
+      n <- names(x)[z]
+      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
+      c(n,m)
+    })
+    names(x) <- newnames[2,]
+    singleRowVars <- newnames[2,][newnames[1,] %in% singleRowVars]
+    longVars <- newnames[2,][newnames[1,] %in% longVars]
+    # Create flextable
+    ft <- flextable(x, col_keys = c(singleRowVars, longVars, 'Value'))
+    ft <- bold(ft, part = 'header', bold = TRUE)
+    ft <- set_table_properties(ft, layout = 'autofit')
+    as.character(htmltools_value(ft, ft.shadow = FALSE))
+  }else{
+    if(x$SampleAtStation[1]){
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
+    }else{
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
+    x <- cbind(x[singleRowVars], Measure = 'none')
+    # Include spaces in column names
+    newnames <- sapply(1:ncol(x), function(z){
+      n <- names(x)[z]
+      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
+      c(n,m)
+    })
+    names(x) <- newnames[2,]
+    # # Remove quotes from column names
+    # names(x) <- gsub('`', '', names(x))
+    ft <- flextable(x)#, 
+    ft <- bold(ft, part = 'header', bold = TRUE)
+    ft <- set_table_properties(ft, layout = 'autofit')
+    as.character(htmltools_value(ft, ft.shadow = FALSE))
+  }
+}
 
 # Load map shape files -----------------------------------------------------
 verbose <- FALSE
-
-# nc1 <- st_read('data/map/Antarctic coastline polygons/high res/add_coastline_high_res_polygon_v7_6.shp', quiet = !verbose)
-nc1 <- st_read('data/map/Antarctic coastline polygons/medium res/add_coastline_medium_res_polygon_v7_6.shp', quiet = !verbose)
-nc2 <- st_read('data/map/sub Antarctic coastline polygons/sub_antarctic_coastline_high_res_polygon_v1.0.shp', quiet = !verbose)
+f1 <- 'data/map/Antarctic coastline polygons/medium res/add_coastline_medium_res_polygon_v7_6.shp'
+f2 <- 'data/map/sub Antarctic coastline polygons/sub_antarctic_coastline_high_res_polygon_v1.0.shp'
+f1 <- paste(wd_base, f1, sep = '/')
+f2 <- paste(wd_base, f2, sep = '/')
+nc1 <- st_read(f1, quiet = !verbose)
+nc2 <- st_read(f2, quiet = !verbose)
 
 # Merge coastline data sets
 nc1$location = 'Antarctica'
@@ -72,7 +167,9 @@ nc$surface = factor(nc$surface, levels = unique(nc$surface))
 
 # Load ecoregion shape files -----------------------------------------------------
 # verbose = TRUE
-eco <- st_read('data/marine ecoregions/data/commondata/data0/meow_ecos_expl_clipped_expl.shp', quiet = !verbose)
+f <- 'data/marine ecoregions/data/commondata/data0/meow_ecos_expl_clipped_expl.shp'
+f <- paste(wd_base, f, sep = '/')
+eco <- st_read(f, quiet = !verbose)
 
 # Filter ecoregions by province
 keepProvinces <- c(60, 61, 48, 59, 62) # 60=Scotia Sea, 61=Continental High Antarctic, 48=Magellenic, 59=Subantarctic Islands, 62=Subantarctic New Zealand
@@ -91,8 +188,9 @@ eco <- st_crop(eco, st_bbox(eco))
 
 
 # Load shipping data  -----------------------------------------------------
-
-ship <- read.table('data/shipping/McCarthy_2022/ship activity in ecoregions_figure 3', sep = ';', header = TRUE)
+f <- 'data/shipping/McCarthy_2022/ship activity in ecoregions_figure 3'
+f <- paste(wd_base, f, sep = '/')
+ship <- read.table(f, sep = ';', header = TRUE)
 
 ship$time_total <- ship$Number.of.visits * ship$Mean.time.in.ecoregion..days.
 
@@ -104,10 +202,28 @@ ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total
 
 # Load plastic data -----------------------------------------------------
 
-# filename = 'plastic_quantity.csv'
+# filepath = 'data/plastic_quantity'
+# # filename = 'plastic_quantity.csv'
+# filename = 'plastic_quantity_new2.csv'
+# f <- paste(wd_base, filepath, filename, sep = '/')
+# DATA = read.csv(f, stringsAsFactors = TRUE)
+
 filename = 'plastic_quantity_new2.csv'
-filepath = 'data/plastic_quantity/'
-DATA = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+f <- paste(wd_orig, filename, sep = '/')
+DATA = read.csv(f, stringsAsFactors = TRUE)
+
+loadTooltipFromFile <- TRUE
+saveTooltipData <- TRUE
+# Does data with tooltip variable exist?
+fw <- paste0(paste(sub('.csv', '', f), 'tooltip', 'wide', sep = '_'), '.Rds')
+fl <- paste0(paste(sub('.csv', '', f), 'tooltip', 'long', sep = '_'), '.Rds')
+dat_tooltip_saved <- file.exists(fw) & file.exists(fl)
+if(loadTooltipFromFile){
+  if(dat_tooltip_saved){
+    DATA_wide <- readRDS(fw)
+    DATA_long <- readRDS(fl)
+  }else{loadTooltipFromFile <- FALSE}
+}
 
 # Data pre-processing ----
 
@@ -292,15 +408,110 @@ DATA <- DATA[,names(DATA) != 'order']
 #   names(DATA)[names(DATA) == DATA_name_swap$original[i]] = DATA_name_swap$spaces[i]
 # }
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Pre-allocate/load tooltip
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Interactive tooltip showing plastic sample info as table is a code bottle-neck
+# To avoid slow map rendering, save data with tooltip variable to file.
+
+if(loadTooltipFromFile){
+  if(!all(dim(DATA) == dim(DATA_long) - c(0,1))) loadTooltipFromFile <- FALSE
+  if(loadTooltipFromFile){
+    dataMatched <- as.vector(DATA == DATA_long[,1:ncol(DATA)])
+    dataMatched <- all(dataMatched[!is.na(dataMatched)])
+    if(!dataMatched) loadTooltipFromFile <- FALSE
+  }
+}
+
+if(!loadTooltipFromFile){
+  # d <- DATA
+  dn <- names(DATA)
+  # Change to wide-form -- choose variables to produce one row per data_id
+  dummyGroupingVariables <- c('PlasticForm_grouped')
+  yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format
+  xvars <- dn[!dn %in% c(yvars, 'Value', dummyGroupingVariables)] # everything else, apart from Value and dummy grouping variables, stays in long format
+  # Handle spaces in data column names
+  xvars_ <- xvars
+  xvars_s <- grepl(' ', xvars)
+  xvars_[xvars_s] <- paste0('`', xvars_[xvars_s], '`')
+  yvars_ <- yvars
+  yvars_s <- grepl(' ', yvars)
+  yvars_[yvars_s] <- paste0('`', yvars_[yvars_s], '`')
+  DATA_wide <- suppressMessages(
+    dcast(DATA, list(xvars_, yvars_), value.var = 'Value'))
+  wellOrganised <- nrow(DATA_wide) == length(unique(DATA$data_id))
+  if(!wellOrganised) warning('Data are not well organised! Some samples are associated with multiple rows of data: we require a single row per sample in the wide-form data set.')
+  # Define interactive tooltip using flextable...
+  # The yvars (now stretched into wide form) are displayed (long form) in
+  # tooltip. Now also choose other variables to display in a single row.
+  keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation') # SampleAtStation is needed to choose appropriate coordinates display
+  omitVars <- xvars[!xvars %in% keepVars]
+  temp_dat <- as.data.frame(DATA_wide)[!names(DATA_wide) %in% omitVars]
+  temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
+  sType <- as.character(DATA_wide$SampleType) # units depend on SampleType
+  sType[grepl('water', sType) | grepl('marine', sType)] <- 'water'
+  DATA_wide$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(x = temp_dat[[z]], longVars = yvars, singleRowVars = keepVars, sampleType = sType[z])) # this is time-consuming and could maybe be moved to pre-amble/saved data set...
+  xvars <- c(xvars, 'tooltip')
+  # Melt data back to original shape
+  DATA_long <- melt(DATA_wide, id.vars = xvars, value.name = 'Value')#, na.rm = TRUE)
+  l <- strsplit(as.character(DATA_long$variable), '_')
+  dl <- setNames(as.data.frame(do.call('rbind', l)), yvars)
+  DATA_long <- subset(DATA_long, select = - variable)
+  DATA_long <- cbind(DATA_long, dl)
+  # Remove NAs
+  mv <- unique(DATA$data_id[is.na(DATA$Value)]) # samples with missing values in the data
+  j <- (DATA_long$data_id %in% mv) # index melted data with missing samples
+  ds <- DATA[DATA$data_id %in% mv, c('data_id', yvars)] # discard rows not appearing in original data
+  dms <- DATA_long[j, c('data_id', yvars)]
+  k <- sapply(1:nrow(dms), function(z){
+    x <- sapply(1:nrow(ds), function(y){
+      all(dms[z,] == ds[y,])
+    })
+    any(x)
+  })
+  j[which(j)[!k]] <- FALSE
+  j <- j | !is.na(DATA_long$Value)
+  DATA_long <- DATA_long[j,]
+  # Merge dummyGroupingVariables
+  DATA_long <- merge(DATA_long, cbind(DATA, order = 1:nrow(DATA)))
+  # Reorder
+  DATA_long <- DATA_long[order(DATA_long$order),]
+  DATA_long <- DATA_long[,names(DATA_long) != 'order']
+  DATA_long <- DATA_long[,c(dn, 'tooltip')]
+  
+  if(saveTooltipData){
+    fn <- paste0(paste(sub('.csv', '', f), 'tooltip', 'wide', sep = '_'), '.Rds')
+    saveRDS(DATA_wide, fn)
+    # fp <- paste(filepath, fn, sep = '/')
+    # saveRDS(DATA_wide, fp)
+    fn <- paste0(paste(sub('.csv', '', f), 'tooltip', 'long', sep = '_'), '.Rds')
+    saveRDS(DATA_long, fn)
+    # fp <- paste(filepath, fn, sep = '/')
+    # saveRDS(DATA_long, fp)
+  }
+  
+}
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# # Transform to correct CRS
+# dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c('Longitude', 'Latitude'), crs = crs_world)
+# dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
+# xvars <- c(xvars, 'geometry')
+
 
 # Mapping coordinates
-DATA_sf = st_as_sf(DATA, coords = c('Longitude', 'Latitude'), crs = crs_world)
+# DATA_sf = st_as_sf(DATA, coords = c('Longitude', 'Latitude'), crs = crs_world)
+# DATA_sf = st_transform(DATA_sf, crs_use)
+DATA_sf = st_as_sf(DATA_wide, coords = c('Longitude', 'Latitude'), crs = crs_world)
 DATA_sf = st_transform(DATA_sf, crs_use)
 
 # Load research station data ----------------------------------------------
-filename = 'COMNAP_Antarctic_Facilities_Master.csv'
-filepath = 'data/research stations/COMNAP/'
-STATIONS = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+filename <- 'COMNAP_Antarctic_Facilities_Master.csv'
+filepath <- 'data/research stations/COMNAP'
+f <- paste(wd_base, filepath, filename, sep = '/')
+STATIONS <- read.csv(f, stringsAsFactors = TRUE)
 
 # Data pre-processing ----
 STATIONS$Type = reorder(STATIONS$Type, rep(1, nrow(STATIONS)), sum, decreasing = TRUE)
@@ -311,6 +522,7 @@ STATIONS$Type = reorder(STATIONS$Type, rep(1, nrow(STATIONS)), sum, decreasing =
 # find a way to include these...
 STATIONS$Official_Name <- gsub("'", "", STATIONS$Official_Name)
 stationTypes <- levels(STATIONS$Type)
+# STATIONS$Type <- as.character(STATIONS$Type)
 STATIONS$order <- 1:nrow(STATIONS)
 
 sl <- lapply(stationTypes, FUN = function(z){
@@ -361,10 +573,10 @@ STATIONS$y = xy[2,]
 
 
 # Load krill data ---------------------------------------------------------
-
 filename = 'krill_data_mapped.csv'
-filepath = 'MatLab/temp/'
-KRILL = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+filepath = 'MatLab/temp'
+f <- paste(wd_base, filepath, filename, sep = '/')
+KRILL = read.csv(f, stringsAsFactors = TRUE)
 
 # Data pre-processing -----------------------------------------------------
 KRILL <- KRILL[!is.nan(KRILL$value),] # omit missing data
@@ -426,10 +638,11 @@ krill_poly$colourgroup <- factor(krill_poly$colourgroup, levels = colgroup)
 # resolution.
 
 # filename = 'chl_data_mapped.csv'
-filename = 'chl_data_mapped_highRes_3x1.csv'
+filename <- 'chl_data_mapped_highRes_3x1.csv'
 # filename = 'chl_data_mapped_highRes_1x0.33.csv'
-filepath = 'MatLab/temp/'
-CHL = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+filepath <- 'MatLab/temp'
+f <- paste(wd_base, filepath, filename, sep = '/')
+CHL <- read.csv(f, stringsAsFactors = TRUE)
 
 # Data pre-processing -----------------------------------------------------
 CHL <- CHL[!is.nan(CHL$value),] # omit missing data
@@ -454,6 +667,7 @@ chl_poly$value <- CHL$value
 # Plot symbols - store in separate data frame
 # Research stations use (mostly) unfilled symbols
 pltShapes <- c(1, 0, 5, 2, 6, 19) 
+# stationTypes <- unique(STATIONS$Type)
 stationTypes <- levels(STATIONS$Type)
 nstationTypes <- length(stationTypes)
 pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
@@ -467,9 +681,31 @@ pltSymbols <- rbind(pltSymbols,
 pltSymbols$Type <- factor(pltSymbols$Type, levels = pltSymbols$Type)
 
 # Plot colours
-# Use a qualitative palette for plastic sources
+# Use a qualitative palette for plastic sources -- the default is limited to 12 colours
+ncol <- length(unique(DATA_sf$Source))
 pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
-pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
+plot(1:12,1:12, col=pltColours, pch = 19)
+if(ncol < 13){
+  pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
+}else{
+  # make new colours as gradient between existing Paired palette colours
+  ne <- ceiling({ncol - 12} / 6)
+  mc <- matrix(pltColours, 2)
+  mc <- sapply(1:6, function(z){
+    cf <- colorRampPalette(c(mc[1,z], mc[2,z]))
+    cf <- cf(ne+2)
+    cf[2:{ne+1}]
+  })
+  mc <- matrix(mc, ne, 6)
+  pltColours <- c(
+    pltColours[seq(2, 12, 2)],
+    pltColours[seq(1, 11, 2)],
+    as.vector(t(mc[seq(ne, 1, -1),]))
+    )
+  }
+
+# pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
+# pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
 sources <- levels(DATA$Source)
 nsources <- length(sources)
 pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
@@ -494,121 +730,7 @@ linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
 
 # Plotting function -------------------------------------------------------
 
-# Some nice examples, worth a look, presented here https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html
-
-# Options for flextables
-set_flextable_defaults(
-  font.size = 10,
-  font.family = 'Roboto',
-  theme_fun = 'theme_vanilla'
-)
-
-
-# dat_plastic_recast$tooltip <-  sapply(1:length(temp_dat), function(z) fun_flextable(temp_dat[[z]], plastic_units, yvars, keepVars, sType[z]))
-# x = temp_dat[[1]]
-# # pu = plastic_units
-# longVars = yvars
-# singleRowVars = keepVars
-# sampleType = sType[1]
-
-fun_flextable <- function(x, longVars, singleRowVars, sampleType){
-  # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
-  # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
-  anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
-  if(anyMeasures){
-    # Arrange data frame
-    x <-suppressMessages(melt(x, id.vars = singleRowVars)) # change to long-form
-    x <- x[!is.na(x$value),]
-    # Disentangle variables...
-    l <- strsplit(as.character(x$variable), '_')
-    y <- setNames(as.data.frame(do.call('rbind', l)), longVars)
-    x <- cbind(x, y)
-    # Create empty Value column -- this stores numeric measurement and unit
-    x$Value <- x$value
-    # Remove/compress unnecessary/redundant variables...
-    # Measurement statistics
-    if(all(c('min','max') %in% x$Statistic)){ # convert min/max into range
-      x_ <- x[x$Statistic %in% c('min', 'max'),]
-      n <- nrow(x_)
-      v <- sapply(seq(1, n, 2), function(z) paste0('[', x_$value[z], ', ', x_$value[z+1], ']'))
-      x$Value[x$Statistic == 'min'] <- v
-      x$Statistic[x$Statistic == 'min'] <- 'range'
-      x <- x[x$Statistic != 'max',]
-    }
-    if(all(c('mean','s.d.') %in% x$Statistic)){ # convert mean/s.d. into mean +- s.d.
-      x_ <- x[x$Statistic %in% c('mean', 's.d.'),]
-      n <- nrow(x_)
-      v <- sapply(seq(1, n, 2), function(z) paste0(x_$value[z], ' +- ', x_$value[z+1]))
-      # v <- sapply(seq(1, n, 2), function(z) bquote(.(x_$value[z]) %+-% .(x_$value[z+1])), simplify = 'array')
-      x$Value[x$Statistic == 's.d.'] <- v
-      x$Statistic[x$Statistic == 's.d.'] <- 'mean +- s.d.'
-      # x$Statistic[x$Statistic == 's.d.'] <- sapply(1:{n/2}, function(...) bquote('mean' %+-% 's.d.'))
-      x <- x[x$Statistic != 'mean',]
-    }
-    # Sample replicates
-    if(length(unique(x$Replicate)) == 1){
-      x <- x[,-which(names(x) == 'Replicate')]
-      longVars <- longVars[longVars != 'Replicate']}
-    # Include unit if Depth is numeric
-    depth <- suppressWarnings(as.numeric(x$Depth))
-    if(!any(is.na(depth)))
-      x$Depth <- paste(depth, 'm')
-    x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
-    # Identify correct unit and create Value column
-    # pu <- pu[pu$SampleType == sampleType,]
-    # w <- outer(pu$Variable, x$Measure, '==')
-    n <- nrow(x)
-    # x$Value <- sapply(1:n, function(z) paste(x$Value[z], pu$Unit[w[,z]]))
-    x$Value <- paste(x$Value, x$Unit)
-    if(x$SampleAtStation[1]){
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
-    }else{
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
-    if(n > 1) x[singleRowVars][2:n,] <- ''
-    
-    # Include spaces in column names
-    newnames <- sapply(1:ncol(x), function(z){
-      n <- names(x)[z]
-      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
-      c(n,m)
-    })
-    names(x) <- newnames[2,]
-    singleRowVars <- newnames[2,][newnames[1,] %in% singleRowVars]
-    longVars <- newnames[2,][newnames[1,] %in% longVars]
-    # # Remove quotes from column names
-    # names(x) <- gsub('`', '', names(x))
-    # singleRowVars <- gsub('`', '', singleRowVars)
-    # longVars <- gsub('`', '', longVars)
-    
-    # Create flextable
-    ft <- flextable(x, col_keys = c(singleRowVars, longVars, 'Value'))#, 
-    # ft <- flextable(x, col_keys = c(singleRowVars, 'Plastic type', 'Measure', 'Value'))#, 
-    ft <- bold(ft, part = 'header', bold = TRUE)
-    ft <- set_table_properties(ft, layout = 'autofit')
-    as.character(htmltools_value(ft, ft.shadow = FALSE))
-  }else{
-    if(x$SampleAtStation[1]){
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
-    }else{
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
-    x <- cbind(x[singleRowVars], Measure = 'none')
-    # Include spaces in column names
-    newnames <- sapply(1:ncol(x), function(z){
-      n <- names(x)[z]
-      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
-      c(n,m)
-    })
-    names(x) <- newnames[2,]
-    # # Remove quotes from column names
-    # names(x) <- gsub('`', '', names(x))
-    ft <- flextable(x)#, 
-    ft <- bold(ft, part = 'header', bold = TRUE)
-    ft <- set_table_properties(ft, layout = 'autofit')
-    as.character(htmltools_value(ft, ft.shadow = FALSE))
-  }
-}
-
-
+# change function structure -- better efficiency, avoids errors...
 make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, components = 'all', ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75){#, pu = plastic_units){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
@@ -632,74 +754,67 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
   anyStations <- nrow(dat_stations) > 0
   anyBackground <- background != 'none'
   
+  # Background layer
+  switch(background,
+         none = {
+           plt_background <- ggplot()
+         },
+         krill = {
+           plt_background <-
+             ggplot() +
+             geom_sf(data = dat_background, aes(fill = colourgroup)) +
+             scale_fill_viridis_d(option = 'plasma',
+                                  name = bquote(atop(Krill, individuals / m^2)))
+           },
+         chl = {
+           plt_background <-
+             ggplot() +
+             geom_sf(data = dat_background, aes(fill = value)) +
+             scale_fill_viridis_c(option = 'viridis', trans = 'log10',
+                                  name = bquote(atop(Chlorophyll, mg / m^3)))
+         },
+         ship = {
+           plt_background <- 
+             ggplot() +
+             geom_sf(data = dat_background, aes(fill = time_total)) + 
+             scale_fill_viridis_c(option = 'mako', trans = 'log10',
+                                  # scale_fill_viridis_c(option = 'cividis', trans = 'log10',
+                                  name = bquote(atop(Ship ~ time, days)))
+         }
+  )
+  
+  plt_background <- plt_background +
+    theme_void() +
+    theme(panel.background = element_rect(fill = 'white', colour = 'white') #,
+#          legend.direction = 'horizontal',
+          # plot.margin = unit(rep(-0.2,4), 'cm'),
+#          legend.position = "bottom" #, legend.key.size = unit(0.4, 'cm')
+    )
+  
+  
   switch(components,
          
          main = {
+           # Produce main map -- no legend
            
-           # Background layer
-           switch(background,
-                  krill = {
-                    plt_background <-
-                      ggplot() +
-                      geom_sf(data = dat_background, aes(fill = colourgroup)) +
-                      scale_fill_viridis_d(option = 'plasma',
-                                           name = bquote(atop(Krill, individuals / m^2)))
-                  },
-                  chl = {
-                    plt_background <-
-                      ggplot() +
-                      geom_sf(data = dat_background, aes(fill = value)) +
-                      scale_fill_viridis_c(option = 'viridis', trans = 'log10',
-                                           name = bquote(atop(Chlorophyll, mg / m^3)))
-                  },
-                  ship = {
-                    plt_background <- 
-                      ggplot() +
-                      geom_sf(data = dat_background, aes(fill = time_total)) + 
-                      scale_fill_viridis_c(option = 'mako', trans = 'log10',
-                      # scale_fill_viridis_c(option = 'cividis', trans = 'log10',
-                                           name = bquote(atop(Ship ~ time, days)))
-                  }
-           )
+           # Map layers
+           plt_map <- plt_background + guides(fill = 'none') + theme(legend.position = 'right')
            
            # Ecoregions
            if(displayEcoregions){
-             if(background == 'none'){
-               plt_background <- ggplot() +
-                 geom_sf(data = eco,
-                         linewidth = polyLineWidth, colour = 'black', fill = alpha('white', 0))
-             }else{
-               plt_background <- plt_background +
-                 geom_sf(data = eco, 
-                         linewidth = polyLineWidth, colour = 'black', fill = alpha('white', 0))
-             }
+             plt_map <- plt_map +
+               geom_sf(data = eco, 
+                       linewidth = polyLineWidth, colour = 'black', fill = alpha('white', 0))
            }
            
            # Coastline
-           if(!exists('plt_background')){
-             plt_map <-
-               ggplot() +
-               geom_sf(data = nc,
-                       aes(fill = surface),
-                       show.legend = FALSE) +
-               scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
-           }else{
-             plt_map <-
-               plt_background +
-               new_scale('fill') +
-               geom_sf(data = nc,
-                       aes(fill = surface),
-                       show.legend = FALSE) +
-               scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
-           }
-           
            plt_map <- plt_map +
-             theme_void() +
-             theme(panel.background = element_rect(fill = 'white', colour = 'white')) +
-             theme(plot.margin = unit(rep(-0.2,4), 'cm'))
-             
-
-           # Combine plot layers
+             new_scale('fill') +
+             geom_sf(data = nc,
+                     aes(fill = surface),
+                     show.legend = FALSE) +
+             scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
+           
            if(anyStations | anyPlastic){
              plt_map <- plt_map +
                scale_shape_manual(values = setNames(symbols$symbol, symbols$Type))
@@ -711,19 +826,13 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
                geom_sf_interactive(data = dat_stations,
                                    aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
                                    alpha = alpha, size = ptSize, stroke = 1, show.legend = FALSE) +
-               # geom_sf(data = dat_stations,
-               #         aes(shape = Type, colour = Seasonality),
-               #         alpha = 1, size = 4, stroke = 1, show.legend = FALSE) +
                scale_colour_manual(values = c('forestgreen','firebrick'))
            }
            
            # Plastic samples
            if(anyPlastic){
-             plt_map <- plt_map +
+             plt_map <- plt_map + 
                new_scale('fill') +
-               # geom_sf(data = dat_plastic,
-               #         aes(fill = Source, shape = SampleType),
-               #         alpha = 1, size = 4, show.legend = FALSE) +
                geom_sf_interactive(data = dat_plastic,
                                    aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
                                    alpha = alpha, size = ptSize, show.legend = FALSE) +
@@ -732,13 +841,12 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
            
            plt_map <- plt_map +
              coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax']))# +
-             # theme_void()
-           
+
            output_plot <- ggdraw(plt_map)
            return(output_plot)
            
          },
-         
+  
          #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
          #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
          
@@ -757,6 +865,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
                theme(legend.key = element_blank()) +
                guides(shape = guide_legend(title = 'Facility', override.aes = list(size = legPtSize)),
                       colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
+             leg_stations <- get_legend(plt_stations)
+           }else{
+             leg_stations <- NULL
            }
            
            # Plastic samples
@@ -775,50 +886,39 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
                theme(legend.key = element_blank()) +
                guides(shape = guide_legend(title = 'Sample type', override.aes = list(size = legPtSize)),
                       fill = guide_legend(override.aes = list(shape = c(21), size = legPtSize)))
+             leg_plastic <- get_legend(plt_plastic_samples)
+           }else{
+             leg_plastic <- NULL
            }
            
-           # Extract legends and make subplot
-           if(anyStations & anyPlastic){
-             leg_plastic <- get_legend(plt_plastic_samples)
-             leg_stations <- get_legend(plt_stations)
-             output_legend <- ggdraw(plot_grid(leg_plastic, leg_stations,
-                                               ncol = 2, align = 'h'))
+           # Background
+           if(anyBackground){
+             leg_background <- get_legend(plt_background)
            }else{
-             if(anyPlastic){
-               leg_plastic <- get_legend(plt_plastic_samples)
-               output_legend <- ggdraw(plot_grid(leg_plastic, NULL,
-                                                 ncol = 2, align = 'h'))
-             }else{
-               if(anyStations){
-                 leg_stations <- get_legend(plt_stations)
-                 output_legend <- ggdraw(plot_grid(leg_stations, NULL,
-                                                   ncol = 2, align = 'h'))
-               }else{
-                 output_legend <-ggdraw(plot_grid(NULL, NULL,
-                                                  ncol = 2))
-               }}}
+             leg_background <- NULL
+           }
            
-           # # Extract legends and make subplot
-           # if(anyStations & anyPlastic){
-           #   leg_plastic <- get_legend(plt_plastic_samples)
-           #   leg_stations <- get_legend(plt_stations)
-           #   output_legend <- ggdraw(plot_grid(leg_plastic, leg_stations,
-           #                                     ncol = 1, align = 'v'))
-           # }else{
-           #   if(anyPlastic){
-           #     leg_plastic <- get_legend(plt_plastic_samples)
-           #     output_legend <- ggdraw(plot_grid(leg_plastic, NULL,
-           #                                       ncol = 1, align = 'v'))
-           #   }else{
-           #     if(anyStations){
-           #       leg_stations <- get_legend(plt_stations)
-           #       output_legend <- ggdraw(plot_grid(leg_stations, NULL,
-           #                                         ncol = 1, align = 'v'))
-           #     }else{
-           #       output_legend <-ggdraw(plot_grid(NULL, NULL,
-           #                                        ncol = 1))
-           #     }}}
+           # output_legend <- ggdraw(
+           #   plot_grid(
+           #     plot_grid(
+           #       leg_plastic, leg_stations,
+           #       ncol = 2, align = 'h', axis = 't'),
+           #     leg_background,
+           #     ncol = 1, rel_heights = c(9, 1), axis = 'l', align = 'v'),
+           #   clip = 'on')
+
+           output_legend <- ggdraw(
+             plot_grid(
+               leg_background, leg_plastic, leg_stations,
+               ncol = 3), #, align = 'h', axis = 't'),
+           ) #clip = 'on')
            
+           
+           # library(patchwork)
+           # output_legend <- (ggdraw(leg_plastic) + ggdraw(leg_stations)) / ggdraw(leg_background)
+           # 
+           # wrap_plots(ggdraw(leg_plastic), ggdraw(leg_stations), ggdraw(leg_background))
+
            return(output_legend)
            
          },
@@ -828,76 +928,24 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
          # components = 'all' is not necessary and included only for completeness
          #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
          all = {
+           # Main plot...
+           # Map layers
+           plt_map <- plt_background + guides(fill = 'none') + theme(legend.position = 'right')
            
-           # Background layer
-           switch(background,
-                  krill = {
-                    plt_background <-
-                      ggplot() +
-                      geom_sf(data = dat_background, aes(fill = colourgroup)) +
-                      scale_fill_viridis_d(option = 'plasma',
-                                           name = bquote(atop(Krill, individuals / m^2)))
-                  },
-                  chl = {
-                    plt_background <-
-                      ggplot() +
-                      geom_sf(data = dat_background, aes(fill = value)) +
-                      scale_fill_viridis_c(option = 'viridis', trans = 'log10',
-                                           name = bquote(atop(Chlorophyll, mg / m^3)))
-                  }
-           )
+           # Ecoregions
+           if(displayEcoregions){
+             plt_map <- plt_map +
+               geom_sf(data = eco, 
+                       linewidth = polyLineWidth, colour = 'black', fill = alpha('white', 0))
+           }
            
            # Coastline
-           if(background == 'none'){
-             plt_map <-
-               ggplot() +
-               geom_sf(data = nc,
-                       aes(fill = surface),
-                       show.legend = FALSE) +
-               scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
-           }else{
-             plt_map <-
-               plt_background +
-               new_scale('fill') +
-               geom_sf(data = nc,
-                       aes(fill = surface),
-                       show.legend = FALSE) +
-               scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
-           }
-           
-           # Research stations
-           if(anyStations){
-             plt_stations <-
-               ggplot() +
-               geom_sf(data = dat_stations,
-                       aes(shape = Type, colour = Seasonality),
-                       alpha = 1, size = ptSize, stroke = 1) +
-               scale_colour_manual(values = c('forestgreen','firebrick')) +
-               scale_shape_manual(values = symbols$symbol[symbols$Class == 'ResearchStation']) +
-               theme(legend.key = element_blank()) +
-               guides(shape = guide_legend(title = 'Facility', override.aes = list(size = legPtSize)),
-                      colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
-           }
-           
-           # Plastic samples
-           if(anyPlastic){
-             plt_plastic_samples <-
-               ggplot() +
-               geom_sf(data = dat_plastic,
-                       aes(fill = Source, shape = SampleType),
-                       alpha = 1, size = ptSize) +
-               # geom_sf_interactive(data = dat_plastic,
-               #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
-               #                     alpha = 1, size = 4) +
-               scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
-               scale_shape_manual(values = symbols$symbol[symbols$Class == 'PlasticSample']) +
-               theme(legend.key = element_blank()) +
-               guides(shape = guide_legend(title = 'Sample type', override.aes = list(size = legPtSize)),
-                      fill = guide_legend(override.aes = list(shape = c(21), size = legPtSize)))
-           }
-           
            plt_map <- plt_map +
-             theme_void()
+             new_scale('fill') +
+             geom_sf(data = nc,
+                     aes(fill = surface),
+                     show.legend = FALSE) +
+             scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
            
            if(anyStations | anyPlastic){
              plt_map <- plt_map +
@@ -910,53 +958,76 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
                geom_sf_interactive(data = dat_stations,
                                    aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
                                    alpha = alpha, size = ptSize, stroke = 1, show.legend = FALSE) +
-               # geom_sf(data = dat_stations,
-               #         aes(shape = Type, colour = Seasonality),
-               #         alpha = 1, size = 4, stroke = 1, show.legend = FALSE) +
                scale_colour_manual(values = c('forestgreen','firebrick'))
            }
            
            # Plastic samples
            if(anyPlastic){
-             plt_map <- plt_map +
+             plt_map <- plt_map + 
                new_scale('fill') +
-               # geom_sf(data = dat_plastic,
-               #         aes(fill = Source, shape = SampleType),
-               #         alpha = 1, size = 4, show.legend = FALSE) +
                geom_sf_interactive(data = dat_plastic,
                                    aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
                                    alpha = alpha, size = ptSize, show.legend = FALSE) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
            }
            
-           # Make main plot
            plt_map <- plt_map +
              coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax']))# +
-             # theme_void()
            
            output_plot <- ggdraw(plt_map)
            
-           
-           # Extract legends and make subplot
-           if(anyStations & anyPlastic){
-             leg_plastic <- get_legend(plt_plastic_samples)
+           # Legends...
+           # Research stations
+           if(anyStations){
+             symbols_ <- symbols[symbols$Class == 'ResearchStation',]
+             plt_stations <-
+               ggplot() +
+               geom_sf(data = dat_stations,
+                       aes(shape = Type, colour = Seasonality),
+                       alpha = 1, size = ptSize, stroke = 1) +
+               scale_colour_manual(values = c('forestgreen','firebrick')) +
+               scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
+               theme(legend.key = element_blank()) +
+               guides(shape = guide_legend(title = 'Facility', override.aes = list(size = legPtSize)),
+                      colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
              leg_stations <- get_legend(plt_stations)
-             output_legend <- ggdraw(plot_grid(leg_plastic, leg_stations,
-                                               ncol = 1, align = 'v'))
            }else{
-             if(anyPlastic){
-               leg_plastic <- get_legend(plt_plastic_samples)
-               output_legend <- ggdraw(plot_grid(leg_plastic, NULL,
-                                                 ncol = 1, align = 'v'))
-             }else{
-               if(anyStations){
-                 leg_stations <- get_legend(plt_stations)
-                 output_legend <- ggdraw(plot_grid(leg_stations, NULL,
-                                                   ncol = 1, align = 'v'))
-               }else{
-                 output_legend <-ggdraw(plot_grid(NULL, NULL,
-                                                  ncol = 1))
-               }}}
+             leg_stations <- NULL
+           }
+           
+           # Plastic samples
+           if(anyPlastic){
+             symbols_ = symbols[symbols$Class == 'PlasticSample',]
+             plt_plastic_samples <-
+               ggplot() +
+               geom_sf(data = dat_plastic,
+                       aes(fill = Source, shape = SampleType),
+                       alpha = 1, size = ptSize) +
+               # geom_sf_interactive(data = dat_plastic,
+               #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
+               #                     alpha = 1, size = 4) +
+               scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
+               scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
+               theme(legend.key = element_blank()) +
+               guides(shape = guide_legend(title = 'Sample type', override.aes = list(size = legPtSize)),
+                      fill = guide_legend(override.aes = list(shape = c(21), size = legPtSize)))
+             leg_plastic <- get_legend(plt_plastic_samples)
+           }else{
+             leg_plastic <- NULL
+           }
+           
+           # Background
+           if(anyBackground){
+             leg_background <- get_legend(plt_background)
+           }else{
+             leg_background <- NULL
+           }
+           
+           output_legend <- ggdraw(
+             plot_grid(
+               leg_background, leg_plastic, leg_stations,
+               ncol = 3)
+           )
            
            return(
              list(plot = output_plot, legend = output_legend)
@@ -966,7 +1037,6 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
   )
   
 }
-
 
 # Define UI for plastic data map app ----
 ui <- fluidPage(
@@ -979,8 +1049,8 @@ ui <- fluidPage(
            wellPanel(
              # Input: year range
              sliderInput('YearRange', 'Years:',
-                         min = min(DATA$Year, na.rm = TRUE) , max = max(DATA$Year, na.rm = TRUE),
-                         value = range(DATA$Year, na.rm = TRUE), step = 1, sep = ''),
+                         min = min(DATA_sf$Year, na.rm = TRUE) , max = max(DATA_sf$Year, na.rm = TRUE),
+                         value = range(DATA_long$Year, na.rm = TRUE), step = 1, sep = ''),
              
              # Input: measurement variable
              selectInput('Variable', 'Measurement:',
@@ -1119,130 +1189,66 @@ server <- function(input, output, session) {
   # individual change being rendered provided input changes are made quickly.
   listInputs <- debounce({
     reactive({
-      list(YearRange = input$YearRange,
-           Variable = input$Variable,
-           PlasticForm = input$PlasticForm_grouped,
-           # PlasticForm_grouped = input$PlasticForm_grouped,
-           LitterScale = input$LitterScale,
-           SampleType = input$SampleType
+      list(
+        YearRange = input$YearRange,
+        Variable = input$Variable,
+        PlasticForm = input$PlasticForm_grouped,
+        LitterScale = input$LitterScale,
+        SampleType = input$SampleType,
+        StationType = input$StationType
       )
     })
   }, 2000)
-
-  
-  # Filter plastic data according to Shiny inputs
-  filtered_plastic_data <-reactive({
+  # Filter data according to Shiny inputs...
+  # Research station data
+  filtered_station_data <- reactive({
     x <- listInputs()
     return(
-      subset(DATA,
-             x$YearRange[1] <= Year & Year <= x$YearRange[2] &
-               Variable %in% x$Variable &
-               PlasticForm_grouped %in% x$PlasticForm &
-               LitterScale %in% x$LitterScale &
-               SampleType %in% x$SampleType
-      )
-    )    
+      subset(STATIONS_sf, Type %in% x$StationType)
+    )
+  })
+  # Plastic data
+  filtered_plastic_data <-reactive({
+    x <- listInputs()
+    y <- subset(DATA_long,
+                x$YearRange[1] <= Year & Year <= x$YearRange[2] &
+                  Variable %in% x$Variable &
+                  PlasticForm_grouped %in% x$PlasticForm &
+                  LitterScale %in% x$LitterScale &
+                  SampleType %in% x$SampleType
+    )
+    return(
+      list(data = y, samples = unique(y$data_id))
+    )
+  })
+  transformed_plastic_data <- reactive({
+    fp <- filtered_plastic_data()
+    return(
+      subset(DATA_sf, data_id %in% fp$samples)
+    )
   })
   
-  # d = DATA
-  # PlasticForms = c('film')
-  # SampleTypes = c('marine surface','wastewater','sediment')
-  # d = subset(DATA, PlasticForm %in% PlasticForms & SampleType %in% SampleTypes)
-  # d = subset(DATA, Source == 'Buckingham (2022)')
   
   
-  
-  # # Filter plastic data according to Shiny inputs
-  # filtered_plastic_data <-reactive({
+  # filtered_data <- reactive({
   #   x <- listInputs()
+  #   
+  #   # Research station data
+  #   filtered_station_data <- subset(STATIONS_sf, Type %in% x$StationType)
+  #   
+  #   # Plastic data
+  #   filtered_plastic_data <- subset(DATA_long,
+  #                 x$YearRange[1] <= Year & Year <= x$YearRange[2] &
+  #                   Variable %in% x$Variable &
+  #                   PlasticForm_grouped %in% x$PlasticForm &
+  #                   LitterScale %in% x$LitterScale &
+  #                   SampleType %in% x$SampleType)
+  #   fsamples <- unique(filtered_plastic_data$data_id)
+  #   transformed_plastic_data <- subset(DATA_sf, data_id %in% fsamples)
   #   return(
-  #     subset(DATA,
-  #            x$YearRange[1] <= Year & Year <= x$YearRange[2] &
-  #              DATA$Variable %in% x$Variable &
-  #              DATA$Type %in% x$Type &
-  #              DATA$SampleType %in% x$SampleType
-  #     )
-  #   )    
-  # })
-  
-  # filtered_plastic_data <-reactive({
-  #   return(
-  #     subset(DATA,
-  #            input$YearRange[1] <= Year & Year <= input$YearRange[2] &
-  #              DATA$Variable %in% input$Variable &
-  #              DATA$Type %in% input$Type &
-  #              DATA$SampleType %in% SampleType_d()
-  #            # DATA$SampleType %in% input$SampleType
-  #     )
+  #     list(plastic_long = filtered_plastic_data, plastic_wide = transformed_plastic_data, stations = filtered_station_data)
   #   )
   # })
-  
-  transformed_plastic_data <- reactive({
-    d <- filtered_plastic_data()
-    anyPlastic <- nrow(d) > 0
-    if(anyPlastic){
-      dn <- names(d)
-      # Change to wide-form -- choose variables to produce one row per data_id
-      dummyGroupingVariables <- c('PlasticForm_grouped')
-      yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format
-      xvars <- dn[!dn %in% c(yvars, 'Value', dummyGroupingVariables)] # everything else, apart from Value and dummy grouping variables, stays in long format
-      # Handle spaces in data column names
-      xvars_ <- grepl(' ', xvars)
-      xvars[xvars_] <- paste0('`', xvars[xvars_], '`')
-      yvars_ <- grepl(' ', yvars)
-      yvars[yvars_] <- paste0('`', yvars[yvars_], '`')
-      
-      # xvars <- c('Source', 'SampleAtStation', 'SampleID', 'SampleType', 'SampleGear',
-      #            'LitterIDMethod', 'LitterCategory', 'Site', 'SiteCategory', 
-      #            'Longitude', 'Latitude', 'Depth', '`Sample Date`', 
-      #            'Year', 'Coordinates', '`Coordinates (start)`', '`Coordinates (end)`', 'data_id')
-      dat_plastic_recast <- suppressMessages(
-        dcast(d, list(xvars, yvars), value.var = 'Value'))
-      wellOrganised <- nrow(dat_plastic_recast) == length(unique(d$data_id))
-      if(!wellOrganised) warning('Data are not well organised! Some samples are associated with multiple rows of data: we require a single row per sample in the wide-form data set.')
-      
-      # head(dat_plastic_recast)
-      
-      
-      # LitterScale may need moved to RHS of dcast formula... figure it out once the size data is sorted...
-      # Statistic should maybe be on the RHS for tooltip
-      
-      # Transform to correct CRS
-      dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c('Longitude', 'Latitude'), crs = crs_world)
-      dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
-      xvars <- c(xvars, 'geometry')
-      # Define interactive tooltip using flextable...
-      # The yvars (now stretched into wide form) are displayed (long form) in
-      # tooltip. Now also choose other variables to display in a single row.
-      # keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation') # SampleAtStation is needed to choose appropriate coordinates display
-      keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation') # SampleAtStation is needed to choose appropriate coordinates display
-      omitVars <- xvars[!xvars %in% keepVars]
-      temp_dat <- as.data.frame(dat_plastic_recast)[!names(dat_plastic_recast) %in% omitVars]
-      temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
-
-      sType <- as.character(dat_plastic_recast$SampleType) # units depend on SampleType
-      sType[grepl('water', sType) | grepl('marine', sType)] <- 'water'
-      # longVars <- yvars[-which(yvars == 'Variable')]
-      
-      # dat_plastic_recast$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(temp_dat[[z]], plastic_units, yvars, keepVars, sType[z]))
-      dat_plastic_recast$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(x = temp_dat[[z]], longVars = yvars, singleRowVars = keepVars, sampleType = sType[z]))
-      
-      return(
-        dat_plastic_recast
-      )
-    }else{
-      return(d)
-    }
-  })
-  
-  # Filter the research station data
-  filtered_station_data = reactive({
-      return(
-        subset(STATIONS_sf,
-               STATIONS_sf$Type %in% input$StationType
-        )
-      )
-  })
   
   # Get background type
   which_background <- reactive({
@@ -1279,16 +1285,12 @@ server <- function(input, output, session) {
   Symbols <- reactive({
     x <- listInputs()
       return(
-        subset(pltSymbols, Type %in% c(x$SampleType, input$StationType))
-        # subset(pltSymbols, Type %in% c(input$SampleType, input$StationType))
+        subset(pltSymbols, Type %in% c(x$SampleType, x$StationType))
       )
   })
   
-  # pltsymbols = subset(pltSymbols, Type %in% c(SampleTypes, as.character(pltSymbols$Type[1:6])))
-  
   # Group all data in a named list
   listData <- reactive({
-    # plastic <- filtered_plastic_data()
     plastic <- transformed_plastic_data()
     stations <- filtered_station_data()
     background <- filtered_background_dat()
@@ -1367,8 +1369,10 @@ server <- function(input, output, session) {
   })
 
   output$datatab_plastic <- renderDataTable({
-    # d <- DATA
-    d <- filtered_plastic_data()
+    # fd <- filtered_data()
+    # fp <- fd$plastic_wide
+    fp <- filtered_plastic_data()
+    d <- fp$data
     d <- d[d$data_id %in% selected_data(),]
     if(nrow(d) < 1) return(NULL)
     
@@ -1391,6 +1395,8 @@ server <- function(input, output, session) {
   })
 
   output$datatab_stations <- renderDataTable({
+    # fd <- filtered_data()
+    # d <- fd$stations
     d <- filtered_station_data()
     d <- as.data.frame(d)
     d <- d[d$Record_ID %in% selected_data(),]
