@@ -16,17 +16,11 @@ library(reshape2)
 library(flextable) # for displaying tables when mouse hovers over mapped data points
 # library(tidyverse)
 library(DT)
-
 # library(shinybrowser) # get browser dimension & other info
 
-# CAN THE CODE EFFICIENCY (MAP PLOTTING SPEED) BE INCREASED BY DEFINING THE
-# TOOLTIP DATA TABLE IN THE PREAMBLE? THEN R-SHINY FILTERS WILL SUBSET THIS
-# PRE-CALCULATED TABLE, RATHER THAN RECREATING THE TOOLTIP TABLE WITH EACH NEW
-# SELECTION OF FILTERING VARIABLES...
-# THIS WILL REQUIRE CASTING TO WIDE-FORM THEN MELTING BACK TO LONG-FORM...
-
-# getwd()
-setwd('~/Documents/Git Repos/CUPIDO-risk-map')
+wd_orig <- getwd()
+wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
+# setwd('~/Documents/Git Repos/CUPIDO-risk-map')
 
 # Flextable functions -----------------------------------------------------
 # Flextable is used for creating interactive displays of data, shown as tables 
@@ -129,10 +123,12 @@ fun_flextable <- function(x, longVars, singleRowVars, sampleType){
 
 # Load map shape files -----------------------------------------------------
 verbose <- FALSE
-
-# nc1 <- st_read('data/map/Antarctic coastline polygons/high res/add_coastline_high_res_polygon_v7_6.shp', quiet = !verbose)
-nc1 <- st_read('data/map/Antarctic coastline polygons/medium res/add_coastline_medium_res_polygon_v7_6.shp', quiet = !verbose)
-nc2 <- st_read('data/map/sub Antarctic coastline polygons/sub_antarctic_coastline_high_res_polygon_v1.0.shp', quiet = !verbose)
+f1 <- 'data/map/Antarctic coastline polygons/medium res/add_coastline_medium_res_polygon_v7_6.shp'
+f2 <- 'data/map/sub Antarctic coastline polygons/sub_antarctic_coastline_high_res_polygon_v1.0.shp'
+f1 <- paste(wd_base, f1, sep = '/')
+f2 <- paste(wd_base, f2, sep = '/')
+nc1 <- st_read(f1, quiet = !verbose)
+nc2 <- st_read(f2, quiet = !verbose)
 
 # Merge coastline data sets
 nc1$location = 'Antarctica'
@@ -171,7 +167,9 @@ nc$surface = factor(nc$surface, levels = unique(nc$surface))
 
 # Load ecoregion shape files -----------------------------------------------------
 # verbose = TRUE
-eco <- st_read('data/marine ecoregions/data/commondata/data0/meow_ecos_expl_clipped_expl.shp', quiet = !verbose)
+f <- 'data/marine ecoregions/data/commondata/data0/meow_ecos_expl_clipped_expl.shp'
+f <- paste(wd_base, f, sep = '/')
+eco <- st_read(f, quiet = !verbose)
 
 # Filter ecoregions by province
 keepProvinces <- c(60, 61, 48, 59, 62) # 60=Scotia Sea, 61=Continental High Antarctic, 48=Magellenic, 59=Subantarctic Islands, 62=Subantarctic New Zealand
@@ -190,8 +188,9 @@ eco <- st_crop(eco, st_bbox(eco))
 
 
 # Load shipping data  -----------------------------------------------------
-
-ship <- read.table('data/shipping/McCarthy_2022/ship activity in ecoregions_figure 3', sep = ';', header = TRUE)
+f <- 'data/shipping/McCarthy_2022/ship activity in ecoregions_figure 3'
+f <- paste(wd_base, f, sep = '/')
+ship <- read.table(f, sep = ';', header = TRUE)
 
 ship$time_total <- ship$Number.of.visits * ship$Mean.time.in.ecoregion..days.
 
@@ -203,26 +202,28 @@ ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total
 
 # Load plastic data -----------------------------------------------------
 
-filepath = 'data/plastic_quantity'
-# filename = 'plastic_quantity.csv'
+# filepath = 'data/plastic_quantity'
+# # filename = 'plastic_quantity.csv'
+# filename = 'plastic_quantity_new2.csv'
+# f <- paste(wd_base, filepath, filename, sep = '/')
+# DATA = read.csv(f, stringsAsFactors = TRUE)
+
 filename = 'plastic_quantity_new2.csv'
-DATA = read.csv(paste(filepath, filename, sep = '/'), stringsAsFactors = TRUE)
+f <- paste(wd_orig, filename, sep = '/')
+DATA = read.csv(f, stringsAsFactors = TRUE)
 
 loadTooltipFromFile <- TRUE
 saveTooltipData <- TRUE
 # Does data with tooltip variable exist?
-fw <- paste0(paste(sub('.csv', '', filename), 'tooltip', 'wide', sep = '_'), '.Rds')
-fl <- paste0(paste(sub('.csv', '', filename), 'tooltip', 'long', sep = '_'), '.Rds')
-fwp <- paste(filepath, fw, sep = '/')
-flp <- paste(filepath, fl, sep = '/')
-dat_tooltip_saved <- file.exists(fwp) & file.exists(flp)
+fw <- paste0(paste(sub('.csv', '', f), 'tooltip', 'wide', sep = '_'), '.Rds')
+fl <- paste0(paste(sub('.csv', '', f), 'tooltip', 'long', sep = '_'), '.Rds')
+dat_tooltip_saved <- file.exists(fw) & file.exists(fl)
 if(loadTooltipFromFile){
   if(dat_tooltip_saved){
-    DATA_wide <- readRDS(fwp)
-    DATA_long <- readRDS(flp)
+    DATA_wide <- readRDS(fw)
+    DATA_long <- readRDS(fl)
   }else{loadTooltipFromFile <- FALSE}
 }
-
 
 # Data pre-processing ----
 
@@ -407,12 +408,9 @@ DATA <- DATA[,names(DATA) != 'order']
 #   names(DATA)[names(DATA) == DATA_name_swap$original[i]] = DATA_name_swap$spaces[i]
 # }
 
-
-
-#############################################################################
-#~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Pre-allocate/load tooltip
-#~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Interactive tooltip showing plastic sample info as table is a code bottle-neck
 # To avoid slow map rendering, save data with tooltip variable to file.
 
@@ -481,18 +479,20 @@ if(!loadTooltipFromFile){
   DATA_long <- DATA_long[,c(dn, 'tooltip')]
   
   if(saveTooltipData){
-    fn <- paste0(paste(sub('.csv', '', filename), 'tooltip', 'wide', sep = '_'), '.Rds')
-    fp <- paste(filepath, fn, sep = '/')
-    saveRDS(DATA_wide, fp)
-    fn <- paste0(paste(sub('.csv', '', filename), 'tooltip', 'long', sep = '_'), '.Rds')
-    fp <- paste(filepath, fn, sep = '/')
-    saveRDS(DATA_long, fp)
+    fn <- paste0(paste(sub('.csv', '', f), 'tooltip', 'wide', sep = '_'), '.Rds')
+    saveRDS(DATA_wide, fn)
+    # fp <- paste(filepath, fn, sep = '/')
+    # saveRDS(DATA_wide, fp)
+    fn <- paste0(paste(sub('.csv', '', f), 'tooltip', 'long', sep = '_'), '.Rds')
+    saveRDS(DATA_long, fn)
+    # fp <- paste(filepath, fn, sep = '/')
+    # saveRDS(DATA_long, fp)
   }
   
 }
 
-
-#############################################################################
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # # Transform to correct CRS
 # dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c('Longitude', 'Latitude'), crs = crs_world)
@@ -507,9 +507,10 @@ DATA_sf = st_as_sf(DATA_wide, coords = c('Longitude', 'Latitude'), crs = crs_wor
 DATA_sf = st_transform(DATA_sf, crs_use)
 
 # Load research station data ----------------------------------------------
-filename = 'COMNAP_Antarctic_Facilities_Master.csv'
-filepath = 'data/research stations/COMNAP/'
-STATIONS = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+filename <- 'COMNAP_Antarctic_Facilities_Master.csv'
+filepath <- 'data/research stations/COMNAP'
+f <- paste(wd_base, filepath, filename, sep = '/')
+STATIONS <- read.csv(f, stringsAsFactors = TRUE)
 
 # Data pre-processing ----
 STATIONS$Type = reorder(STATIONS$Type, rep(1, nrow(STATIONS)), sum, decreasing = TRUE)
@@ -520,6 +521,7 @@ STATIONS$Type = reorder(STATIONS$Type, rep(1, nrow(STATIONS)), sum, decreasing =
 # find a way to include these...
 STATIONS$Official_Name <- gsub("'", "", STATIONS$Official_Name)
 stationTypes <- levels(STATIONS$Type)
+# STATIONS$Type <- as.character(STATIONS$Type)
 STATIONS$order <- 1:nrow(STATIONS)
 
 sl <- lapply(stationTypes, FUN = function(z){
@@ -570,10 +572,10 @@ STATIONS$y = xy[2,]
 
 
 # Load krill data ---------------------------------------------------------
-
 filename = 'krill_data_mapped.csv'
-filepath = 'MatLab/temp/'
-KRILL = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+filepath = 'MatLab/temp'
+f <- paste(wd_base, filepath, filename, sep = '/')
+KRILL = read.csv(f, stringsAsFactors = TRUE)
 
 # Data pre-processing -----------------------------------------------------
 KRILL <- KRILL[!is.nan(KRILL$value),] # omit missing data
@@ -635,10 +637,11 @@ krill_poly$colourgroup <- factor(krill_poly$colourgroup, levels = colgroup)
 # resolution.
 
 # filename = 'chl_data_mapped.csv'
-filename = 'chl_data_mapped_highRes_3x1.csv'
+filename <- 'chl_data_mapped_highRes_3x1.csv'
 # filename = 'chl_data_mapped_highRes_1x0.33.csv'
-filepath = 'MatLab/temp/'
-CHL = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+filepath <- 'MatLab/temp'
+f <- paste(wd_base, filepath, filename, sep = '/')
+CHL <- read.csv(f, stringsAsFactors = TRUE)
 
 # Data pre-processing -----------------------------------------------------
 CHL <- CHL[!is.nan(CHL$value),] # omit missing data
@@ -663,7 +666,8 @@ chl_poly$value <- CHL$value
 # Plot symbols - store in separate data frame
 # Research stations use (mostly) unfilled symbols
 pltShapes <- c(1, 0, 5, 2, 6, 19) 
-stationTypes <- levels(STATIONS$Type)
+stationTypes <- unique(STATIONS$Type)
+# stationTypes <- levels(STATIONS$Type)
 nstationTypes <- length(stationTypes)
 pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
 # Plastic samples use filled plot symbols (21:25) that differ according to sample type.
@@ -1162,18 +1166,25 @@ server <- function(input, output, session) {
   # individual change being rendered provided input changes are made quickly.
   listInputs <- debounce({
     reactive({
-      list(YearRange = input$YearRange,
-           Variable = input$Variable,
-           PlasticForm = input$PlasticForm_grouped,
-           # PlasticForm_grouped = input$PlasticForm_grouped,
-           LitterScale = input$LitterScale,
-           SampleType = input$SampleType
+      list(
+        YearRange = input$YearRange,
+        Variable = input$Variable,
+        PlasticForm = input$PlasticForm_grouped,
+        LitterScale = input$LitterScale,
+        SampleType = input$SampleType,
+        StationType = input$StationType
       )
     })
   }, 2000)
-
-  
-  # Filter plastic data according to Shiny inputs
+  # Filter data according to Shiny inputs...
+  # Research station data
+  filtered_station_data <- reactive({
+    x <- listInputs()
+    return(
+      subset(STATIONS_sf, Type %in% x$StationType)
+    )
+  })
+  # Plastic data
   filtered_plastic_data <-reactive({
     x <- listInputs()
     y <- subset(DATA_long,
@@ -1187,80 +1198,34 @@ server <- function(input, output, session) {
       list(data = y, samples = unique(y$data_id))
     )
   })
-  
-  # # Filter plastic data according to Shiny inputs
-  # filtered_plastic_data <-reactive({
-  #   x <- listInputs()
-  #   return(
-  #     subset(DATA_sf,
-  #            x$YearRange[1] <= Year & Year <= x$YearRange[2] &
-  #              Variable %in% x$Variable &
-  #              PlasticForm_grouped %in% x$PlasticForm &
-  #              LitterScale %in% x$LitterScale &
-  #              SampleType %in% x$SampleType
-  #     )
-  #   )    
-  # })
-  
   transformed_plastic_data <- reactive({
     fp <- filtered_plastic_data()
-    # d <- fp$data
-    # anyPlastic <- nrow(d) > 0
-    # if(anyPlastic){
-      y <- subset(DATA_sf, data_id %in% fp$samples)
-      return(
-        y
-      )
+    return(
+      subset(DATA_sf, data_id %in% fp$samples)
+    )
   })
   
-  # transformed_plastic_data <- reactive({
-  #   d <- filtered_plastic_data()
-  #   anyPlastic <- nrow(d) > 0
-  #   if(anyPlastic){
-  #     dn <- names(d)
-  #     # Change to wide-form -- choose variables to produce one row per data_id
-  #     dummyGroupingVariables <- c('PlasticForm_grouped')
-  #     yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format
-  #     xvars <- dn[!dn %in% c(yvars, 'Value', dummyGroupingVariables)] # everything else, apart from Value and dummy grouping variables, stays in long format
-  #     # Handle spaces in data column names
-  #     xvars_ <- grepl(' ', xvars)
-  #     xvars[xvars_] <- paste0('`', xvars[xvars_], '`')
-  #     yvars_ <- grepl(' ', yvars)
-  #     yvars[yvars_] <- paste0('`', yvars[yvars_], '`')
-  #     dat_plastic_recast <- suppressMessages(
-  #       dcast(d, list(xvars, yvars), value.var = 'Value'))
-  #     wellOrganised <- nrow(dat_plastic_recast) == length(unique(d$data_id))
-  #     if(!wellOrganised) warning('Data are not well organised! Some samples are associated with multiple rows of data: we require a single row per sample in the wide-form data set.')
-  #     # Transform to correct CRS
-  #     dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c('Longitude', 'Latitude'), crs = crs_world)
-  #     dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
-  #     xvars <- c(xvars, 'geometry')
-  #     # Define interactive tooltip using flextable...
-  #     # The yvars (now stretched into wide form) are displayed (long form) in
-  #     # tooltip. Now also choose other variables to display in a single row.
-  #     keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation') # SampleAtStation is needed to choose appropriate coordinates display
-  #     omitVars <- xvars[!xvars %in% keepVars]
-  #     temp_dat <- as.data.frame(dat_plastic_recast)[!names(dat_plastic_recast) %in% omitVars]
-  #     temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
-  #     sType <- as.character(dat_plastic_recast$SampleType) # units depend on SampleType
-  #     sType[grepl('water', sType) | grepl('marine', sType)] <- 'water'
-  #     dat_plastic_recast$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(x = temp_dat[[z]], longVars = yvars, singleRowVars = keepVars, sampleType = sType[z])) # this is time-consuming and could maybe be moved to pre-amble/saved data set...
-  #     return(
-  #       dat_plastic_recast
-  #     )
-  #   }else{
-  #     return(d)
-  #   }
+  
+  
+  # filtered_data <- reactive({
+  #   x <- listInputs()
+  #   
+  #   # Research station data
+  #   filtered_station_data <- subset(STATIONS_sf, Type %in% x$StationType)
+  #   
+  #   # Plastic data
+  #   filtered_plastic_data <- subset(DATA_long,
+  #                 x$YearRange[1] <= Year & Year <= x$YearRange[2] &
+  #                   Variable %in% x$Variable &
+  #                   PlasticForm_grouped %in% x$PlasticForm &
+  #                   LitterScale %in% x$LitterScale &
+  #                   SampleType %in% x$SampleType)
+  #   fsamples <- unique(filtered_plastic_data$data_id)
+  #   transformed_plastic_data <- subset(DATA_sf, data_id %in% fsamples)
+  #   return(
+  #     list(plastic_long = filtered_plastic_data, plastic_wide = transformed_plastic_data, stations = filtered_station_data)
+  #   )
   # })
-  
-  # Filter the research station data
-  filtered_station_data = reactive({
-      return(
-        subset(STATIONS_sf,
-               STATIONS_sf$Type %in% input$StationType
-        )
-      )
-  })
   
   # Get background type
   which_background <- reactive({
@@ -1297,16 +1262,12 @@ server <- function(input, output, session) {
   Symbols <- reactive({
     x <- listInputs()
       return(
-        subset(pltSymbols, Type %in% c(x$SampleType, input$StationType))
-        # subset(pltSymbols, Type %in% c(input$SampleType, input$StationType))
+        subset(pltSymbols, Type %in% c(x$SampleType, x$StationType))
       )
   })
   
-  # pltsymbols = subset(pltSymbols, Type %in% c(SampleTypes, as.character(pltSymbols$Type[1:6])))
-  
   # Group all data in a named list
   listData <- reactive({
-    # plastic <- filtered_plastic_data()
     plastic <- transformed_plastic_data()
     stations <- filtered_station_data()
     background <- filtered_background_dat()
@@ -1385,7 +1346,8 @@ server <- function(input, output, session) {
   })
 
   output$datatab_plastic <- renderDataTable({
-    # d <- DATA
+    # fd <- filtered_data()
+    # fp <- fd$plastic_wide
     fp <- filtered_plastic_data()
     d <- fp$data
     d <- d[d$data_id %in% selected_data(),]
@@ -1410,6 +1372,8 @@ server <- function(input, output, session) {
   })
 
   output$datatab_stations <- renderDataTable({
+    # fd <- filtered_data()
+    # d <- fd$stations
     d <- filtered_station_data()
     d <- as.data.frame(d)
     d <- d[d$Record_ID %in% selected_data(),]
