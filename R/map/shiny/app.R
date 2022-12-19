@@ -415,10 +415,11 @@ DATA <- DATA[,names(DATA) != 'order']
 # To avoid slow map rendering, save data with tooltip variable to file.
 
 if(loadTooltipFromFile){
-  dataMatched <- as.vector(DATA == DATA_long[,1:ncol(DATA)])
-  dataMatched <- all(dataMatched[!is.na(dataMatched)])
-  if(!dataMatched){
-    loadTooltipFromFile <- FALSE    
+  if(!all(dim(DATA) == dim(DATA_long) - c(0,1))) loadTooltipFromFile <- FALSE
+  if(loadTooltipFromFile){
+    dataMatched <- as.vector(DATA == DATA_long[,1:ncol(DATA)])
+    dataMatched <- all(dataMatched[!is.na(dataMatched)])
+    if(!dataMatched) loadTooltipFromFile <- FALSE
   }
 }
 
@@ -666,8 +667,8 @@ chl_poly$value <- CHL$value
 # Plot symbols - store in separate data frame
 # Research stations use (mostly) unfilled symbols
 pltShapes <- c(1, 0, 5, 2, 6, 19) 
-stationTypes <- unique(STATIONS$Type)
-# stationTypes <- levels(STATIONS$Type)
+# stationTypes <- unique(STATIONS$Type)
+stationTypes <- levels(STATIONS$Type)
 nstationTypes <- length(stationTypes)
 pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
 # Plastic samples use filled plot symbols (21:25) that differ according to sample type.
@@ -680,9 +681,31 @@ pltSymbols <- rbind(pltSymbols,
 pltSymbols$Type <- factor(pltSymbols$Type, levels = pltSymbols$Type)
 
 # Plot colours
-# Use a qualitative palette for plastic sources
+# Use a qualitative palette for plastic sources -- the default is limited to 12 colours
+ncol <- length(unique(DATA_sf$Source))
 pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
-pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
+plot(1:12,1:12, col=pltColours, pch = 19)
+if(ncol < 13){
+  pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
+}else{
+  # make new colours as gradient between existing Paired palette colours
+  ne <- ceiling({ncol - 12} / 6)
+  mc <- matrix(pltColours, 2)
+  mc <- sapply(1:6, function(z){
+    cf <- colorRampPalette(c(mc[1,z], mc[2,z]))
+    cf <- cf(ne+2)
+    cf[2:{ne+1}]
+  })
+  mc <- matrix(mc, ne, 6)
+  pltColours <- c(
+    pltColours[seq(2, 12, 2)],
+    pltColours[seq(1, 11, 2)],
+    as.vector(t(mc[seq(ne, 1, -1),]))
+    )
+  }
+
+# pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
+# pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
 sources <- levels(DATA$Source)
 nsources <- length(sources)
 pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
