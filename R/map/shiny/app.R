@@ -28,6 +28,105 @@ library(DT)
 # getwd()
 setwd('~/Documents/Git Repos/CUPIDO-risk-map')
 
+# Flextable functions -----------------------------------------------------
+# Flextable is used for creating interactive displays of data, shown as tables 
+# when the mouse is hovered over data points. The display info is stored in a
+# variable called 'tooltip'. Making flextables is code bottle-neck so it's best
+# to pre-allocate/load tooltip info.
+
+# Some nice examples, worth a look, presented here https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html
+
+# Options for flextables
+set_flextable_defaults(
+  font.size = 10,
+  font.family = 'Roboto',
+  theme_fun = 'theme_vanilla'
+)
+
+fun_flextable <- function(x, longVars, singleRowVars, sampleType){
+  # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
+  # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
+  anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
+  if(anyMeasures){
+    # Arrange data frame
+    x <-suppressMessages(melt(x, id.vars = singleRowVars)) # change to long-form
+    x <- x[!is.na(x$value),]
+    # Disentangle variables...
+    l <- strsplit(as.character(x$variable), '_')
+    y <- setNames(as.data.frame(do.call('rbind', l)), longVars)
+    x <- cbind(x, y)
+    # Create empty Value column -- this stores numeric measurement and unit
+    x$Value <- x$value
+    # Remove/compress unnecessary/redundant variables...
+    # Measurement statistics
+    if(all(c('min','max') %in% x$Statistic)){ # convert min/max into range
+      x_ <- x[x$Statistic %in% c('min', 'max'),]
+      n <- nrow(x_)
+      v <- sapply(seq(1, n, 2), function(z) paste0('[', x_$value[z], ', ', x_$value[z+1], ']'))
+      x$Value[x$Statistic == 'min'] <- v
+      x$Statistic[x$Statistic == 'min'] <- 'range'
+      x <- x[x$Statistic != 'max',]
+    }
+    if(all(c('mean','s.d.') %in% x$Statistic)){ # convert mean/s.d. into mean +- s.d.
+      x_ <- x[x$Statistic %in% c('mean', 's.d.'),]
+      n <- nrow(x_)
+      v <- sapply(seq(1, n, 2), function(z) paste0(x_$value[z], ' +- ', x_$value[z+1]))
+      x$Value[x$Statistic == 's.d.'] <- v
+      x$Statistic[x$Statistic == 's.d.'] <- 'mean +- s.d.'
+      x <- x[x$Statistic != 'mean',]
+    }
+    # Sample replicates
+    if(length(unique(x$Replicate)) == 1){
+      x <- x[,-which(names(x) == 'Replicate')]
+      longVars <- longVars[longVars != 'Replicate']}
+    # Include unit if Depth is numeric
+    depth <- suppressWarnings(as.numeric(x$Depth))
+    if(!any(is.na(depth)))
+      x$Depth <- paste(depth, 'm')
+    x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
+    n <- nrow(x)
+    x$Value <- paste(x$Value, x$Unit)
+    if(x$SampleAtStation[1]){
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
+    }else{
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
+    if(n > 1) x[singleRowVars][2:n,] <- ''
+    # Include spaces in column names
+    newnames <- sapply(1:ncol(x), function(z){
+      n <- names(x)[z]
+      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
+      c(n,m)
+    })
+    names(x) <- newnames[2,]
+    singleRowVars <- newnames[2,][newnames[1,] %in% singleRowVars]
+    longVars <- newnames[2,][newnames[1,] %in% longVars]
+    # Create flextable
+    ft <- flextable(x, col_keys = c(singleRowVars, longVars, 'Value'))
+    ft <- bold(ft, part = 'header', bold = TRUE)
+    ft <- set_table_properties(ft, layout = 'autofit')
+    as.character(htmltools_value(ft, ft.shadow = FALSE))
+  }else{
+    if(x$SampleAtStation[1]){
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
+    }else{
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
+    x <- cbind(x[singleRowVars], Measure = 'none')
+    # Include spaces in column names
+    newnames <- sapply(1:ncol(x), function(z){
+      n <- names(x)[z]
+      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
+      c(n,m)
+    })
+    names(x) <- newnames[2,]
+    # # Remove quotes from column names
+    # names(x) <- gsub('`', '', names(x))
+    ft <- flextable(x)#, 
+    ft <- bold(ft, part = 'header', bold = TRUE)
+    ft <- set_table_properties(ft, layout = 'autofit')
+    as.character(htmltools_value(ft, ft.shadow = FALSE))
+  }
+}
+
 # Load map shape files -----------------------------------------------------
 verbose <- FALSE
 
@@ -104,10 +203,26 @@ ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total
 
 # Load plastic data -----------------------------------------------------
 
+filepath = 'data/plastic_quantity'
 # filename = 'plastic_quantity.csv'
 filename = 'plastic_quantity_new2.csv'
-filepath = 'data/plastic_quantity/'
-DATA = read.csv(paste0(filepath, filename), stringsAsFactors = TRUE)
+DATA = read.csv(paste(filepath, filename, sep = '/'), stringsAsFactors = TRUE)
+
+loadTooltipFromFile <- TRUE
+saveTooltipData <- TRUE
+# Does data with tooltip variable exist?
+fw <- paste0(paste(sub('.csv', '', filename), 'tooltip', 'wide', sep = '_'), '.Rds')
+fl <- paste0(paste(sub('.csv', '', filename), 'tooltip', 'long', sep = '_'), '.Rds')
+fwp <- paste(filepath, fw, sep = '/')
+flp <- paste(filepath, fl, sep = '/')
+dat_tooltip_saved <- file.exists(fwp) & file.exists(flp)
+if(loadTooltipFromFile){
+  if(dat_tooltip_saved){
+    DATA_wide <- readRDS(fwp)
+    DATA_long <- readRDS(flp)
+  }else{loadTooltipFromFile <- FALSE}
+}
+
 
 # Data pre-processing ----
 
@@ -293,8 +408,102 @@ DATA <- DATA[,names(DATA) != 'order']
 # }
 
 
+
+#############################################################################
+#~~~~~~~~~~~~~~~~~~~~~
+# Pre-allocate/load tooltip
+#~~~~~~~~~~~~~~~~~~~~~
+# Interactive tooltip showing plastic sample info as table is a code bottle-neck
+# To avoid slow map rendering, save data with tooltip variable to file.
+
+if(loadTooltipFromFile){
+  dataMatched <- as.vector(DATA == DATA_long[,1:ncol(DATA)])
+  dataMatched <- all(dataMatched[!is.na(dataMatched)])
+  if(!dataMatched){
+    loadTooltipFromFile <- FALSE    
+  }
+}
+
+if(!loadTooltipFromFile){
+  # d <- DATA
+  dn <- names(DATA)
+  # Change to wide-form -- choose variables to produce one row per data_id
+  dummyGroupingVariables <- c('PlasticForm_grouped')
+  yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format
+  xvars <- dn[!dn %in% c(yvars, 'Value', dummyGroupingVariables)] # everything else, apart from Value and dummy grouping variables, stays in long format
+  # Handle spaces in data column names
+  xvars_ <- xvars
+  xvars_s <- grepl(' ', xvars)
+  xvars_[xvars_s] <- paste0('`', xvars_[xvars_s], '`')
+  yvars_ <- yvars
+  yvars_s <- grepl(' ', yvars)
+  yvars_[yvars_s] <- paste0('`', yvars_[yvars_s], '`')
+  DATA_wide <- suppressMessages(
+    dcast(DATA, list(xvars_, yvars_), value.var = 'Value'))
+  wellOrganised <- nrow(DATA_wide) == length(unique(DATA$data_id))
+  if(!wellOrganised) warning('Data are not well organised! Some samples are associated with multiple rows of data: we require a single row per sample in the wide-form data set.')
+  # Define interactive tooltip using flextable...
+  # The yvars (now stretched into wide form) are displayed (long form) in
+  # tooltip. Now also choose other variables to display in a single row.
+  keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation') # SampleAtStation is needed to choose appropriate coordinates display
+  omitVars <- xvars[!xvars %in% keepVars]
+  temp_dat <- as.data.frame(DATA_wide)[!names(DATA_wide) %in% omitVars]
+  temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
+  sType <- as.character(DATA_wide$SampleType) # units depend on SampleType
+  sType[grepl('water', sType) | grepl('marine', sType)] <- 'water'
+  DATA_wide$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(x = temp_dat[[z]], longVars = yvars, singleRowVars = keepVars, sampleType = sType[z])) # this is time-consuming and could maybe be moved to pre-amble/saved data set...
+  xvars <- c(xvars, 'tooltip')
+  # Melt data back to original shape
+  DATA_long <- melt(DATA_wide, id.vars = xvars, value.name = 'Value')#, na.rm = TRUE)
+  l <- strsplit(as.character(DATA_long$variable), '_')
+  dl <- setNames(as.data.frame(do.call('rbind', l)), yvars)
+  DATA_long <- subset(DATA_long, select = - variable)
+  DATA_long <- cbind(DATA_long, dl)
+  # Remove NAs
+  mv <- unique(DATA$data_id[is.na(DATA$Value)]) # samples with missing values in the data
+  j <- (DATA_long$data_id %in% mv) # index melted data with missing samples
+  ds <- DATA[DATA$data_id %in% mv, c('data_id', yvars)] # discard rows not appearing in original data
+  dms <- DATA_long[j, c('data_id', yvars)]
+  k <- sapply(1:nrow(dms), function(z){
+    x <- sapply(1:nrow(ds), function(y){
+      all(dms[z,] == ds[y,])
+    })
+    any(x)
+  })
+  j[which(j)[!k]] <- FALSE
+  j <- j | !is.na(DATA_long$Value)
+  DATA_long <- DATA_long[j,]
+  # Merge dummyGroupingVariables
+  DATA_long <- merge(DATA_long, cbind(DATA, order = 1:nrow(DATA)))
+  # Reorder
+  DATA_long <- DATA_long[order(DATA_long$order),]
+  DATA_long <- DATA_long[,names(DATA_long) != 'order']
+  DATA_long <- DATA_long[,c(dn, 'tooltip')]
+  
+  if(saveTooltipData){
+    fn <- paste0(paste(sub('.csv', '', filename), 'tooltip', 'wide', sep = '_'), '.Rds')
+    fp <- paste(filepath, fn, sep = '/')
+    saveRDS(DATA_wide, fp)
+    fn <- paste0(paste(sub('.csv', '', filename), 'tooltip', 'long', sep = '_'), '.Rds')
+    fp <- paste(filepath, fn, sep = '/')
+    saveRDS(DATA_long, fp)
+  }
+  
+}
+
+
+#############################################################################
+
+# # Transform to correct CRS
+# dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c('Longitude', 'Latitude'), crs = crs_world)
+# dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
+# xvars <- c(xvars, 'geometry')
+
+
 # Mapping coordinates
-DATA_sf = st_as_sf(DATA, coords = c('Longitude', 'Latitude'), crs = crs_world)
+# DATA_sf = st_as_sf(DATA, coords = c('Longitude', 'Latitude'), crs = crs_world)
+# DATA_sf = st_transform(DATA_sf, crs_use)
+DATA_sf = st_as_sf(DATA_wide, coords = c('Longitude', 'Latitude'), crs = crs_world)
 DATA_sf = st_transform(DATA_sf, crs_use)
 
 # Load research station data ----------------------------------------------
@@ -493,113 +702,6 @@ linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
 
 
 # Plotting function -------------------------------------------------------
-
-# Some nice examples, worth a look, presented here https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html
-
-# Options for flextables
-set_flextable_defaults(
-  font.size = 10,
-  font.family = 'Roboto',
-  theme_fun = 'theme_vanilla'
-)
-
-
-fun_flextable <- function(x, longVars, singleRowVars, sampleType){
-  # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
-  # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
-  anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
-  if(anyMeasures){
-    # Arrange data frame
-    x <-suppressMessages(melt(x, id.vars = singleRowVars)) # change to long-form
-    x <- x[!is.na(x$value),]
-    # Disentangle variables...
-    l <- strsplit(as.character(x$variable), '_')
-    y <- setNames(as.data.frame(do.call('rbind', l)), longVars)
-    x <- cbind(x, y)
-    # Create empty Value column -- this stores numeric measurement and unit
-    x$Value <- x$value
-    # Remove/compress unnecessary/redundant variables...
-    # Measurement statistics
-    if(all(c('min','max') %in% x$Statistic)){ # convert min/max into range
-      x_ <- x[x$Statistic %in% c('min', 'max'),]
-      n <- nrow(x_)
-      v <- sapply(seq(1, n, 2), function(z) paste0('[', x_$value[z], ', ', x_$value[z+1], ']'))
-      x$Value[x$Statistic == 'min'] <- v
-      x$Statistic[x$Statistic == 'min'] <- 'range'
-      x <- x[x$Statistic != 'max',]
-    }
-    if(all(c('mean','s.d.') %in% x$Statistic)){ # convert mean/s.d. into mean +- s.d.
-      x_ <- x[x$Statistic %in% c('mean', 's.d.'),]
-      n <- nrow(x_)
-      v <- sapply(seq(1, n, 2), function(z) paste0(x_$value[z], ' +- ', x_$value[z+1]))
-      # v <- sapply(seq(1, n, 2), function(z) bquote(.(x_$value[z]) %+-% .(x_$value[z+1])), simplify = 'array')
-      x$Value[x$Statistic == 's.d.'] <- v
-      x$Statistic[x$Statistic == 's.d.'] <- 'mean +- s.d.'
-      # x$Statistic[x$Statistic == 's.d.'] <- sapply(1:{n/2}, function(...) bquote('mean' %+-% 's.d.'))
-      x <- x[x$Statistic != 'mean',]
-    }
-    # Sample replicates
-    if(length(unique(x$Replicate)) == 1){
-      x <- x[,-which(names(x) == 'Replicate')]
-      longVars <- longVars[longVars != 'Replicate']}
-    # Include unit if Depth is numeric
-    depth <- suppressWarnings(as.numeric(x$Depth))
-    if(!any(is.na(depth)))
-      x$Depth <- paste(depth, 'm')
-    x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
-    # Identify correct unit and create Value column
-    # pu <- pu[pu$SampleType == sampleType,]
-    # w <- outer(pu$Variable, x$Measure, '==')
-    n <- nrow(x)
-    # x$Value <- sapply(1:n, function(z) paste(x$Value[z], pu$Unit[w[,z]]))
-    x$Value <- paste(x$Value, x$Unit)
-    if(x$SampleAtStation[1]){
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
-    }else{
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
-    if(n > 1) x[singleRowVars][2:n,] <- ''
-    
-    # Include spaces in column names
-    newnames <- sapply(1:ncol(x), function(z){
-      n <- names(x)[z]
-      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
-      c(n,m)
-    })
-    names(x) <- newnames[2,]
-    singleRowVars <- newnames[2,][newnames[1,] %in% singleRowVars]
-    longVars <- newnames[2,][newnames[1,] %in% longVars]
-    # # Remove quotes from column names
-    # names(x) <- gsub('`', '', names(x))
-    # singleRowVars <- gsub('`', '', singleRowVars)
-    # longVars <- gsub('`', '', longVars)
-    
-    # Create flextable
-    ft <- flextable(x, col_keys = c(singleRowVars, longVars, 'Value'))#, 
-    # ft <- flextable(x, col_keys = c(singleRowVars, 'Plastic type', 'Measure', 'Value'))#, 
-    ft <- bold(ft, part = 'header', bold = TRUE)
-    ft <- set_table_properties(ft, layout = 'autofit')
-    as.character(htmltools_value(ft, ft.shadow = FALSE))
-  }else{
-    if(x$SampleAtStation[1]){
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
-    }else{
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
-    x <- cbind(x[singleRowVars], Measure = 'none')
-    # Include spaces in column names
-    newnames <- sapply(1:ncol(x), function(z){
-      n <- names(x)[z]
-      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
-      c(n,m)
-    })
-    names(x) <- newnames[2,]
-    # # Remove quotes from column names
-    # names(x) <- gsub('`', '', names(x))
-    ft <- flextable(x)#, 
-    ft <- bold(ft, part = 'header', bold = TRUE)
-    ft <- set_table_properties(ft, layout = 'autofit')
-    as.character(htmltools_value(ft, ft.shadow = FALSE))
-  }
-}
 
 # change function structure -- better efficiency, avoids errors...
 make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, components = 'all', ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75){#, pu = plastic_units){
@@ -920,8 +1022,8 @@ ui <- fluidPage(
            wellPanel(
              # Input: year range
              sliderInput('YearRange', 'Years:',
-                         min = min(DATA$Year, na.rm = TRUE) , max = max(DATA$Year, na.rm = TRUE),
-                         value = range(DATA$Year, na.rm = TRUE), step = 1, sep = ''),
+                         min = min(DATA_sf$Year, na.rm = TRUE) , max = max(DATA_sf$Year, na.rm = TRUE),
+                         value = range(DATA_long$Year, na.rm = TRUE), step = 1, sep = ''),
              
              # Input: measurement variable
              selectInput('Variable', 'Measurement:',
@@ -1074,57 +1176,82 @@ server <- function(input, output, session) {
   # Filter plastic data according to Shiny inputs
   filtered_plastic_data <-reactive({
     x <- listInputs()
+    y <- subset(DATA_long,
+                x$YearRange[1] <= Year & Year <= x$YearRange[2] &
+                  Variable %in% x$Variable &
+                  PlasticForm_grouped %in% x$PlasticForm &
+                  LitterScale %in% x$LitterScale &
+                  SampleType %in% x$SampleType
+    )
     return(
-      subset(DATA,
-             x$YearRange[1] <= Year & Year <= x$YearRange[2] &
-               Variable %in% x$Variable &
-               PlasticForm_grouped %in% x$PlasticForm &
-               LitterScale %in% x$LitterScale &
-               SampleType %in% x$SampleType
-      )
-    )    
+      list(data = y, samples = unique(y$data_id))
+    )
   })
   
-
+  # # Filter plastic data according to Shiny inputs
+  # filtered_plastic_data <-reactive({
+  #   x <- listInputs()
+  #   return(
+  #     subset(DATA_sf,
+  #            x$YearRange[1] <= Year & Year <= x$YearRange[2] &
+  #              Variable %in% x$Variable &
+  #              PlasticForm_grouped %in% x$PlasticForm &
+  #              LitterScale %in% x$LitterScale &
+  #              SampleType %in% x$SampleType
+  #     )
+  #   )    
+  # })
+  
   transformed_plastic_data <- reactive({
-    d <- filtered_plastic_data()
-    anyPlastic <- nrow(d) > 0
-    if(anyPlastic){
-      dn <- names(d)
-      # Change to wide-form -- choose variables to produce one row per data_id
-      dummyGroupingVariables <- c('PlasticForm_grouped')
-      yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format
-      xvars <- dn[!dn %in% c(yvars, 'Value', dummyGroupingVariables)] # everything else, apart from Value and dummy grouping variables, stays in long format
-      # Handle spaces in data column names
-      xvars_ <- grepl(' ', xvars)
-      xvars[xvars_] <- paste0('`', xvars[xvars_], '`')
-      yvars_ <- grepl(' ', yvars)
-      yvars[yvars_] <- paste0('`', yvars[yvars_], '`')
-      dat_plastic_recast <- suppressMessages(
-        dcast(d, list(xvars, yvars), value.var = 'Value'))
-      wellOrganised <- nrow(dat_plastic_recast) == length(unique(d$data_id))
-      if(!wellOrganised) warning('Data are not well organised! Some samples are associated with multiple rows of data: we require a single row per sample in the wide-form data set.')
-      # Transform to correct CRS
-      dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c('Longitude', 'Latitude'), crs = crs_world)
-      dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
-      xvars <- c(xvars, 'geometry')
-      # Define interactive tooltip using flextable...
-      # The yvars (now stretched into wide form) are displayed (long form) in
-      # tooltip. Now also choose other variables to display in a single row.
-      keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation') # SampleAtStation is needed to choose appropriate coordinates display
-      omitVars <- xvars[!xvars %in% keepVars]
-      temp_dat <- as.data.frame(dat_plastic_recast)[!names(dat_plastic_recast) %in% omitVars]
-      temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
-      sType <- as.character(dat_plastic_recast$SampleType) # units depend on SampleType
-      sType[grepl('water', sType) | grepl('marine', sType)] <- 'water'
-      dat_plastic_recast$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(x = temp_dat[[z]], longVars = yvars, singleRowVars = keepVars, sampleType = sType[z])) # this is time-consuming and could maybe be moved to pre-amble/saved data set...
+    fp <- filtered_plastic_data()
+    # d <- fp$data
+    # anyPlastic <- nrow(d) > 0
+    # if(anyPlastic){
+      y <- subset(DATA_sf, data_id %in% fp$samples)
       return(
-        dat_plastic_recast
+        y
       )
-    }else{
-      return(d)
-    }
   })
+  
+  # transformed_plastic_data <- reactive({
+  #   d <- filtered_plastic_data()
+  #   anyPlastic <- nrow(d) > 0
+  #   if(anyPlastic){
+  #     dn <- names(d)
+  #     # Change to wide-form -- choose variables to produce one row per data_id
+  #     dummyGroupingVariables <- c('PlasticForm_grouped')
+  #     yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format
+  #     xvars <- dn[!dn %in% c(yvars, 'Value', dummyGroupingVariables)] # everything else, apart from Value and dummy grouping variables, stays in long format
+  #     # Handle spaces in data column names
+  #     xvars_ <- grepl(' ', xvars)
+  #     xvars[xvars_] <- paste0('`', xvars[xvars_], '`')
+  #     yvars_ <- grepl(' ', yvars)
+  #     yvars[yvars_] <- paste0('`', yvars[yvars_], '`')
+  #     dat_plastic_recast <- suppressMessages(
+  #       dcast(d, list(xvars, yvars), value.var = 'Value'))
+  #     wellOrganised <- nrow(dat_plastic_recast) == length(unique(d$data_id))
+  #     if(!wellOrganised) warning('Data are not well organised! Some samples are associated with multiple rows of data: we require a single row per sample in the wide-form data set.')
+  #     # Transform to correct CRS
+  #     dat_plastic_recast <- st_as_sf(dat_plastic_recast, coords = c('Longitude', 'Latitude'), crs = crs_world)
+  #     dat_plastic_recast <- st_transform(dat_plastic_recast, crs_use)
+  #     xvars <- c(xvars, 'geometry')
+  #     # Define interactive tooltip using flextable...
+  #     # The yvars (now stretched into wide form) are displayed (long form) in
+  #     # tooltip. Now also choose other variables to display in a single row.
+  #     keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation') # SampleAtStation is needed to choose appropriate coordinates display
+  #     omitVars <- xvars[!xvars %in% keepVars]
+  #     temp_dat <- as.data.frame(dat_plastic_recast)[!names(dat_plastic_recast) %in% omitVars]
+  #     temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
+  #     sType <- as.character(dat_plastic_recast$SampleType) # units depend on SampleType
+  #     sType[grepl('water', sType) | grepl('marine', sType)] <- 'water'
+  #     dat_plastic_recast$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(x = temp_dat[[z]], longVars = yvars, singleRowVars = keepVars, sampleType = sType[z])) # this is time-consuming and could maybe be moved to pre-amble/saved data set...
+  #     return(
+  #       dat_plastic_recast
+  #     )
+  #   }else{
+  #     return(d)
+  #   }
+  # })
   
   # Filter the research station data
   filtered_station_data = reactive({
@@ -1259,7 +1386,8 @@ server <- function(input, output, session) {
 
   output$datatab_plastic <- renderDataTable({
     # d <- DATA
-    d <- filtered_plastic_data()
+    fp <- filtered_plastic_data()
+    d <- fp$data
     d <- d[d$data_id %in% selected_data(),]
     if(nrow(d) < 1) return(NULL)
     
