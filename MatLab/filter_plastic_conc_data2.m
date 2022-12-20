@@ -68,48 +68,70 @@ end
 % Volumetric concentration 'pieces/m^3' is most common unit for seawater 
 % samples; some data use area density 'pieces/km^2', some use mass density
 % 'g/km^2'.
-varOpts_water = {'concentration', 'massConcentration', 'density', 'massDensity'}; %, 'all'}; % filtering options
-varOpts_sediment = {'concentration', 'density'};
+varOpts_water = {'concentration', 'massConcentration', 'density', 'massDensity', 'presence/absence'}; %, 'all'}; % filtering options
+varOpts_sediment = {'concentration', 'density', 'presence/absence'};
+varOpts_air = {'presence/absence'};
+varOpts_ice = {'presence/absence'};
 
 Units.water.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
 Units.water.massConcentration = {'g/m3'};
 Units.water.density = {'pieces/km2', 'items/km2', 'number/km2'};
 Units.water.massDensity = {'g/km2'};
+Units.water.presence = {'none'};
 
 Units.sediment.concentration = {'pieces/g'};
 Units.sediment.density = {'pieces/m2'};
+Units.sediment.presence = {'none'};
+
+Units.air.presence = {'none'};
+Units.ice.presence = {'none'};
 
 Units_water = struct2cell(Units.water);
 useUnit_water = cellfun(@(z) z(1), Units_water);
 Units_sediment = struct2cell(Units.sediment);
 useUnit_sediment = cellfun(@(z) z(1), Units_sediment);
+Units_air = struct2cell(Units.air);
+useUnit_air = cellfun(@(z) z(1), Units_air);
+Units_ice = struct2cell(Units.ice);
+useUnit_ice = cellfun(@(z) z(1), Units_ice);
 
 % Standardise Variable column and omit rows with with units not listed in
 % Units -- unwanted Variable
 for i = 1:nsources
     source = sources{i};
-    sampleType = sampleTypes.(source);
-    if contains(sampleType, 'water')
-        Units_ = Units_water;
-        useUnit = useUnit_water;
-        varOpts = varOpts_water;
-    end
-    if contains(sampleType, 'sediment')
-        Units_ = Units_sediment;
-        useUnit = useUnit_sediment;
-        varOpts = varOpts_sediment;
-    end
-%     d = DATbySource(source);
     I = find(source_ind(source_ref, source));
     n = length(I);
-    for j = n:-1:1
-        k = cellfun(@(z) ismember(DAT.Unit{I(j)}, z), Units_);
-        if any(k)
-            DAT.Variable(I(j)) = varOpts(k);
-            DAT.Unit(I(j)) = useUnit(k);
-        else
-            DAT.Variable(I(j)) = {''};
+    for j = 1:n
+        d = DAT(I(j),:);
+        sampleType = d.SampleType;
+        if contains(sampleType, 'water')
+            Units_ = Units_water;
+            useUnit = useUnit_water;
+            varOpts = varOpts_water;
         end
+        if contains(sampleType, 'sediment')
+            Units_ = Units_sediment;
+            useUnit = useUnit_sediment;
+            varOpts = varOpts_sediment;
+        end
+        if contains(sampleType, 'ice')
+            Units_ = Units_ice;
+            useUnit = useUnit_ice;
+            varOpts = varOpts_ice;
+        end
+        if contains(sampleType, 'air')
+            Units_ = Units_air;
+            useUnit = useUnit_air;
+            varOpts = varOpts_air;
+        end
+        k = cellfun(@(z) ismember(d.Unit, z), Units_);
+        if any(k)
+            d.Variable = varOpts(k);
+            d.Unit = useUnit(k);
+        else
+            d.Variable = {''};
+        end
+        DAT(I(j),:) = d;
     end
     DAT(strcmp(DAT.Variable, ''),:) = []; % omit unwanted rows
     source_ref = make_source_ref(DAT);
@@ -153,21 +175,27 @@ for i = 1:nsources
     d.SampleGear = strrep(d.SampleGear, 'Open ocean', 'open ocean');
     
     % SampleID -- set as numeric counter starting 1
-    j = d.SampleAtStation; % some data sources contain sample stations and longer tows, these get separate SampleID lists
-    x = d(:,'SampleID');
-    % samples at fixed stations
-    SampleID = unique(x.SampleID(j), 'stable');
-    nx = length(SampleID);
-    SampleID_new = (1:nx)';
-    ux1 = table(SampleID, SampleID_new);
-    % samples from longer tows
-    SampleID = unique(x.SampleID(~j), 'stable');
-    nx = length(SampleID);
-    SampleID_new = (1:nx)';
-    ux2 = table(SampleID, SampleID_new);
-    ux = [ux1; ux2];
-    x = join(x, ux);
-    d.SampleID = cellstr(num2str(x.SampleID_new));
+    st = unique(d.SampleType);
+    for ii = 1:length(st)
+        k = strcmp(d.SampleType, st(ii));
+        dd = d(k,:);
+        j = dd.SampleAtStation; % some data sources contain sample stations and longer tows, these get separate SampleID lists
+        x = dd(:,'SampleID');
+        % samples at fixed stations
+        SampleID = unique(x.SampleID(j), 'stable');
+        nx = length(SampleID);
+        SampleID_new = (1:nx)';
+        ux1 = table(SampleID, SampleID_new);
+        % samples from longer tows
+        SampleID = unique(x.SampleID(~j), 'stable');
+        nx = length(SampleID);
+        SampleID_new = (1:nx)';
+        ux2 = table(SampleID, SampleID_new);
+        ux = [ux1; ux2];
+        x = join(x, ux);
+        dd.SampleID = cellstr(num2str(x.SampleID_new));
+        d(k,:) = dd;
+    end
 
     % Longitude
     % Measure as degrees east [-180,180]

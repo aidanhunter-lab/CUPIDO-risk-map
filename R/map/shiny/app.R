@@ -37,6 +37,14 @@ set_flextable_defaults(
   theme_fun = 'theme_vanilla'
 )
 
+# DATA_wide$tooltip <- sapply(1:length(temp_dat), function(z) fun_flextable(x = temp_dat[[z]], longVars = yvars, singleRowVars = keepVars, sampleType = sType[z])) # this is time-consuming and could maybe be moved to pre-amble/saved data set...
+# z = which(DATA_wide$data_id == 'sample 1')
+# z = which(DATA_wide$data_id == 'sample 224')
+# x = temp_dat[[z]]
+# longVars = yvars
+# singleRowVars = keepVars
+# sampleType = sType[z]
+
 fun_flextable <- function(x, longVars, singleRowVars, sampleType){
   # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
   # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
@@ -47,6 +55,8 @@ fun_flextable <- function(x, longVars, singleRowVars, sampleType){
     x <- x[!is.na(x$value),]
     # Disentangle variables...
     l <- strsplit(as.character(x$variable), '_')
+    # y <- as.data.frame(do.call('rbind', l))
+    # names(y) <- longVars[1:ncol(y)]
     y <- setNames(as.data.frame(do.call('rbind', l)), longVars)
     x <- cbind(x, y)
     # Create empty Value column -- this stores numeric measurement and unit
@@ -69,6 +79,8 @@ fun_flextable <- function(x, longVars, singleRowVars, sampleType){
       x$Statistic[x$Statistic == 's.d.'] <- 'mean +- s.d.'
       x <- x[x$Statistic != 'mean',]
     }
+    if(any(x$Statistic == 'none')){
+      longVars <- longVars[longVars != 'Statistic']}
     # Sample replicates
     if(length(unique(x$Replicate)) == 1){
       x <- x[,-which(names(x) == 'Replicate')]
@@ -79,11 +91,18 @@ fun_flextable <- function(x, longVars, singleRowVars, sampleType){
       x$Depth <- paste(depth, 'm')
     x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
     n <- nrow(x)
-    x$Value <- paste(x$Value, x$Unit)
     if(x$SampleAtStation[1]){
       singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
     }else{
       singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
+    if(any(x$Unit == 'none')){
+      longVars <- longVars[longVars != 'Unit']}
+    if(any(x$Value == -Inf)){
+      x$Value <- x$Observation
+    }else{
+      x$Value <- paste(x$Value, x$Unit)}
+    singleRowVars <- singleRowVars[singleRowVars != 'Observation']
+
     if(n > 1) x[singleRowVars][2:n,] <- ''
     # Include spaces in column names
     newnames <- sapply(1:ncol(x), function(z){
@@ -99,11 +118,14 @@ fun_flextable <- function(x, longVars, singleRowVars, sampleType){
     ft <- bold(ft, part = 'header', bold = TRUE)
     ft <- set_table_properties(ft, layout = 'autofit')
     as.character(htmltools_value(ft, ft.shadow = FALSE))
+    
   }else{
+    
     if(x$SampleAtStation[1]){
       singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
     }else{
       singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
+    if(!any(x$Observation != '')) singleRowVars <- singleRowVars[singleRowVars != 'Observation']
     x <- cbind(x[singleRowVars], Measure = 'none')
     # Include spaces in column names
     newnames <- sapply(1:ncol(x), function(z){
@@ -208,7 +230,7 @@ ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total
 # f <- paste(wd_base, filepath, filename, sep = '/')
 # DATA = read.csv(f, stringsAsFactors = TRUE)
 
-filename = 'plastic_quantity_new2.csv'
+filename = 'plastic_quantity_new3.csv'
 f <- paste(wd_orig, filename, sep = '/')
 DATA = read.csv(f, stringsAsFactors = TRUE)
 
@@ -313,7 +335,7 @@ DATA$`Coordinates (end)`[notAtStation] <- coord_lab2[notAtStation]
 DATA$Variable <- as.character(DATA$Variable)
 DATA$Variable[DATA$Variable == 'massDensity'] <- 'mass density'
 DATA$Variable[DATA$Variable == 'massConcentration'] <- 'mass concentration'
-DATA$Variable <- factor(DATA$Variable, levels = c('concentration', 'density', 'mass concentration', 'mass density'))
+DATA$Variable <- factor(DATA$Variable, levels = c('concentration', 'density', 'mass concentration', 'mass density', 'presence/absence'))
 
 
 # plastic_units <- unique(DATA[,c('Variable','Unit')])
@@ -383,11 +405,15 @@ DATA <- subset(DATA, LitterCategory == 'plastic')
 # Measurement statistic
 DATA$Statistic <- as.character(DATA$Statistic)
 DATA$Statistic[DATA$Statistic == 'stddev'] = 's.d.'
-DATA$Statistic <- factor(DATA$Statistic, levels = c('raw','mean','s.d.','min','max'))
+DATA$Statistic <- factor(DATA$Statistic, levels = c('raw','mean','s.d.','min','max','none'))
 
+# Set non-numeric Values to -Inf to distinguish them from NAs -- this for presence/absence data
+DATA$Value[is.na(DATA$Value) & DATA$Observation != ''] <- -Inf
+
+#DATA$Observation <- as.character(DATA$Observation)
 
 # Order the data
-DATA <- DATA[order(DATA$Source, DATA$SampleID, DATA$LitterScale, DATA$PlasticSize, 
+DATA <- DATA[order(DATA$Source, DATA$SampleType, DATA$SampleID, DATA$LitterScale, DATA$PlasticSize, 
                    DATA$PlasticForm, DATA$Variable, DATA$Statistic, DATA$Replicate),]
 # DATA <- DATA[order(DATA$Source, DATA$SampleID, DATA$`Litter scale`, DATA$`Plastic size`, 
 #                    DATA$`Plastic form`, DATA$Variable, DATA$Statistic, DATA$Replicate),]
@@ -397,7 +423,7 @@ DATA <- DATA[order(DATA$Source, DATA$SampleID, DATA$LitterScale, DATA$PlasticSiz
 # Include a data_id variable unique to each sample
 #head(DATA)
 DATA$order <- 1:nrow(DATA)
-d <- unique(DATA[c('Source', 'SampleAtStation',  'SampleID')])
+d <- unique(DATA[c('Source', 'SampleType', 'SampleAtStation',  'SampleID')])
 d$data_id <- paste('sample', 1:nrow(d))
 
 DATA <- merge(DATA, d, sort = FALSE)
@@ -444,7 +470,7 @@ if(!loadTooltipFromFile){
   # Define interactive tooltip using flextable...
   # The yvars (now stretched into wide form) are displayed (long form) in
   # tooltip. Now also choose other variables to display in a single row.
-  keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation') # SampleAtStation is needed to choose appropriate coordinates display
+  keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation', 'Observation') # SampleAtStation and Observation are needed to choose appropriate coordinates display
   omitVars <- xvars[!xvars %in% keepVars]
   temp_dat <- as.data.frame(DATA_wide)[!names(DATA_wide) %in% omitVars]
   temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
@@ -464,10 +490,10 @@ if(!loadTooltipFromFile){
   ds <- DATA[DATA$data_id %in% mv, c('data_id', yvars)] # discard rows not appearing in original data
   dms <- DATA_long[j, c('data_id', yvars)]
   k <- sapply(1:nrow(dms), function(z){
-    x <- sapply(1:nrow(ds), function(y){
-      all(dms[z,] == ds[y,])
-    })
-    any(x)
+    m1 <- as.matrix(ds)
+    m2 <- as.matrix(dms[z,])[rep(1, nrow(m1)),]
+    t <- m1 == m2
+    any(apply(t, 1, all))
   })
   j[which(j)[!k]] <- FALSE
   j <- j | !is.na(DATA_long$Value)
@@ -684,7 +710,7 @@ pltSymbols$Type <- factor(pltSymbols$Type, levels = pltSymbols$Type)
 # Use a qualitative palette for plastic sources -- the default is limited to 12 colours
 ncol <- length(unique(DATA_sf$Source))
 pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
-plot(1:12,1:12, col=pltColours, pch = 19)
+# plot(1:12,1:12, col=pltColours, pch = 19)
 if(ncol < 13){
   pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
 }else{
@@ -1057,8 +1083,9 @@ ui <- fluidPage(
                          c('Concentration (pieces/m3)' = 'concentration',
                            'Mass concentration (g/m3)' = 'mass concentration',
                            'Density (pieces/km2)' = 'density',
-                           'Mass density (g/km2)' = 'mass density'),
-                         multiple = TRUE, selected = c('concentration', 'mass concentration', 'density', 'mass density')),
+                           'Mass density (g/km2)' = 'mass density',
+                           'Presence/absence' = 'presence/absence'),
+                         multiple = TRUE, selected = c('concentration', 'mass concentration', 'density', 'mass density', 'presence/absence')),
              
              # Input: plastic type
              selectInput('PlasticForm_grouped', 'Plastic form:',

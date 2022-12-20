@@ -59,6 +59,8 @@ columnDescriptions.Value           = 'Numeric measurement value';
 columnTypes.Value                  = 'double';
 columnDescriptions.Unit            = 'Measurement unit corresponding to Value column -- use SI units';
 columnTypes.Unit                   = 'cellstr';
+columnDescriptions.Observation     = 'Additional comments -- store text descriptions of Value here, e.g., presence/absence data';
+columnTypes.Observation            = 'cellstr';
 
 allColumns = fieldnames(columnDescriptions);
 
@@ -141,6 +143,7 @@ dat_tot.Latitude_end = nan(hd, 1);
 dat_tot.Variable = repmat({'concentration'}, hd, 1);
 dat_tot.Statistic = dat_tot.Measure;
 dat_tot.Replicate = ones(hd, 1);
+dat_tot.Observation = cell(hd, 1); dat_tot.Observation(:) = {''};
 
 dat_tot = dat_tot(:,allColumns);
 
@@ -204,6 +207,7 @@ abundance.Longitude_end = nan(hd, 1);
 abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -289,6 +293,7 @@ abundance.Longitude_end = nan(hd, 1);
 abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -413,6 +418,7 @@ abundance.Longitude_end = nan(hd, 1);
 abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -501,6 +507,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = abundance.Stat;
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -574,6 +581,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -630,6 +638,7 @@ abundance.Latitude_end = nan(hd, 1);
 % abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -696,6 +705,8 @@ dat = movevars(dat, 'SampleType', 'Before', 'Station');
 dat.Variable(strcmp(dat.Unit, 'g/km2')) = {'massDensity'};
 dat.Variable(strcmp(dat.Unit, 'pieces/km2')) = {'density'};
 
+dat.Date = repmat(datetime({'01-Jan-2011', '31-Dec-2013'}), height(dat), 1);
+
 abundance = dat;
 
 hd = height(abundance);
@@ -710,7 +721,7 @@ abundance.SampleAtStation = true(hd, 1);
 abundance.Site = abundance.Location;
 abundance.SiteCategory = cell(hd, 1); abundance.SiteCategory(:) = {''};
 abundance.SampleID = cellstr(num2str(abundance.Station));
-abundance.Date = NaT(hd, 2); % IMPORTANT: FIND THE DATE FOR THESE SAMPLES
+% abundance.Date = NaT(hd, 2); % IMPORTANT: FIND THE DATE FOR THESE SAMPLES
 abundance.Longitude_start = nan(hd, 1);
 abundance.Latitude_start = nan(hd, 1);
 abundance.Longitude_end = nan(hd, 1);
@@ -718,6 +729,7 @@ abundance.Latitude_end = nan(hd, 1);
 % abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -779,6 +791,7 @@ abundance.Latitude_end = nan(hd, 1);
 % abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -880,6 +893,7 @@ abundance.Depth = abundance.Depth_m;
 % abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 % abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -971,6 +985,7 @@ abundance.Depth = abundance.Depth_m;
 % abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = abundance.Stat;
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -983,6 +998,7 @@ Data.Munari_2017 = Munari_2017;
 
 
 %% Suaria 2020
+
 
 source = 'Suaria_2020';
 filepath = fullfile(dataDirectory, source);
@@ -1144,6 +1160,7 @@ abundance.Date = [abundance.Date, NaT(hd, 1)];
 % abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = abundance.Measure;
 abundance.Replicate = ones(hd, 1);
+abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
 
 abundance = abundance(:,allColumns);
 
@@ -1154,6 +1171,111 @@ Suaria_2020.colour = mp_cat;
 Suaria_2020.size = mp_size;
 
 Data.Suaria_2020 = Suaria_2020;
+
+
+
+%% Cunningham 2022
+
+% Presence/absence data => no numeric values
+
+source = 'Cunningham_2022';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'raw data table S1.csv';
+raw = readtable(fullfile(filepath, filename));
+
+filename = 'air samples table S2.csv';
+air = readtable(fullfile(filepath, filename));
+
+filename = 'water samples table S3.csv';
+water = readtable(fullfile(filepath, filename));
+
+filename = 'sediment samples table S4.csv';
+sediment = readtable(fullfile(filepath, filename));
+
+filename = 'sea ice samples table S5.csv';
+ice = readtable(fullfile(filepath, filename));
+
+air.SampleType = cell(height(air), 1); air.SampleType(:) = {'air'};
+water.SampleType = cell(height(water), 1); water.SampleType(:) = {'seawater'};
+sediment.SampleType = cell(height(sediment), 1); sediment.SampleType(:) = {'sediment'};
+ice.SampleType = cell(height(ice), 1); ice.SampleType(:) = {'ice'};
+
+air.SampleID = air.FilterID;
+water.SampleID = water.StationID;
+sediment.SampleID = sediment.StationID;
+ice.SampleID = ice.CoreID;
+
+air.Date = [air.DeploymentDate, air.CollectionDate];
+water.Date = [water.Date, NaT(height(water),1)];
+sediment.Date = repmat(reshape(...
+    datetime([2018 12 8; 2019 3 14], 'Format', 'yyyy-MM-dd'), 1, []), ...
+    height(sediment), 1);
+ice.Date = [ice.Date, NaT(height(ice), 1)];
+
+air.Depth = cell(height(air), 1); air.Depth(:) = {'NA'};
+water.Depth = cell(height(water), 1); water.Depth(:) = {'subsurface'};
+sediment.Depth = cellstr(num2str(sediment.Depth_m_));
+ice.Depth = cell(height(ice), 1); ice.Depth(:) = {'NA'};
+
+air.Longitude_start = -air.Longitude_W_Start;
+air.Longitude_end = -air.Longitude_W_End;
+air.Latitude_start = -air.Latitude_S_Start;
+air.Latitude_end = -air.Latitude_S_End;
+air.Longitude = 0.5 .* (air.Longitude_start + air.Longitude_end);
+air.Latitude = 0.5 .* (air.Latitude_start + air.Latitude_end);
+
+water.Longitude = -water.Longitude_W_;
+water.Latitude = -water.Latitude_S_;
+water.Longitude_start = nan(height(water), 1); water.Longitude_end = nan(height(water), 1);
+water.Latitude_start = nan(height(water), 1); water.Latitude_end = nan(height(water), 1);
+
+sediment.Longitude = -sediment.Longitude_W_;
+sediment.Latitude = -sediment.Latitude_S_;
+sediment.Longitude_start = nan(height(sediment), 1); sediment.Longitude_end = nan(height(sediment), 1);
+sediment.Latitude_start = nan(height(sediment), 1); sediment.Latitude_end = nan(height(sediment), 1);
+
+ice.Longitude = -ice.Longitude_W_;
+ice.Latitude = -ice.Latitude_S_;
+ice.Longitude_start = nan(height(ice), 1); ice.Longitude_end = nan(height(ice), 1);
+ice.Latitude_start = nan(height(ice), 1); ice.Latitude_end = nan(height(ice), 1);
+
+water.Site = cell(height(water), 1); water.Site(:) = {''};
+air.Site = cell(height(air), 1); air.Site(:) = {''};
+ice.Site = cell(height(ice), 1); ice.Site(:) = {''};
+sediment.Site = sediment.Location;
+
+% combine data sets
+getVars = {'SampleType', 'Site', 'SampleID', 'Date', 'Longitude', 'Latitude', ...
+    'Longitude_start', 'Latitude_start', 'Longitude_end', 'Latitude_end', ...
+    'Depth'};
+dat = [water(:,getVars); air(:,getVars); ice(:,getVars); sediment(:,getVars)];
+
+hd = height(dat);
+dat.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
+dat.SampleGear = cell(hd, 1); dat.SampleGear(:) = {''};
+dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {''};
+dat.LitterCategory = repmat({'plastic'}, hd, 1);
+dat.LitterScale = cell(hd, 1); dat.LitterScale(:) = {''};
+dat.PlasticForm = cell(hd, 1); dat.PlasticForm(:) = {'fibre'};
+dat.PlasticSize = cell(hd, 1); dat.PlasticSize(:) = {''};
+dat.SampleAtStation = isnan(dat.Longitude_start);
+dat.SiteCategory = cell(hd, 1); dat.SiteCategory(:) = {''};
+dat.Variable = cell(hd, 1); dat.Variable(:) = {'presence/absence'};
+dat.Statistic = cell(hd, 1); dat.Statistic(:) = {'none'};
+dat.Replicate = ones(hd, 1);
+dat.Value = nan(hd, 1);
+dat.Unit = cell(hd, 1); dat.Unit(:) = {'none'};
+dat.Observation = cell(hd, 1); dat.Observation(:) = {'present'};
+
+dat = dat(:,allColumns);
+
+Cunningham_2022.abundance = dat;
+Cunningham_2022.raw = raw;
+
+Data.Cunningham_2022 = Cunningham_2022;
+
+
 
 
 %% Combine abundance tables
