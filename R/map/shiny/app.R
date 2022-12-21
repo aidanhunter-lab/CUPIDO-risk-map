@@ -85,10 +85,15 @@ fun_flextable <- function(x, longVars, singleRowVars, sampleType){
     if(length(unique(x$Replicate)) == 1){
       x <- x[,-which(names(x) == 'Replicate')]
       longVars <- longVars[longVars != 'Replicate']}
-    # Include unit if Depth is numeric
-    depth <- suppressWarnings(as.numeric(x$Depth))
-    if(!any(is.na(depth)))
-      x$Depth <- paste(depth, 'm')
+    # Depth
+    if(x$Depth[1] == ''){
+      singleRowVars <- singleRowVars[!singleRowVars == 'Depth']
+    }else{
+      # Include unit if Depth is numeric
+      depth <- suppressWarnings(as.numeric(x$Depth))
+      if(!any(is.na(depth)))
+        x$Depth <- paste(depth, 'm')
+    }
     x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
     n <- nrow(x)
     if(x$SampleAtStation[1]){
@@ -280,17 +285,35 @@ DATA$Year = as.integer(substr(DATA$Date_1, 1, 4))
 s <- as.character(DATA$SampleType)
 marine <- s == 'seawater'
 DATA$Depth <- as.character(DATA$Depth)
+DATA$Depth[DATA$Depth == 'na'] <- ''
+# DATA$Depth[DATA$Depth == ''] <- NA
+
 dep <- DATA$Depth
-surf <- dep %in% c('5m','<1m', '5 m', '<1 m', 'surface') | suppressWarnings(as.numeric(dep) <= 5)
-subsurf <- dep %in% c('subsurface')  | suppressWarnings(as.numeric(dep) > 5)
+surf <- suppressWarnings(as.numeric(dep) <= 5)
+surf[is.na(surf)] <- FALSE
+surf <- surf | dep %in% c('5m','<1m', '5 m', '<1 m', 'surface')
+subsurf <- suppressWarnings(as.numeric(dep) > 5)
+subsurf[is.na(subsurf)] <- FALSE
+subsurf <- subsurf | dep %in% c('subsurface')
 surf <- marine & surf
 subsurf <- marine & subsurf
-surf[is.na(surf)] <- FALSE
-subsurf[is.na(subsurf)] <- FALSE
 s[surf] <- 'marine surface'
 s[subsurf] <- 'marine subsurface'
 DATA$SampleType <- factor(s, levels = unique(s))
 
+# Make a dummy grouping variable for SampleType
+allSampleTypes <- unique(DATA$SampleType)
+seawater <- allSampleTypes[grepl('sea', allSampleTypes) | grepl('marine', allSampleTypes)]
+freshwater <- allSampleTypes[grepl('fresh', allSampleTypes) | grepl('waste', allSampleTypes)]
+sediment <- allSampleTypes[grepl('sediment', allSampleTypes)]
+air <- allSampleTypes[grepl('air', allSampleTypes)]
+ice <- allSampleTypes[grepl('ice', allSampleTypes)]
+DATA$SampleType_grouped[DATA$SampleType %in% seawater] <- 'seawater'
+DATA$SampleType_grouped[DATA$SampleType %in% freshwater] <- 'freshwater/wastewater'
+DATA$SampleType_grouped[DATA$SampleType %in% sediment] <- 'sediment'
+DATA$SampleType_grouped[DATA$SampleType %in% air] <- 'air'
+DATA$SampleType_grouped[DATA$SampleType %in% ice] <- 'ice'
+DATA$SampleType_grouped <- factor(DATA$SampleType_grouped, levels = c('seawater','freshwater/wastewater','sediment','ice','air'))
 
 # Reorder data sources by publication date
 sources <- levels(DATA$Source)
@@ -699,7 +722,8 @@ nstationTypes <- length(stationTypes)
 pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
 # Plastic samples use filled plot symbols (21:25) that differ according to sample type.
 pltShapes <- 21:25
-sampleTypes <- levels(DATA$SampleType)
+sampleTypes <- levels(DATA$SampleType_grouped)
+# sampleTypes <- levels(DATA$SampleType)
 # sampleTypes <- levels(DATA$'Sample type')
 nsampleTypes <- length(sampleTypes)
 pltSymbols <- rbind(pltSymbols,
@@ -756,7 +780,6 @@ linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
 
 # Plotting function -------------------------------------------------------
 
-# change function structure -- better efficiency, avoids errors...
 make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, components = 'all', ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75){#, pu = plastic_units){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
@@ -860,7 +883,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
              plt_map <- plt_map + 
                new_scale('fill') +
                geom_sf_interactive(data = dat_plastic,
-                                   aes(fill = Source, shape = SampleType, data_id = data_id, tooltip = tooltip),
+                                   aes(fill = Source, shape = SampleType_grouped, data_id = data_id, tooltip = tooltip),
                                    alpha = alpha, size = ptSize, show.legend = FALSE) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
            }
@@ -902,7 +925,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
              plt_plastic_samples <-
                ggplot() +
                geom_sf(data = dat_plastic,
-                       aes(fill = Source, shape = SampleType),
+                       aes(fill = Source, shape = SampleType_grouped),
                        alpha = 1, size = ptSize) +
                # geom_sf_interactive(data = dat_plastic,
                #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
@@ -1111,13 +1134,22 @@ ui <- fluidPage(
                          multiple = TRUE, selected = c('micro', 'micro and meso', 'meso', 'macro', 'unspecified')),
              
              # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment)
-             selectInput('SampleType', 'Sample type:',
-                         c('Sea surface' = 'marine surface',
-                           'Sea subsurface' = 'marine subsurface',
-                           'Freshwater' = 'freshwater',
-                           'Wastewater' = 'wastewater',
-                           'Sediment' = 'sediment'),
-                         multiple = TRUE, selected = c('marine surface','marine subsurface','freshwater','wastewater','sediment')),
+             selectInput('SampleType_grouped', 'Sample type:',
+                         c('Seawater' = 'seawater',
+                           'Fresh/waste water' = 'freshwater/wastewater',
+                           'Sediment' = 'sediment',
+                           'Ice' = 'ice',
+                           'Air' = 'air'),
+                         multiple = TRUE, selected = c('seawater', 'freshwater/wastewater', 'sediment', 'ice', 'air')),
+
+             # # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment)
+             # selectInput('SampleType', 'Sample type:',
+             #             c('Sea surface' = 'marine surface',
+             #               'Sea subsurface' = 'marine subsurface',
+             #               'Freshwater' = 'freshwater',
+             #               'Wastewater' = 'wastewater',
+             #               'Sediment' = 'sediment'),
+             #             multiple = TRUE, selected = c('marine surface','marine subsurface','freshwater','wastewater','sediment')),
              
              # Input: sample type (depth, for now, later extended to sub/surface-beach-sediment)
              selectInput('StationType', 'Facility:',
@@ -1221,7 +1253,7 @@ server <- function(input, output, session) {
         Variable = input$Variable,
         PlasticForm = input$PlasticForm_grouped,
         LitterScale = input$LitterScale,
-        SampleType = input$SampleType,
+        SampleType = input$SampleType_grouped,
         StationType = input$StationType
       )
     })
@@ -1242,7 +1274,7 @@ server <- function(input, output, session) {
                   Variable %in% x$Variable &
                   PlasticForm_grouped %in% x$PlasticForm &
                   LitterScale %in% x$LitterScale &
-                  SampleType %in% x$SampleType
+                  SampleType_grouped %in% x$SampleType
     )
     return(
       list(data = y, samples = unique(y$data_id))

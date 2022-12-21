@@ -1213,10 +1213,10 @@ sediment.Date = repmat(reshape(...
     height(sediment), 1);
 ice.Date = [ice.Date, NaT(height(ice), 1)];
 
-air.Depth = cell(height(air), 1); air.Depth(:) = {'NA'};
+air.Depth = cell(height(air), 1); air.Depth(:) = {''};
 water.Depth = cell(height(water), 1); water.Depth(:) = {'subsurface'};
 sediment.Depth = cellstr(num2str(sediment.Depth_m_));
-ice.Depth = cell(height(ice), 1); ice.Depth(:) = {'NA'};
+ice.Depth = cell(height(ice), 1); ice.Depth(:) = {''};
 
 air.Longitude_start = -air.Longitude_W_Start;
 air.Longitude_end = -air.Longitude_W_End;
