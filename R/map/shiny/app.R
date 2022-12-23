@@ -254,6 +254,8 @@ if(loadTooltipFromFile){
 
 # Data pre-processing ----
 
+# DATA$Url[DATA$Source == 'Cincinelli (2017)'] <- 'https://doi.org/10.1016/j.chemosphere.2017.02.024'
+
 # Include spaces in names of data for better display
 DATA_names_orig <- names(DATA)
 DATA_names_spaces <- DATA_names_orig
@@ -760,6 +762,9 @@ sources <- levels(DATA$Source)
 nsources <- length(sources)
 pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
 
+du <- unique(DATA[c('Source', 'URL')])
+pltColours <- merge(pltColours, du, by = 'Source')
+
 # Plot bounding box
 bbox_map <- st_bbox(nc)
 # st_bbox(eco)
@@ -880,13 +885,45 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
            
            # Plastic samples
            if(anyPlastic){
-             plt_map <- plt_map + 
+             plt_map <- plt_map +
                new_scale('fill') +
                geom_sf_interactive(data = dat_plastic,
                                    aes(fill = Source, shape = SampleType_grouped, data_id = data_id, tooltip = tooltip),
                                    alpha = alpha, size = ptSize, show.legend = FALSE) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
            }
+           
+           
+           # if(anyPlastic){
+           # 
+           #   plt_map <- plt_map +
+           #     new_scale('fill') +
+           #     geom_sf_interactive(data = dat_plastic,
+           #                         aes(fill = Source, shape = SampleType_grouped, data_id = data_id, tooltip = tooltip),
+           #                         alpha = alpha, size = ptSize, show.legend = FALSE) +
+           #     # scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
+           #   scale_fill_manual_interactive(
+           #     # name = label_interactive("Source", tooltip = "Url", data_id =
+           #     #                            "legend.title"),
+           #     values = setNames(pltColours$colour, pltColours$Source),
+           #     data_id = setNames(pltColours$Source, pltColours$Source),
+           #     tooltip = setNames(pltColours$Url, pltColours$Source)
+           #     # data_id = function(fill) {
+           #     #   as.character(fill)
+           #     # },
+           #     # tooltip = function(fill) {
+           #     #   as.character(fill)
+           #     # },
+           #     # labels = function(fill) {
+           #     #   lapply(fill, function(fl) {
+           #     #     label_interactive(as.character(fl),
+           #     #                       data_id = as.character(fl),
+           #     #                       tooltip = as.character(fl))
+           #     #   })
+           #     # }
+           #   )
+           # }
+
            
            plt_map <- plt_map +
              coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax']))# +
@@ -939,6 +976,46 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
            }else{
              leg_plastic <- NULL
            }
+           
+           
+           # if(anyPlastic){
+           #   symbols_ = symbols[symbols$Class == 'PlasticSample',]
+           #   plt_plastic_samples <-
+           #     ggplot() +
+           #     geom_sf(data = dat_plastic,
+           #             aes(fill = Source, shape = SampleType_grouped),
+           #             alpha = 1, size = ptSize) +
+           #     scale_fill_manual_interactive(
+           #       # name = label_interactive("Source", tooltip = "Url", data_id =
+           #       #                            "legend.title"),
+           #       values = setNames(pltColours$colour, pltColours$Source),
+           #       data_id = setNames(pltColours$Source, pltColours$Source),
+           #       tooltip = setNames(pltColours$Url, pltColours$Source)
+           #       # data_id = function(fill) {
+           #       #   as.character(fill)
+           #       # },
+           #       # tooltip = function(fill) {
+           #       #   as.character(fill)
+           #       # },
+           #       # labels = function(fill) {
+           #       #   lapply(fill, function(fl) {
+           #       #     label_interactive(as.character(fl),
+           #       #                       data_id = as.character(fl),
+           #       #                       tooltip = as.character(fl))
+           #       #   })
+           #       # }
+           #     ) +
+           #     # scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
+           #     scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
+           #     theme(legend.key = element_blank()) +
+           #     guides(shape = guide_legend(title = 'Sample type', override.aes = list(size = legPtSize)),
+           #            fill = guide_legend(override.aes = list(shape = c(21), size = legPtSize)))
+           #   leg_plastic <- get_legend(plt_plastic_samples)
+           # }else{
+           #   leg_plastic <- NULL
+           # }
+           
+           
            
            # Background
            if(anyBackground){
@@ -1214,6 +1291,7 @@ ui <- fluidPage(
     column(width = 2, offset = 0, style='padding:0px;',
            linebreaks(8), # add whitespace above legends
            plotOutput('legend')
+           # ggiraphOutput('legend')
     )
   ),
   
@@ -1387,33 +1465,74 @@ server <- function(input, output, session) {
   })
 
   
+  # output$plt <- renderGirafe({
+  #   p <- plot_main()
+  #   w <- blankwidth()
+  #   h <- blankheight()
+  #   x <- girafe(code = print(p),
+  #               options = list(opts_sizing(rescale = FALSE),
+  #                              # opts_tooltip(css = 'padding:5px;background:white;border-radius:2px 2px 2px 2px;font-size:12pt;'),
+  #                              opts_tooltip(css = 'background:white;'),
+  #                              opts_zoom(min = 0.5, max = 10),
+  #                              opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE),
+  #                              # opts_hover(css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;cursor:pointer;', reactive = TRUE),
+  #                              opts_hover_inv(css = 'opacity:0.2;cursor:pointer;'),
+  #                              # opts_hover(css = 'fill:#FF3333;stroke:black;cursor:pointer;', reactive = TRUE)),
+  #                              opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:4;')),
+  #               # opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;')),
+  #               width_svg = (w / {input$dpi}),
+  #               height_svg = (h / {input$dpi})
+  #   )
+  #   x
+  # }
+  # )
+  
   output$plt <- renderGirafe({
     p <- plot_main()
     w <- blankwidth()
     h <- blankheight()
     x <- girafe(code = print(p),
-                options = list(opts_sizing(rescale = FALSE),
-                               # opts_tooltip(css = 'padding:5px;background:white;border-radius:2px 2px 2px 2px;font-size:12pt;'),
-                               opts_tooltip(css = 'background:white;'),
-                               opts_zoom(min = 0.5, max = 10),
-                               opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE),
-                               # opts_hover(css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;cursor:pointer;', reactive = TRUE),
-                               opts_hover_inv(css = 'opacity:0.2;cursor:pointer;'),
-                               # opts_hover(css = 'fill:#FF3333;stroke:black;cursor:pointer;', reactive = TRUE)),
-                               opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:4;')),
-                             # opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;')),
                 width_svg = (w / {input$dpi}),
                 height_svg = (h / {input$dpi})
+    )
+    x <- girafe_options(x,
+                        opts_sizing(rescale = FALSE),
+                        opts_tooltip(css = 'background:white;'),
+                        opts_zoom(min = 0.5, max = 10),
+                        opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE),
+                        opts_hover_inv(css = 'opacity:0.2;cursor:pointer;'),
+                        opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:4;'),
+                        opts_selection_key(css = girafe_css("stroke:red; stroke-width:2px",
+                                                            text = "stroke:none;fill:red;font-size:12px")),
+                        opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE)
     )
     x
   }
   )
+  
+  
   
   output$legend <- renderPlot({
     p <- plot_legend()
     p
   }
   )
+  
+  
+  # output$legend <- renderGirafe({
+  #   p <- plot_legend()
+  #   x <- girafe(code = print(p))
+  #   x <- girafe_options(x,
+  #                       opts_sizing(rescale = TRUE),
+  #                       opts_tooltip(css = 'background:white;'),
+  #                       opts_selection_key(css = girafe_css("stroke:red; stroke-width:2px",
+  #                                                           text = "stroke:none;fill:red;font-size:12px"))
+  #   )
+  #   x
+  # }
+  # )
+  
+  
   
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
@@ -1442,6 +1561,8 @@ server <- function(input, output, session) {
       if(any(i)) n <- DATA_name_swap$spaces[i]
       n
     })
+    
+    d$URL <- paste0("<a href='", d$URL, "'>", d$URL,"</a>")
     # d <- subset(d, select = -c(Year, Coordinates, data_id))
     row.names(d) <- NULL
     d <- datatable(d,
@@ -1449,7 +1570,7 @@ server <- function(input, output, session) {
                      paging = FALSE, searching = FALSE # ,fillContainer = TRUE,
                     # bPaginate = FALSE,  searching = FALSE, fillContainer = TRUE
                      # autoWidth = TRUE
-                   ))
+                   ), escape = FALSE)
     d
   })
 
