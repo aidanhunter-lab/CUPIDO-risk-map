@@ -5,6 +5,7 @@ function [Data, DATA] = load_plastic_conc_data(varargin)
 
 extractVarargin(varargin)
 
+%% Data table structure
 % Standardise the format of data from different sources so they may be
 % combined into a single table.
 
@@ -61,6 +62,8 @@ columnDescriptions.Unit            = 'Measurement unit corresponding to Value co
 columnTypes.Unit                   = 'cellstr';
 columnDescriptions.Observation     = 'Additional comments -- store text descriptions of Value here, e.g., presence/absence data';
 columnTypes.Observation            = 'cellstr';
+columnDescriptions.URL             = 'Web link to data source';
+columnTypes.URL                    = 'cellstr';
 
 allColumns = fieldnames(columnDescriptions);
 
@@ -144,6 +147,7 @@ dat_tot.Variable = repmat({'concentration'}, hd, 1);
 dat_tot.Statistic = dat_tot.Measure;
 dat_tot.Replicate = ones(hd, 1);
 dat_tot.Observation = cell(hd, 1); dat_tot.Observation(:) = {''};
+dat_tot.URL = cell(hd, 1); dat_tot.URL(:) = {'https://doi.org/10.1016/j.chemosphere.2017.02.024'};
 
 dat_tot = dat_tot(:,allColumns);
 
@@ -208,6 +212,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1016/j.marpolbul.2016.09.037'};
 
 abundance = abundance(:,allColumns);
 
@@ -294,6 +299,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1038/s41598-019-40311-4'};
 
 abundance = abundance(:,allColumns);
 
@@ -419,6 +425,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1016/j.envint.2020.105792'};
 
 abundance = abundance(:,allColumns);
 
@@ -508,6 +515,7 @@ abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = abundance.Stat;
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1016/j.scitotenv.2022.156051'};
 
 abundance = abundance(:,allColumns);
 
@@ -582,6 +590,7 @@ abundance.Variable = repmat({'concentration'}, hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1016/j.envpol.2022.119379'};
 
 abundance = abundance(:,allColumns);
 
@@ -639,6 +648,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://www.adventurescientists.org/microplastics.html'};
 
 abundance = abundance(:,allColumns);
 
@@ -730,6 +740,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1371/journal.pone.0111913'};
 
 abundance = abundance(:,allColumns);
 
@@ -792,6 +803,7 @@ abundance.Latitude_end = nan(hd, 1);
 abundance.Statistic = repmat({'raw'}, hd, 1);
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1073/pnas.1314705111'};
 
 abundance = abundance(:,allColumns);
 
@@ -894,6 +906,7 @@ abundance.Depth = abundance.Depth_m;
 abundance.Statistic = repmat({'raw'}, hd, 1);
 % abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1021/acs.est.0c03441'};
 
 abundance = abundance(:,allColumns);
 
@@ -986,6 +999,7 @@ abundance.Depth = abundance.Depth_m;
 abundance.Statistic = abundance.Stat;
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1016/j.marpolbul.2017.06.039'};
 
 abundance = abundance(:,allColumns);
 
@@ -1161,6 +1175,7 @@ abundance.Date = [abundance.Date, NaT(hd, 1)];
 abundance.Statistic = abundance.Measure;
 abundance.Replicate = ones(hd, 1);
 abundance.Observation = cell(hd, 1); abundance.Observation(:) = {''};
+abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://doi.org/10.1016/j.envint.2020.105494'};
 
 abundance = abundance(:,allColumns);
 
@@ -1267,6 +1282,7 @@ dat.Replicate = ones(hd, 1);
 dat.Value = nan(hd, 1);
 dat.Unit = cell(hd, 1); dat.Unit(:) = {'none'};
 dat.Observation = cell(hd, 1); dat.Observation(:) = {'present'};
+dat.URL = cell(hd, 1); dat.URL(:) = {'https://doi.org/10.3389/fmars.2022.1056081'};
 
 dat = dat(:,allColumns);
 

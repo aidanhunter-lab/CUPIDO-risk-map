@@ -254,6 +254,8 @@ if(loadTooltipFromFile){
 
 # Data pre-processing ----
 
+# DATA$Url[DATA$Source == 'Cincinelli (2017)'] <- 'https://doi.org/10.1016/j.chemosphere.2017.02.024'
+
 # Include spaces in names of data for better display
 DATA_names_orig <- names(DATA)
 DATA_names_spaces <- DATA_names_orig
@@ -760,6 +762,9 @@ sources <- levels(DATA$Source)
 nsources <- length(sources)
 pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
 
+du <- unique(DATA[c('Source', 'URL')])
+pltColours <- merge(pltColours, du, by = 'Source')
+
 # Plot bounding box
 bbox_map <- st_bbox(nc)
 # st_bbox(eco)
@@ -880,13 +885,45 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
            
            # Plastic samples
            if(anyPlastic){
-             plt_map <- plt_map + 
+             plt_map <- plt_map +
                new_scale('fill') +
                geom_sf_interactive(data = dat_plastic,
                                    aes(fill = Source, shape = SampleType_grouped, data_id = data_id, tooltip = tooltip),
                                    alpha = alpha, size = ptSize, show.legend = FALSE) +
                scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
            }
+           
+           
+           # if(anyPlastic){
+           # 
+           #   plt_map <- plt_map +
+           #     new_scale('fill') +
+           #     geom_sf_interactive(data = dat_plastic,
+           #                         aes(fill = Source, shape = SampleType_grouped, data_id = data_id, tooltip = tooltip),
+           #                         alpha = alpha, size = ptSize, show.legend = FALSE) +
+           #     # scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
+           #   scale_fill_manual_interactive(
+           #     # name = label_interactive("Source", tooltip = "Url", data_id =
+           #     #                            "legend.title"),
+           #     values = setNames(pltColours$colour, pltColours$Source),
+           #     data_id = setNames(pltColours$Source, pltColours$Source),
+           #     tooltip = setNames(pltColours$Url, pltColours$Source)
+           #     # data_id = function(fill) {
+           #     #   as.character(fill)
+           #     # },
+           #     # tooltip = function(fill) {
+           #     #   as.character(fill)
+           #     # },
+           #     # labels = function(fill) {
+           #     #   lapply(fill, function(fl) {
+           #     #     label_interactive(as.character(fl),
+           #     #                       data_id = as.character(fl),
+           #     #                       tooltip = as.character(fl))
+           #     #   })
+           #     # }
+           #   )
+           # }
+
            
            plt_map <- plt_map +
              coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax']))# +
@@ -915,11 +952,41 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
                guides(shape = guide_legend(title = 'Facility', override.aes = list(size = legPtSize)),
                       colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
              leg_stations <- get_legend(plt_stations)
+             # get legend dimensions
+             lw = (leg_stations$widths)
+             lh = (leg_stations$heights)
+             lw = lw[grepl('cm', lw)]
+             lh = lh[grepl('cm', lh)]
+             leg_stations_width = sum(as.numeric(gsub('cm', '', lw)))
+             leg_stations_height = sum(as.numeric(gsub('cm', '', lh)))
            }else{
              leg_stations <- NULL
+             leg_stations_width = 0.5
+             leg_stations_height = 0.5
            }
            
-           # Plastic samples
+           # # Plastic samples
+           # if(anyPlastic){
+           #   symbols_ = symbols[symbols$Class == 'PlasticSample',]
+           #   plt_plastic_samples <-
+           #     ggplot() +
+           #     geom_sf(data = dat_plastic,
+           #             aes(fill = Source, shape = SampleType_grouped),
+           #             alpha = 1, size = ptSize) +
+           #     # geom_sf_interactive(data = dat_plastic,
+           #     #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
+           #     #                     alpha = 1, size = 4) +
+           #     scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
+           #     scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
+           #     theme(legend.key = element_blank()) +
+           #     guides(shape = guide_legend(title = 'Sample type', override.aes = list(size = legPtSize)),
+           #            fill = guide_legend(override.aes = list(shape = c(21), size = legPtSize)))
+           #   leg_plastic <- get_legend(plt_plastic_samples)
+           # }else{
+           #   leg_plastic <- NULL
+           # }
+           
+           
            if(anyPlastic){
              symbols_ = symbols[symbols$Class == 'PlasticSample',]
              plt_plastic_samples <-
@@ -927,25 +994,66 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
                geom_sf(data = dat_plastic,
                        aes(fill = Source, shape = SampleType_grouped),
                        alpha = 1, size = ptSize) +
-               # geom_sf_interactive(data = dat_plastic,
-               #                     aes(fill = Source, shape = SampleType, data_id = SampleType, tooltip = SampleType),
-               #                     alpha = 1, size = 4) +
-               scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
+               guides(
+                 shape = guide_legend(
+                   title = 'Sample type',
+                   override.aes = list(size = legPtSize)),
+                 fill = guide_legend_interactive(
+                   override.aes = list(
+                     shape = 21,
+                     size = legPtSize))
+               ) +
+               scale_fill_manual_interactive(
+                 values = setNames(pltColours$colour, pltColours$Source),
+                 data_id = setNames(pltColours$Source, pltColours$Source),
+                 tooltip = setNames(pltColours$URL, pltColours$Source),
+                 labels = function(Source) {
+                   lapply(Source, function(s) {
+                     u <- unique(dat_plastic$URL[dat_plastic$Source == s])
+                     label_interactive(
+                       as.character(s),
+                       data_id = as.character(s),
+                       onclick = paste0("window.open(`", as.character(u), "`);"),
+                       tooltip = as.character(u)
+                     )
+                   })
+                 }
+               ) +
+               # scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source)) +
                scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
-               theme(legend.key = element_blank()) +
-               guides(shape = guide_legend(title = 'Sample type', override.aes = list(size = legPtSize)),
-                      fill = guide_legend(override.aes = list(shape = c(21), size = legPtSize)))
+               theme(legend.key = element_blank())
              leg_plastic <- get_legend(plt_plastic_samples)
+             # get legend dimensions
+             lw = (leg_plastic$widths)
+             lh = (leg_plastic$heights)
+             lw = lw[grepl('cm', lw)]
+             lh = lh[grepl('cm', lh)]
+             leg_plastic_width = sum(as.numeric(gsub('cm', '', lw)))
+             leg_plastic_height = sum(as.numeric(gsub('cm', '', lh)))
            }else{
              leg_plastic <- NULL
+             leg_plastic_width = 0.5
+             leg_plastic_height = 0.5
            }
-           
+
            # Background
            if(anyBackground){
              leg_background <- get_legend(plt_background)
+             # get legend dimensions
+             lw = (leg_background$widths)
+             lh = (leg_background$heights)
+             lw = lw[grepl('cm', lw)]
+             lh = lh[grepl('cm', lh)]
+             leg_background_width = sum(as.numeric(gsub('cm', '', lw)))
+             leg_background_height = sum(as.numeric(gsub('cm', '', lh)))
            }else{
              leg_background <- NULL
+             leg_background_width = 0.5
+             leg_background_height = 0.5
            }
+           
+           leg_width <- {2 * 1} + 3 * max(c(leg_plastic_width, leg_stations_width, leg_background_width))
+           leg_height <- {3 * 2} + max(c(leg_plastic_height, leg_stations_height, leg_background_height))
            
            # output_legend <- ggdraw(
            #   plot_grid(
@@ -968,7 +1076,8 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, compo
            # 
            # wrap_plots(ggdraw(leg_plastic), ggdraw(leg_stations), ggdraw(leg_background))
 
-           return(output_legend)
+           # return(output_legend)
+           return(list(plot = output_legend, width = leg_width, height = leg_height))
            
          },
          
@@ -1207,13 +1316,18 @@ ui <- fluidPage(
                                 });
                             '),
            # h3("Data plot"),
-           plotOutput('blank', width = '100%', height = '1px'),
+           plotOutput('blank', width = '100%', height = '10px'),
            ggiraphOutput('plt')
     ),
     
     column(width = 2, offset = 0, style='padding:0px;',
+
+           plotOutput('blank_leg', width = '100%', height = '10px'),
+           
            linebreaks(8), # add whitespace above legends
-           plotOutput('legend')
+           
+           # plotOutput('legend')
+           ggiraphOutput('legend')
     )
   ),
   
@@ -1240,7 +1354,7 @@ ui <- fluidPage(
   )
 )
 
-# Define server logic to plot various variables against mpg ----
+# Define server logic ----
 server <- function(input, output, session) {
   
   # Updating some Shiny inputs takes a long time because plotting the plastic
@@ -1359,21 +1473,30 @@ server <- function(input, output, session) {
     )
   })
   
-    # Create blank plot to specify sizing/aspect ratio
-    output$blank = renderPlot({
-     ggplot(data.frame(x = 1, y = 1), aes(x, y)) + geom_point() + theme_void()
-    })
-
-    blankwidth = reactive({
-      # this is the magic that makes it work
-      bw = session$clientData$output_blank_width
-      return(5/4 * bw) # the sizing on girafe functions is weird, this scaling by 5/4 is a bit of a hack method...
-    })
-
-    blankheight <- reactive({
-      blankwidth() / aspectRatio
-    })
+  # Create blank plot to specify sizing/aspect ratio of main plot
+  output$blank = renderPlot({
+    ggplot(data.frame(x = 1, y = 1), aes(x, y)) + geom_point() + theme_void()
+  })
+  blankwidth = reactive({
+    # this is the magic that makes it work
+    bw = session$clientData$output_blank_width
+    return(5/4 * bw) # the sizing on girafe functions is weird, this scaling by 5/4 is a bit of a hack method...
+  })
+  blankheight <- reactive({
+    blankwidth() / aspectRatio
+  })
   
+  # Repeat for sizing of legend
+  output$blank_leg = renderPlot({
+    ggplot(data.frame(x = 1, y = 1), aes(x, y)) + geom_point() + theme_void()
+  })
+  blankwidth_leg = reactive({
+    # this is the magic that makes it work
+    bw = session$clientData$output_blank_leg_width
+    return(5/4 * bw) # the sizing on girafe functions is weird, this scaling by 5/4 is a bit of a hack method...
+  })
+  
+    
   plot_main <- reactive({
     return(
       make_plot(dat = listData(), background = which_background(), displayEcoregions = display_ecoregions(), components = 'main')
@@ -1386,34 +1509,95 @@ server <- function(input, output, session) {
     )
   })
 
+  # plot_main <- make_plot(dat = dat, background = background, displayEcoregions = FALSE, components = 'main')
+  # plot_legend <- make_plot(dat = dat, background = background, components = 'legend')
+  
+  
+  # output$plt <- renderGirafe({
+  #   p <- plot_main()
+  #   w <- blankwidth()
+  #   h <- blankheight()
+  #   x <- girafe(code = print(p),
+  #               options = list(opts_sizing(rescale = FALSE),
+  #                              # opts_tooltip(css = 'padding:5px;background:white;border-radius:2px 2px 2px 2px;font-size:12pt;'),
+  #                              opts_tooltip(css = 'background:white;'),
+  #                              opts_zoom(min = 0.5, max = 10),
+  #                              opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE),
+  #                              # opts_hover(css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;cursor:pointer;', reactive = TRUE),
+  #                              opts_hover_inv(css = 'opacity:0.2;cursor:pointer;'),
+  #                              # opts_hover(css = 'fill:#FF3333;stroke:black;cursor:pointer;', reactive = TRUE)),
+  #                              opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:4;')),
+  #               # opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;')),
+  #               width_svg = (w / {input$dpi}),
+  #               height_svg = (h / {input$dpi})
+  #   )
+  #   x
+  # }
+  # )
   
   output$plt <- renderGirafe({
     p <- plot_main()
     w <- blankwidth()
     h <- blankheight()
     x <- girafe(code = print(p),
-                options = list(opts_sizing(rescale = FALSE),
-                               # opts_tooltip(css = 'padding:5px;background:white;border-radius:2px 2px 2px 2px;font-size:12pt;'),
-                               opts_tooltip(css = 'background:white;'),
-                               opts_zoom(min = 0.5, max = 10),
-                               opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE),
-                               # opts_hover(css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;cursor:pointer;', reactive = TRUE),
-                               opts_hover_inv(css = 'opacity:0.2;cursor:pointer;'),
-                               # opts_hover(css = 'fill:#FF3333;stroke:black;cursor:pointer;', reactive = TRUE)),
-                               opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:4;')),
-                             # opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:2;r:6pt;width:12pt;height:12pt;')),
                 width_svg = (w / {input$dpi}),
                 height_svg = (h / {input$dpi})
+    )
+    x <- girafe_options(x,
+                        opts_sizing(rescale = FALSE),
+                        opts_tooltip(css = 'background:white;'),
+                        opts_zoom(min = 0.5, max = 10),
+                        opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE),
+                        opts_hover_inv(css = 'opacity:0.2;cursor:pointer;'),
+                        opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:4;'),
+                        opts_selection_key(css = girafe_css("stroke:red; stroke-width:2px",
+                                                            text = "stroke:none;fill:red;font-size:12px")),
+                        opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE)
     )
     x
   }
   )
   
-  output$legend <- renderPlot({
-    p <- plot_legend()
-    p
+  # output$legend <- renderPlot({
+  #   p <- plot_legend()
+  #   p
+  # }
+  # )
+  
+  # output$legend <- renderGirafe({
+  #   p <- plot_legend()
+  #   x <- girafe(code = print(p))
+  #   x <- girafe_options(x,
+  #                       opts_sizing(rescale = FALSE),
+  #                       opts_tooltip(css = 'background:white;'),
+  #                       opts_selection_key(css = girafe_css("stroke:red; stroke-width:2px",
+  #                                                           text = "stroke:none;fill:red;font-size:12px"))
+  #   )
+  #   x
+  # }
+  # )
+
+  output$legend <- renderGirafe({
+    pl <- plot_legend()
+    p <- pl$plot
+    w <- pl$width
+    h <- pl$height
+    bw <- blankwidth_leg()
+    bh <- bw / {w / h}
+    x <- girafe(code = print(p),
+                width_svg = (bw / {input$dpi}),
+                height_svg = (bh / {input$dpi}))
+    x <- girafe_options(x,
+                        opts_sizing(rescale = FALSE),
+                        opts_tooltip(css = 'background:white;'),
+                        opts_selection_key(css = girafe_css("stroke:red; stroke-width:2px",
+                                                            text = "stroke:none;fill:red;font-size:12px"))
+    )
+    x
   }
   )
+  
+  
   
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
@@ -1442,6 +1626,8 @@ server <- function(input, output, session) {
       if(any(i)) n <- DATA_name_swap$spaces[i]
       n
     })
+    
+    d$URL <- paste0("<a href='", d$URL, "'>", d$URL,"</a>")
     # d <- subset(d, select = -c(Year, Coordinates, data_id))
     row.names(d) <- NULL
     d <- datatable(d,
@@ -1449,7 +1635,7 @@ server <- function(input, output, session) {
                      paging = FALSE, searching = FALSE # ,fillContainer = TRUE,
                     # bPaginate = FALSE,  searching = FALSE, fillContainer = TRUE
                      # autoWidth = TRUE
-                   ))
+                   ), escape = FALSE)
     d
   })
 
