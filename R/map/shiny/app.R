@@ -215,17 +215,55 @@ eco <- st_crop(eco, st_bbox(eco))
 
 
 # Load shipping data  -----------------------------------------------------
-f <- 'data/shipping/McCarthy_2022/ship activity in ecoregions_figure 3'
-f <- paste(wd_base, f, sep = '/')
-ship <- read.table(f, sep = ';', header = TRUE)
 
-ship$time_total <- ship$Number.of.visits * ship$Mean.time.in.ecoregion..days.
+# file_all <- 'data/shipping/McCarthy_2022/so_ecoregion_all.csv'
+# file_all <- paste(wd_base, file_all, sep = '/')
+# ship <- read.table(file_all, sep = ',', header = TRUE)
+
+f <- 'data/shipping/McCarthy_2022/so_ecoregion_combined.csv' # data table with all ship types
+f <- paste(wd_base, f, sep = '/')
+ship <- read.table(f, sep = ',', header = TRUE)
+
+# Set time units to days
+ship$total_time <- ship$total_time / 86400 # seconds to days
+ship$mean_time <- ship$mean_time / 86400
+ship$median_time <- ship$median_time / 86400
+
+ship_classes <- unique(ship$ship_class)
+n_ship_classes <- length(ship_classes)
 
 # Match to spatial data on ecoregions
-ship_poly <- eco[eco$ECO_CODE_X %in% ship$Ecoregion.number,]
-ship_poly$Number.of.visits <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Number.of.visits[ship$Ecoregion.number == z])
-ship_poly$Mean.time.in.ecoregion <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Mean.time.in.ecoregion..days.[ship$Ecoregion.number == z])
-ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total[ship$Ecoregion.number == z])
+ship_poly_ <- eco[eco$ECO_CODE_X %in% ship$ecoregion_number,]
+measure_vars <- c("n_voyages", "n_ships", "total_time", "median_time", "mean_time", "n_time" )
+ship_poly <- do.call('rbind',
+                     lapply(1:n_ship_classes, function(z){
+                       sc <- ship_classes[z]
+                       d <- ship[ship$ship_class == sc,]
+                       sp <- ship_poly_
+                       sp$ship_class <- sapply(sp$ECO_CODE_X, function(z) d$ship_class[d$ecoregion_number == z])
+                       sp$n_voyages <- sapply(sp$ECO_CODE_X, function(z) d$n_voyages[d$ecoregion_number == z])
+                       sp$n_ships <- sapply(sp$ECO_CODE_X, function(z) d$n_ships[d$ecoregion_number == z])
+                       sp$total_time <- sapply(sp$ECO_CODE_X, function(z) d$total_time[d$ecoregion_number == z])
+                       sp$median_time <- sapply(sp$ECO_CODE_X, function(z) d$median_time[d$ecoregion_number == z])
+                       sp$mean_time <- sapply(sp$ECO_CODE_X, function(z) d$mean_time[d$ecoregion_number == z])
+                       sp$n_time <- sapply(sp$ECO_CODE_X, function(z) d$n_time[d$ecoregion_number == z])
+                       # handle missing values - regions not visited by certain ship types
+                       if(is.list(sp$ship_class)){
+                         j <- sapply(sp$ship_class, function(y) length(y) == 0)
+                         sp$ship_class[j] <- as.vector(rep(sc, sum(j)), 'list')
+                         sp[j,measure_vars] <- NA
+                         for(i in c('ship_class', measure_vars)) sp[[i]] <- unlist(sp[[i]])
+                       }
+                       sp
+                     })
+)
+
+
+# # Match to spatial data on ecoregions
+# ship_poly <- eco[eco$ECO_CODE_X %in% ship$Ecoregion.number,]
+# ship_poly$Number.of.visits <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Number.of.visits[ship$Ecoregion.number == z])
+# ship_poly$Mean.time.in.ecoregion <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Mean.time.in.ecoregion..days.[ship$Ecoregion.number == z])
+# ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total[ship$Ecoregion.number == z])
 
 # Load plastic data -----------------------------------------------------
 
@@ -785,7 +823,7 @@ linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
 
 # Plotting function -------------------------------------------------------
 
-make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio){
+make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
@@ -819,30 +857,41 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, ptSiz
              ggplot() +
              geom_sf(data = dat_background, aes(fill = colourgroup)) +
              scale_fill_viridis_d(option = 'plasma',
-                                  name = bquote(atop(Krill, individuals / m^2)))
+                                  name = bquote(atop(Krill, (number / m^2))))
            },
          chl = {
            plt_background <-
              ggplot() +
              geom_sf(data = dat_background, aes(fill = value)) +
              scale_fill_viridis_c(option = 'viridis', trans = 'log10',
-                                  name = bquote(atop(Chlorophyll, mg / m^3)))
+                                  name = bquote(atop(Chlorophyll, (mg / m^3))))
          },
          ship = {
+           shipType <- unique(dat_background$ship_class)
+           ShipType <- paste0(toupper(substr(shipType,1,1)), substr(shipType,2,nchar(shipType)))
+           leg_lab <- bquote(.(paste0('Ship time:', '\n', shipType, ' vessels', '\n', '(days)')))
+           vesselsPresent <- !is.na(dat_background$total_time)
            plt_background <- 
-             ggplot() +
-             geom_sf(data = dat_background, aes(fill = time_total)) + 
-             scale_fill_viridis_c(option = 'mako', trans = 'log10',
-                                  # scale_fill_viridis_c(option = 'cividis', trans = 'log10',
-                                  name = bquote(atop(Ship ~ time, days)))
+             ggplot() + 
+             geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +              scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
+                                  name = leg_lab) +
+             geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
          }
   )
   
   plt_background <- plt_background +
-    theme_void() +
-    theme(panel.background = element_rect(fill = 'white', colour = 'white')
+    # theme_nothing() +
+    # theme_void() +
+    theme(
+      axis.text = element_blank(),
+      axis.ticks = element_blank(),
+      panel.background = element_rect(fill = 'white', colour = 'white'),
+      plot.background = element_rect(fill = 'white', colour = 'white')
     )
   
+  if(backgroundOnly){
+    leg_background <- get_legend(plt_background)
+  }
   
   #~~~~~~~~~~~~~~~~~~~~~~
   # Main map -- no legend
@@ -865,6 +914,12 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, ptSiz
             show.legend = FALSE) +
     scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
   
+  if(backgroundOnly){
+    return(
+      list(plot = ggdraw(plot_grid(plt_map, leg_background, ncol = 2, rel_widths = c(0.8, 0.2))))
+      )
+  }
+
   if(anyStations | anyPlastic){
     plt_map <- plt_map +
       scale_shape_manual(values = setNames(symbols$symbol, symbols$Type))
@@ -987,6 +1042,12 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, ptSiz
     leg_background_height = 0.5
   }
   
+  if(plasticOnly){
+    return(
+      list(plot = ggdraw(plot_grid(plt_map, leg_plastic, leg_stations, ncol = 3, rel_widths = c(0.7, 0.15, 0.15))))
+    )
+  }
+  
   # Find size (cm) of combined legend -- include spacings
   leg_width <- {2 * 1} + 3 * max(c(leg_plastic_width, leg_stations_width, leg_background_width))
   leg_height <- {3 * 2} + max(c(leg_plastic_height, leg_stations_height, leg_background_height))
@@ -1085,6 +1146,21 @@ ui <- fluidPage(
              checkboxInput('DisplayEcoregions','Display ecoregions',
                            value = FALSE),
 
+             # # Input: background layers
+             # radioButtons('background', 'Background data:',
+             #              c('None' = 'none',
+             #                'Krill (Jan--Mar)' = 'krill_all',
+             #                'Krill (Jan)' = 'krill_1',
+             #                'Krill (Feb)' = 'krill_2',
+             #                'Krill (Mar)' = 'krill_3',
+             #                'Chlorophyll (Jan--Mar)' = 'chl_all',
+             #                'Chlorophyll (Jan)' = 'chl_1',
+             #                'Chlorophyll (Feb)' = 'chl_2',
+             #                'Chlorophyll (Mar)' = 'chl_3',
+             #                'Shipping activity' = 'ship'
+             #              ),
+             #              selected = 'none')
+
              # Input: background layers
              radioButtons('background', 'Background data:',
                           c('None' = 'none',
@@ -1096,7 +1172,12 @@ ui <- fluidPage(
                             'Chlorophyll (Jan)' = 'chl_1',
                             'Chlorophyll (Feb)' = 'chl_2',
                             'Chlorophyll (Mar)' = 'chl_3',
-                            'Shipping activity' = 'ship'
+                            'Shipping (all)' = 'ship_all',
+                            'Shipping (fishing)' = 'ship_fishing',
+                            'Shipping (tourism)' = 'ship_tourism',
+                            'Shipping (research)' = 'ship_research',
+                            'Shipping (supply)' = 'ship_supply',
+                            'Shipping (other)' = 'ship_other'
                           ),
                           selected = 'none')
              
@@ -1222,11 +1303,19 @@ server <- function(input, output, session) {
                              ship = ship_poly
     ) # get background data
     if(background != 'none'){
-      x <- strsplit(input$background, '_')[[1]]
-      if(length(x) == 2){
-        m <- x[2] # get the chosen month
-        background_dat <- subset(background_dat, month == m) # filter by month
-      }
+      # filter by month (chl/krill) or ship type
+      if(background %in% c('chl', 'krill')){
+        x <- strsplit(input$background, '_')[[1]]
+        if(length(x) == 2){
+          m <- x[2] # get the chosen month(s)
+          background_dat <- subset(background_dat, month == m) # filter by month
+        } else warning('Background data cannot be filtered by month: check that R Shiny ui input options match the data.')
+      }else{
+        if(background == 'ship'){
+          x <- strsplit(input$background, '_')[[1]]
+          if(x[2] %in% background_dat$ship_class){
+            background_dat <- subset(background_dat, ship_class == x[2])
+          } else warning('Background data cannot be filtered by ship type: check that R Shiny input options match the data.')}}
     }
     return(background_dat)
   })
