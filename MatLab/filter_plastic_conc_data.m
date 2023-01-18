@@ -123,12 +123,21 @@ for i = 1:nsources
     if ~j, error(['No variable has been (re)named as "Station" in ' source ' data!']); end
     % Code unique stations as numeric integer lists: 1,2,3,...
     x = d(:,'Station');
+    % some data may derive from long tows not associated to a single
+    % station -- these are left as NaN values, which may be problematic...
+    if iscell(x.Station)
+        j = true(height(x), 1);
+    else
+        j = ~isnan(x.Station);
+    end
+    x = x(j,:);
     Station = unique(x.Station, 'stable');
     nx = length(Station);
     StationNew = (1:nx)';
     ux = table(Station, StationNew);
     x = join(x, ux);
-    d.Station = x.StationNew;
+    d.Station = [];
+    d.Station(j) = x.StationNew;
     d = movevars(d, 'Station', 'Before', fields{1});
     fields = d.Properties.VariableNames;
     % Some data sources specify a station Location
@@ -234,15 +243,23 @@ for i = 1:nsources
 end
 
 % Only use microplastic measures?
+% THE COLUMN NAMES SHOULD BE REGULARISED BETWEEN DATA SETS -- USING EITHER
+% Class OR Size
 switch returnOnlyMicroplasticMeasures, case true
     for i = 1:nsources
         source = sources{i};
         d = dat.(source).abundance;
         fields = d.Properties.VariableNames;
         j = ismember(fields, {'Size','size'});
-        if ~any(j), continue; end
-        j = ismember(d{:,j}, {'Micro', 'micro'});
-        dat.(source).abundance = d(j,:);
+        if any(j)
+            j = ismember(d{:,j}, {'Micro', 'micro'});
+            dat.(source).abundance = d(j,:);
+        end
+        j = ismember(fields, {'Class'});
+        if any(j)
+            j = ismember(d{:,j}, {'Micro', 'micro'});
+            dat.(source).abundance = d(j,:);
+        end
     end
 end
 
@@ -384,12 +401,12 @@ for i = 1:nsources
     abundance = dat.(source).abundance;
     Type = abundance.Type;
     Fibres = {'Line','line','Fibre','fibre','microfibre',...
-        'Microfibre','microFibre','MicroFibre'};
+        'Microfibre','microFibre','MicroFibre', 'filament', 'Filament'};
     isFibre = ismember(Type, Fibres);
     Type(isFibre) = repmat({'fibre'}, sum(isFibre), 1);
     Fragments = {'fragment','Fragment','flake','Flake','granule',...
         'Granule','sphere','Sphere','microplastic','Microplastic',...
-        'microPlastic','MicroPlastic', 'particle', 'Particle'};
+        'microPlastic','MicroPlastic', 'particle', 'Particle', 'pellet', 'Pellet'};
     isFragment = ismember(Type, Fragments);
     Type(isFragment) = repmat({'fragment'}, sum(isFragment), 1);
     Films = {'film','Film'};
@@ -414,12 +431,23 @@ end
 
 % Omit variables not shared by all data tables -- these occur after the 
 % Value column, and could be included later...
+% THIS NEEDS MORE WORK... GROUPING VARIABLES TO DISTINGUISH PLASTIC
+% CATEGORIES
 for i = 1:nsources
     source = sources{i};
     d = dat.(source).abundance;
     d = d(:,1:find(strcmp(d.Properties.VariableNames, 'Value')));
     dat.(source).abundance = d;
 end
+
+
+
+% for i = 1:nsources
+%     source = sources{i};
+%     d = dat.(source);
+%     s = size(d.abundance, 2);
+%     disp([source ' ' num2str(s)])
+% end
 
 % Combine all plastic abundance data into a single table
 out = structfun(@(z) z.abundance, dat, 'UniformOutput', false);
