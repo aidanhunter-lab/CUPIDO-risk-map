@@ -8,6 +8,7 @@ library(gridExtra)
 library(cowplot)
 library(ggnewscale)
 library(RColorBrewer)
+library(scales)
 # library(plotly) # doesn't work with layering grobs...
 library(ggiraph) # this is good for interactivity, but cannot be converted to grobs for layout...
 # library(ggpubr) # maybe this package's 'ggarrange' function can help.
@@ -644,9 +645,9 @@ while(w){
 }
 STATIONS$Official_Name <- gsub('- ', ' ', STATIONS$Official_Name)
 
-STATIONS$tooltip <- paste0(STATIONS$Official_Name, ' ', STATIONS$Type, '\n ',
-                           'Primary operator: ', STATIONS$Operator_primary, '\n ',
-                           'Peak population size = ', STATIONS$Peak_Population)
+# STATIONS$tooltip <- paste0(STATIONS$Official_Name, ' ', STATIONS$Type, '\n ',
+#                            'Primary operator: ', STATIONS$Operator_primary, '\n ',
+#                            'Peak population size = ', STATIONS$Peak_Population)
 
 STATIONS$Record_ID <- paste('facility', STATIONS$Record_ID)
 
@@ -657,8 +658,37 @@ xy = matrix(unlist(STATIONS_sf$geometry), 2, nrow(STATIONS))
 STATIONS$x = xy[1,]
 STATIONS$y = xy[2,]
 
+# Calculate each facility's distance from the coast...
+# Get all points from map polygons
+coastPoints <- as.data.frame(do.call('rbind',
+                                     lapply(1:nrow(nc),
+                                            function(z) st_coordinates(nc[z,])[,1:2])))
+# Create spatial feature object
+coastPoints_sf = st_as_sf(coastPoints, coords = c('X', 'Y'), crs = crs_use)
+# Convert to standard lat/lon coordinates
+coastPoints_sf = st_transform(coastPoints_sf, crs_world)
+# Convert back to standard data frame
+coastPoints <- st_coordinates(coastPoints_sf)
+# Use haversine formula for distance calculation
+hav <- function(theta){
+  y <- 0.5 * {1 - cos(theta)}
+  y[y > 1] <- 1 # control for floating point error
+  y}
+greatCircDist <- function(lon1, lon2, lat1, lat2, r){
+  dlon <- lon2 - lon1
+  dlat <- lat2 - lat1
+  2 * r * asin({hav(dlat) + cos(lat1)*cos(lat2)*hav(dlon)} ^ 0.5)}
 
+STATIONS_sf$Distance_From_Coast <- sapply(1:nrow(STATIONS), function(z)
+  min(greatCircDist(coastPoints[,1], STATIONS$Longitude_DD[z], coastPoints[,2], STATIONS$Latitude_DD[z], r = 6371))
+)
 
+# There is something wrong with this distance calculation... need to figure it out... maybe the polygon points are not all coastline...
+
+STATIONS_sf$tooltip <- paste0(STATIONS_sf$Official_Name, ' ', STATIONS_sf$Type, '\n ',
+                           'Primary operator: ', STATIONS_sf$Operator_primary, '\n ',
+                           'Peak population size = ', STATIONS_sf$Peak_Population, '\n ',
+                           'Distance from coast = ', round(STATIONS_sf$Distance_From_Coast, 1), ' km')
 
 
 # Load krill data ---------------------------------------------------------
@@ -721,11 +751,6 @@ krill_poly$colourgroup <- factor(krill_poly$colourgroup, levels = colgroup)
 
 # Load chlorophyll data ---------------------------------------------------------
 
-# The high-res data are too big for fast processing... It's quite slow to load
-# and later functions are VERY slow -- I don't know where the bottle neck is.
-# Perhaps dplyr could help... but it's probably best to simply reduce the
-# resolution.
-
 # filename = 'chl_data_mapped.csv'
 filename <- 'chl_data_mapped_highRes_3x1.csv'
 # filename = 'chl_data_mapped_highRes_1x0.33.csv'
@@ -750,6 +775,105 @@ chl_poly <- st_as_sf(chl_poly)
 chl_poly <- st_transform(chl_poly, crs = crs_use) # convert coordinates
 chl_poly$month <- CHL$month
 chl_poly$value <- CHL$value
+
+
+
+
+# Load SST trend (or anomaly) data --------------------------------------
+
+sstType = 'trend' # 'trend' or 'anomaly
+res <- '3x1' # choose data resolution: either  '3x1' or '9x3'
+filename <- paste0('sst_', sstType, '_res_', res, '.csv')
+filepath <- 'MatLab/temp'
+f <- paste(wd_base, filepath, filename, sep = '/')
+
+SST <- read.csv(f)
+
+# Data pre-processing -----------------------------------------------------     
+
+if(sstType == 'anomaly'){
+  sst_ymax <- max(SST$year)
+  SST <- subset(SST, year == sst_ymax, select = -c(year, value))
+  names(SST)[ncol(SST)] = 'value'
+  SST <- subset(SST, !is.nan(value))  # omit missing data
+  mon <- 1:3
+  SST <- subset(SST, month %in% mon)
+  # Mean SST anomaly across selected (summer) months
+  SST_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, SST, 'mean')
+  SST_allMonths$month <- 'all'
+  SST_allMonths <- SST_allMonths[,c(1:4,6,5)]
+  SST <- rbind(SST, SST_allMonths)
+}
+
+if(sstType == 'trend'){
+  SST <- melt(SST, id.vars = c('lonmin','lonmax','latmin','latmax'), variable.name = 'month', value.name = 'value')
+  SST <- subset(SST, !is.nan(value))  # omit missing data
+  # Include summer months only
+  mon <- month.abb[1:3]
+  SST <- subset(SST, month %in% mon | month == 'Summer')
+  SST$month <- as.character(SST$month)
+  SST$month[SST$month == 'Summer'] <- 'all'
+  for(i in 1:length(mon)) SST$month[SST$month == mon[i]] <- i
+  SST$month <- as.factor(SST$month)
+}
+
+
+# Generate spatial polygons
+sst_poly <- createPolygons(SST)
+sst_poly <- SpatialPolygons(sst_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
+sst_poly <- st_as_sf(sst_poly)
+sst_poly <- st_transform(sst_poly, crs = crs_use) # convert coordinates
+sst_poly$month <- SST$month
+sst_poly$value <- SST$value
+
+
+# Load pH trend (or anomaly) data -----------------------------------------
+
+pHType = 'trend' # 'trend' or 'anomaly
+res <- '3x1' # choose data resolution: either  '3x1' or '9x3'
+filename <- paste0('pH_', pHType, '_res_', res, '.csv')
+filepath <- 'MatLab/temp'
+f <- paste(wd_base, filepath, filename, sep = '/')
+
+pH <- read.csv(f)
+
+# Data pre-processing -----------------------------------------------------     
+
+if(pHType == 'anomaly'){
+  pH_ymax <- max(pH$year)
+  pH <- subset(pH, year == pH_ymax, select = -c(year, pH, pH_sd))
+  names(pH)[ncol(pH)] = 'value'
+  pH <- subset(pH, !is.nan(value))  # omit missing data
+  mon <- 1:3
+  pH <- subset(pH, month %in% mon)
+  # Mean pH anomaly across selected (summer) months
+  pH_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, pH, 'mean')
+  pH_allMonths$month <- 'all'
+  pH_allMonths <- pH_allMonths[,c(1:4,6,5)]
+  pH <- rbind(pH, pH_allMonths)
+  pH$month <- as.factor(pH$month)
+}
+
+if(pHType == 'trend'){
+  pH <- melt(pH, id.vars = c('lonmin','lonmax','latmin','latmax'), variable.name = 'month', value.name = 'value')
+  pH <- subset(pH, !is.nan(value))  # omit missing data
+  # Include summer months only
+  mon <- month.abb[1:3]
+  pH <- subset(pH, month %in% mon | month == 'Summer')
+  pH$month <- as.character(pH$month)
+  pH$month[pH$month == 'Summer'] <- 'all'
+  for(i in 1:length(mon)) pH$month[pH$month == mon[i]] <- i
+  pH$month <- as.factor(pH$month)
+}
+
+
+# Generate spatial polygons
+pH_poly <- createPolygons(pH)
+pH_poly <- SpatialPolygons(pH_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
+pH_poly <- st_as_sf(pH_poly)
+pH_poly <- st_transform(pH_poly, crs = crs_use) # convert coordinates
+pH_poly$month <- pH$month
+pH_poly$value <- pH$value
 
 
 # Plotting parameters -----------------------------------------------------
@@ -865,6 +989,65 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              geom_sf(data = dat_background, aes(fill = value)) +
              scale_fill_viridis_c(option = 'viridis', trans = 'log10',
                                   name = bquote(atop(Chlorophyll, (mg / m^3))))
+         },
+         sst = {
+           # The SST trend data look like an inverse hyperbolic tangent function,
+           # so use this to scale the colour gradient
+           
+           # sst_min <- min(dat_background$value)
+           # sst_max <- max(dat_background$value)
+           # sst_median <- median(dat_background$value)
+           # stran <- function(x){
+           #   # scaling factor for colour transform
+           #   pq <- quantile(x, c(0.05, 0.95))
+           #   1.5 / mean(abs(pq))}
+           # sc <- stran(dat_background$value)
+           # coltran <- function(x, m = sst_median, s = sc) tanh(s * (x - m)) # inverse tangent with scaling
+           # icoltran <- function(y, m = sst_median, s = sc) m + atanh(y) / s
+           
+
+           nv <- dat_background$value[dat_background$value < 0]
+           pv <- dat_background$value[dat_background$value > 0]
+           
+           ncol_sst <- 11
+           ncol_sst_ <- 0.5 * {ncol_sst - 1}
+           cval <- c(quantile(nv, seq(0, 1, length = ncol_sst_ + 1))[1:ncol_sst_], 0, quantile(pv, seq(0, 1, length = ncol_sst_ + 1))[2:{ncol_sst_ + 1}])
+           cval <- {cval - min(cval)} / diff(range(cval))
+           plt_background <-
+             ggplot() +
+             geom_sf(data = dat_background, aes(fill = value)) +
+             scale_fill_distiller(type = 'div',  palette = 'RdBu',
+                                  name = bquote(atop(SST ~ trend, (degree * C / year))),
+                                 values = cval)
+
+                    },
+         pH = {
+           
+           # x <- sort(dat_background$value)
+           # xi <- 1:length(x)
+           # plot(xi, x)
+           
+           legLabel <- switch(pHType,
+                              trend = bquote(atop(pH ~ trend, (year^{-1}))),
+                              anomaly = bquote(pH ~ anomaly)
+           )
+           
+           nv <- dat_background$value[dat_background$value < 0]
+           pv <- dat_background$value[dat_background$value > 0]
+           
+           ncol_pH <- 11
+           ncol_pH_ <- 0.5 * {ncol_pH - 1}
+           
+           cval <- c(quantile(nv, seq(0, 1, length = ncol_pH_ + 1))[1:ncol_pH_], 0, quantile(pv, seq(0, 1, length = ncol_pH_ + 1))[2:{ncol_pH_ + 1}])
+           cval <- {cval - min(cval)} / diff(range(cval))
+
+           plt_background <-
+             ggplot() +
+             geom_sf(data = dat_background, aes(fill = value)) +
+             scale_fill_distiller(type = 'div',  palette = 'PuOr', direction = 1,
+                                  name = legLabel,
+                                  values = cval)
+           
          },
          ship = {
            shipType <- unique(dat_background$ship_class)
@@ -1172,6 +1355,18 @@ ui <- fluidPage(
                             'Chlorophyll (Jan)' = 'chl_1',
                             'Chlorophyll (Feb)' = 'chl_2',
                             'Chlorophyll (Mar)' = 'chl_3',
+                            # 'SST anomaly (Jan--Mar)' = 'sst_all',
+                            # 'SST anomaly (Jan)' = 'sst_1',
+                            # 'SST anomaly (Feb)' = 'sst_2',
+                            # 'SST anomaly (Mar)' = 'sst_3',
+                            'SST trend (Jan--Mar)' = 'sst_all',
+                            'SST trend (Jan)' = 'sst_1',
+                            'SST trend (Feb)' = 'sst_2',
+                            'SST trend (Mar)' = 'sst_3',
+                            'pH trend (Jan--Mar)' = 'pH_all',
+                            'pH trend (Jan)' = 'pH_1',
+                            'pH trend (Feb)' = 'pH_2',
+                            'pH trend (Mar)' = 'pH_3',
                             'Shipping (all)' = 'ship_all',
                             'Shipping (fishing)' = 'ship_fishing',
                             'Shipping (tourism)' = 'ship_tourism',
@@ -1288,7 +1483,7 @@ server <- function(input, output, session) {
   
   # Get background type
   which_background <- reactive({
-      backgroundOptions <- c('none', 'krill', 'chl', 'ship')
+      backgroundOptions <- c('none', 'krill', 'chl', 'sst', 'pH', 'ship')
       t <- sapply(backgroundOptions, FUN = function(z) grepl(z, input$background))
       background <- names(which(t)) # get the chosen background
       return(background)
@@ -1300,11 +1495,13 @@ server <- function(input, output, session) {
     background_dat <- switch(background,
                              krill = krill_poly,
                              chl = chl_poly,
+                             sst = sst_poly,
+                             pH = pH_poly,
                              ship = ship_poly
     ) # get background data
     if(background != 'none'){
-      # filter by month (chl/krill) or ship type
-      if(background %in% c('chl', 'krill')){
+      # filter by month (chl/krill/sst) or ship type
+      if(background %in% c('chl', 'krill', 'sst', 'pH')){
         x <- strsplit(input$background, '_')[[1]]
         if(length(x) == 2){
           m <- x[2] # get the chosen month(s)
