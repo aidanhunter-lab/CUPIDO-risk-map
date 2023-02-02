@@ -283,7 +283,8 @@ abundance = dat_tot;
 
 hd = height(abundance);
 abundance.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
-abundance.SampleGear = cell(hd, 1); abundance.SampleGear(:) = {''};
+abundance.SampleGear = cell(hd, 1); abundance.SampleGear(:) = {'330 μm manta net'};
+% abundance.SampleGear = cell(hd, 1); abundance.SampleGear(:) = {''};
 abundance.LitterIDMethod = cell(hd, 1); abundance.LitterIDMethod(:) = {''};
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = repmat({'micro and meso -- see size data'}, hd, 1);
@@ -408,7 +409,8 @@ abundance = dat;
 
 hd = height(abundance);
 abundance.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
-abundance.SampleGear = cell(hd, 1); abundance.SampleGear(:) = {''};
+abundance.SampleGear = cell(hd, 1); abundance.SampleGear(:) = {'300 μm mesh HydroBios microplastics net'};
+% abundance.SampleGear = cell(hd, 1); abundance.SampleGear(:) = {''};
 abundance.LitterIDMethod = cell(hd, 1); abundance.LitterIDMethod(:) = {''};
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = repmat({'micro'}, hd, 1);
@@ -495,10 +497,11 @@ for i = 1:length(pc)
     abundance = vertcat(abundance, d);
 end
 
-
 hd = height(abundance);
 abundance.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
-abundance.SampleGear = cell(hd, 1); abundance.SampleGear(:) = {''};
+abundance.SampleGear = cell(hd, 1);
+abundance.SampleGear(strcmp(abundance.Depth, 'surface')) = {'330μ mesh trawl'};
+abundance.SampleGear(strcmp(abundance.Depth, 'subsurface')) = {'Vogelsang VX13670Q rotor pump'};
 abundance.LitterIDMethod = cell(hd, 1); abundance.LitterIDMethod(:) = {''};
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = repmat({'micro'}, hd, 1);
@@ -789,7 +792,8 @@ abundance.SampleGear = abundance.Sampling_Method;
 abundance.LitterIDMethod = abundance.Identification_Method;
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
 abundance.LitterScale = abundance.Size;
-abundance.PlasticForm = repmat({'plastic'}, hd, 1);
+abundance.PlasticForm = cell(hd, 1); abundance.PlasticForm(:) = Type;
+% abundance.PlasticForm = repmat({'plastic'}, hd, 1);
 abundance.PlasticSize = cell(hd, 1); abundance.PlasticSize(:) = {''};
 abundance.SampleAtStation = true(hd, 1);
 abundance.Site = abundance.Location;
@@ -1268,7 +1272,12 @@ dat = [water(:,getVars); air(:,getVars); ice(:,getVars); sediment(:,getVars)];
 
 hd = height(dat);
 dat.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
-dat.SampleGear = cell(hd, 1); dat.SampleGear(:) = {''};
+dat.SampleGear = cell(hd, 1);
+dat.SampleGear(strcmp(dat.SampleType, 'seawater')) = {'vessel underway system'};
+dat.SampleGear(strcmp(dat.SampleType, 'sediment')) = {'Craib-type multicorer'};
+dat.SampleGear(strcmp(dat.SampleType, 'air')) = {'Tisch Environmental high-volume air-sampler'};
+dat.SampleGear(strcmp(dat.SampleType, 'ice')) = {'Kovacs Mark II coring system'};
+% dat.SampleGear = cell(hd, 1); dat.SampleGear(:) = {''};
 dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {''};
 dat.LitterCategory = repmat({'plastic'}, hd, 1);
 dat.LitterScale = cell(hd, 1); dat.LitterScale(:) = {''};

@@ -577,6 +577,18 @@ month = month(:);
 value = map_chl(:);
 map_chl_table = table(lonmin, lonmax, latmin, latmax, month, value);
 
+switch saveOutput, case true
+    path = fullfile(baseDirectory, 'MatLab', 'temp');
+    if ~exist(path, 'dir')
+        mkdir(fileparts(path), 'temp')
+        addpath(genpath(path))
+    end
+    filename = ['chl_data_mapped_res_' num2str(round(domain.dlon,2,'significant')) 'x' num2str(round(domain.dlat,2,'significant')) '.csv'];
+    %         filename = ['chl_data_mapped_highRes_' num2str(round(dlon,2,'significant')) 'x' num2str(round(dlat,2,'significant')) '.csv'];
+    filepath = fullfile(path, filename);
+    writetable(map_chl_table, filepath)
+end
+
 % Also output a high-resolution chlorophyll table that might be nice for
 % the interactive map.
 % The krill map uses a 9*3 degree lon*lat ratio for grid cells, so let's
@@ -601,7 +613,7 @@ switch makeHiResChlMap, case true
                 datgrid(i,j,k) = mean(Dat.(vars_chl)(indk), 'omitnan');
             end
         end
-%         disp(num2str(i / nlon))
+        disp(num2str(i / nlon))
     end
     lonmin = longrid(1:end-1); lonmax = longrid(2:end);
     latmin = latgrid(1:end-1); latmax = latgrid(2:end);
@@ -621,7 +633,8 @@ switch makeHiResChlMap, case true
             mkdir(fileparts(path), 'temp')
             addpath(genpath(path))
         end
-        filename = ['chl_data_mapped_highRes_' num2str(round(dlon,2,'significant')) 'x' num2str(round(dlat,2,'significant')) '.csv'];
+        filename = ['chl_data_mapped_res_' num2str(round(dlon,2,'significant')) 'x' num2str(round(dlat,2,'significant')) '.csv'];
+%         filename = ['chl_data_mapped_highRes_' num2str(round(dlon,2,'significant')) 'x' num2str(round(dlat,2,'significant')) '.csv'];
         filepath = fullfile(path, filename);
         writetable(map_chl_table_highRes, filepath)
     end
@@ -892,7 +905,7 @@ for i = 1:12
     dat.(['pValue_' Months(i,:)]) = nan(hd, 1);
 end
 for i = 1:ng
-    disp([num2str(round(100 * i / ng, 2)) '%'])
+%     disp([num2str(round(100 * i / ng, 2)) '%'])
     ii = dat.grid_cell == i;
     y = dat(ii,:);
     if all(isnan(y.value)), continue; end
@@ -922,10 +935,11 @@ map_sst_table_3x1 = dat;
 % Filter this data before saving. I need to reduce memory requiremenrs for
 % a speedy interactive map...
 
-% For the trend data, all we need are single values for each grid cell
+% For the trend data, all we need are single values for each grid cell --
+% also include the p-values
 coords_9x3 = unique(map_sst_table_9x3(:,1:4), 'stable');
 sst_trend_9x3 = map_sst_table_9x3;
-sst_trend_9x3 = sst_trend_9x3(:,[1:4 9:2:34]);
+sst_trend_9x3 = sst_trend_9x3(:,[1:4 9:end]);
 sst_trend_9x3 = sst_trend_9x3(~all(isnan(table2array(sst_trend_9x3(:,5:end))), 2),:);
 sst_trend_9x3 = unique(sst_trend_9x3, 'stable');
 sst_trend_9x3 = outerjoin(coords_9x3, sst_trend_9x3);
@@ -935,7 +949,7 @@ sst_trend_9x3.Properties.VariableNames = strrep(sst_trend_9x3.Properties.Variabl
 
 coords_3x1 = unique(map_sst_table_3x1(:,1:4), 'stable');
 sst_trend_3x1 = map_sst_table_3x1;
-sst_trend_3x1 = sst_trend_3x1(:,[1:4 9:2:34]);
+sst_trend_3x1 = sst_trend_3x1(:,[1:4 9:end]);
 sst_trend_3x1 = sst_trend_3x1(~all(isnan(table2array(sst_trend_3x1(:,5:end))), 2),:);
 sst_trend_3x1 = unique(sst_trend_3x1, 'stable');
 sst_trend_3x1 = outerjoin(coords_3x1, sst_trend_3x1);
@@ -1235,7 +1249,7 @@ for i = 1:12
     dat.(['pValue_' Months(i,:)]) = nan(hd, 1);
 end
 for i = 1:ng
-    disp(['iteration ' num2str(i) ': '  num2str(round(100 * i / ng, 2)) '%'])
+%     disp(['iteration ' num2str(i) ': '  num2str(round(100 * i / ng, 2)) '%'])
     ii = dat.grid_cell == i;
     y = dat(ii,:);
     if all(isnan(y.pH)), continue; end
@@ -1282,7 +1296,7 @@ for i = 1:12
     dat.(['pValue_' Months(i,:)]) = nan(hd, 1);
 end
 for i = 1:ng
-    disp(['iteration ' num2str(i) ': '  num2str(round(100 * i / ng, 2)) '%'])
+%     disp(['iteration ' num2str(i) ': '  num2str(round(100 * i / ng, 2)) '%'])
     ii = dat.grid_cell == i;
     y = dat(ii,:);
     if all(isnan(y.pH)), continue; end
@@ -1319,7 +1333,7 @@ map_pH_table_3x1 = dat;
 % For the trend data, all we need are single values for each grid cell
 coords_9x3 = unique(map_pH_table_9x3(:,1:4), 'stable');
 pH_trend_9x3 = map_pH_table_9x3;
-pH_trend_9x3 = pH_trend_9x3(:,[1:4 10:2:34]);
+pH_trend_9x3 = pH_trend_9x3(:,[1:4 10:end]);
 pH_trend_9x3 = pH_trend_9x3(~all(isnan(table2array(pH_trend_9x3(:,5:end))), 2),:);
 a = table2array(pH_trend_9x3);
 a(isnan(a)) = inf; % replace NaNs so that unique works 'properly'
@@ -1333,7 +1347,7 @@ pH_trend_9x3.Properties.VariableNames = strrep(pH_trend_9x3.Properties.VariableN
 
 coords_3x1 = unique(map_pH_table_3x1(:,1:4), 'stable');
 pH_trend_3x1 = map_pH_table_3x1;
-pH_trend_3x1 = pH_trend_3x1(:,[1:4 10:2:34]);
+pH_trend_3x1 = pH_trend_3x1(:,[1:4 10:end]);
 pH_trend_3x1 = pH_trend_3x1(~all(isnan(table2array(pH_trend_3x1(:,5:end))), 2),:);
 a = table2array(pH_trend_3x1);
 a(isnan(a)) = inf; % replace NaNs so that unique works 'properly'
