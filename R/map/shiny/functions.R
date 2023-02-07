@@ -1,8 +1,29 @@
 # Functions used in interactive map shiny app
 
+createPolygons <- function(dat){
+  # Generate list of polygons describing lon/lat bounding box for each row of input
+  # data frame. The input data must contain columns called 'lonmin' ,'lonmax', 'latmin',
+  # and 'latmax'that define the area corresponding the measurement variable(s).
+  # (I think this function may be too complicated -- perhaps we only need call to
+  # 'Polygon' function, and not the 'Polygons' function. But this is not important...)
+  n = nrow(dat)
+  lapply(1:n, FUN = function(z){
+    x = dat[z,]
+    Polygons(
+      list(
+        Polygon(
+          cbind(
+            c(x$lonmin, x$lonmax, x$lonmax, x$lonmin, x$lonmin),
+            c(x$latmin, x$latmin, x$latmax, x$latmax, x$latmin)
+          ))), paste0('row', z)
+    )}
+  )
+}
+
+
 # Load and organise data required for map
 get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHType = 'trend',
-                     sstTrend_significantOnly = TRUE, pHTrend_significantOnly = TRUE, significanceLevel = 0.05){
+                     sstTrend_significantOnly = TRUE, pHTrend_significantOnly = TRUE, significanceLevel = 0.05, shipSummaryDataOrRaw = 'summary'){
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Load data with spatial resolution given by res = '3x1' or '9x3'.
   # Required outputs are assigned to the function calling environment.
@@ -18,6 +39,7 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   
   assign('sstType', sstType, envir = parent.frame())
   assign('pHType', pHType, envir = parent.frame())
+  assign('shipSummaryDataOrRaw', shipSummaryDataOrRaw, envir = parent.frame())
   
   # Load map shape files -----------------------------------------------------
   verbose <- FALSE
@@ -78,55 +100,102 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   
   # Load shipping data  -----------------------------------------------------
   
-  f <- 'data/shipping/McCarthy_2022/so_ecoregion_combined.csv' # data table with all ship types
-  f <- paste(baseDirectory, f, sep = '/')
-  ship <- read.table(f, sep = ',', header = TRUE)
-  
-  # Set time units to days
-  ship$total_time <- ship$total_time / 86400 # seconds to days
-  ship$mean_time <- ship$mean_time / 86400
-  ship$median_time <- ship$median_time / 86400
-  
-  ship_classes <- unique(ship$ship_class)
-  n_ship_classes <- length(ship_classes)
-  
-  # Match to spatial data on ecoregions
-  ship_poly_ <- eco[eco$ECO_CODE_X %in% ship$ecoregion_number,]
-  measure_vars <- c("n_voyages", "n_ships", "total_time", "median_time", "mean_time", "n_time" )
-  ship_poly <- do.call('rbind',
-                       lapply(1:n_ship_classes, function(z){
-                         sc <- ship_classes[z]
-                         d <- ship[ship$ship_class == sc,]
-                         sp <- ship_poly_
-                         sp$ship_class <- sapply(sp$ECO_CODE_X, function(z) d$ship_class[d$ecoregion_number == z])
-                         sp$n_voyages <- sapply(sp$ECO_CODE_X, function(z) d$n_voyages[d$ecoregion_number == z])
-                         sp$n_ships <- sapply(sp$ECO_CODE_X, function(z) d$n_ships[d$ecoregion_number == z])
-                         sp$total_time <- sapply(sp$ECO_CODE_X, function(z) d$total_time[d$ecoregion_number == z])
-                         sp$median_time <- sapply(sp$ECO_CODE_X, function(z) d$median_time[d$ecoregion_number == z])
-                         sp$mean_time <- sapply(sp$ECO_CODE_X, function(z) d$mean_time[d$ecoregion_number == z])
-                         sp$n_time <- sapply(sp$ECO_CODE_X, function(z) d$n_time[d$ecoregion_number == z])
-                         # handle missing values - regions not visited by certain ship types
-                         if(is.list(sp$ship_class)){
-                           j <- sapply(sp$ship_class, function(y) length(y) == 0)
-                           sp$ship_class[j] <- as.vector(rep(sc, sum(j)), 'list')
-                           sp[j,measure_vars] <- NA
-                           for(i in c('ship_class', measure_vars)) sp[[i]] <- unlist(sp[[i]])
-                         }
-                         sp
-                       })
+  switch(shipSummaryDataOrRaw,
+         summary = {
+           
+           f <- 'data/shipping/McCarthy_2022/so_ecoregion_combined.csv' # data table with all ship types
+           f <- paste(baseDirectory, f, sep = '/')
+           ship <- read.table(f, sep = ',', header = TRUE)
+           
+           # Set time units to days
+           ship$total_time <- ship$total_time / 86400 # seconds to days
+           ship$mean_time <- ship$mean_time / 86400
+           ship$median_time <- ship$median_time / 86400
+           
+           ship_classes <- unique(ship$ship_class)
+           n_ship_classes <- length(ship_classes)
+           
+           # Match to spatial data on ecoregions
+           ship_poly_ <- eco[eco$ECO_CODE_X %in% ship$ecoregion_number,]
+           measure_vars <- c("n_voyages", "n_ships", "total_time", "median_time", "mean_time", "n_time" )
+           ship_poly <- do.call('rbind',
+                                lapply(1:n_ship_classes, function(z){
+                                  sc <- ship_classes[z]
+                                  d <- ship[ship$ship_class == sc,]
+                                  sp <- ship_poly_
+                                  sp$ship_class <- sapply(sp$ECO_CODE_X, function(z) d$ship_class[d$ecoregion_number == z])
+                                  sp$n_voyages <- sapply(sp$ECO_CODE_X, function(z) d$n_voyages[d$ecoregion_number == z])
+                                  sp$n_ships <- sapply(sp$ECO_CODE_X, function(z) d$n_ships[d$ecoregion_number == z])
+                                  sp$total_time <- sapply(sp$ECO_CODE_X, function(z) d$total_time[d$ecoregion_number == z])
+                                  sp$median_time <- sapply(sp$ECO_CODE_X, function(z) d$median_time[d$ecoregion_number == z])
+                                  sp$mean_time <- sapply(sp$ECO_CODE_X, function(z) d$mean_time[d$ecoregion_number == z])
+                                  sp$n_time <- sapply(sp$ECO_CODE_X, function(z) d$n_time[d$ecoregion_number == z])
+                                  # handle missing values - regions not visited by certain ship types
+                                  if(is.list(sp$ship_class)){
+                                    j <- sapply(sp$ship_class, function(y) length(y) == 0)
+                                    sp$ship_class[j] <- as.vector(rep(sc, sum(j)), 'list')
+                                    sp[j,measure_vars] <- NA
+                                    for(i in c('ship_class', measure_vars)) sp[[i]] <- unlist(sp[[i]])
+                                  }
+                                  sp
+                                })
+           )
+           
+           
+           # # Match to spatial data on ecoregions
+           # ship_poly <- eco[eco$ECO_CODE_X %in% ship$Ecoregion.number,]
+           # ship_poly$Number.of.visits <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Number.of.visits[ship$Ecoregion.number == z])
+           # ship_poly$Mean.time.in.ecoregion <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Mean.time.in.ecoregion..days.[ship$Ecoregion.number == z])
+           # ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total[ship$Ecoregion.number == z])
+           
+           
+           assign('ship_poly', ship_poly, envir = parent.frame())
+           
+         },
+         
+         raw = {
+           
+           f <- 'data/shipping/McCarthy_2022/ship_time_res_9x3.csv'
+           # f <- 'data/shipping/McCarthy_2022/ship_time_res_3x1.csv'
+           f <- paste(baseDirectory, f, sep = '/')
+           ship <- read.table(f, sep = ',', header = TRUE)
+           
+           # For each year, sum ship_time over all vessels (this will need more
+           # thinking in terms of vessel types...)
+           ship <- aggregate(ship_time ~ lonmin + lonmax + latmin + latmax + year, data = ship, FUN = sum)
+           
+           # Average ship_time over years
+           ship_ <- aggregate(ship_time ~ lonmin + lonmax + latmin + latmax, data = ship, FUN = mean)
+           ship_$year <- 'all'
+           ship_ <- ship_[names(ship)]
+           ship <- rbind(ship, ship_)
+           
+           # Round ship_time to nearest day -- this removes grid cells with negligible
+           # ship presence, creating a more useful colour scale with greater focus
+           # on areas of high traffic
+           # ship$ship_time <- round(ship$ship_time)
+           # Hmmm, I only want to crop the small measures, so do this instead of
+           # rounding all data.
+           lowTraffic <- ship$ship_time < 1
+           ship$ship_time[lowTraffic] <- round(ship$ship_time[lowTraffic])
+           
+           ship <- subset(ship, ship_time != 0) # remove zero measures
+
+           # Generate spatial polygons
+           ship_poly <- createPolygons(ship)
+           ship_poly <- SpatialPolygons(ship_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
+           ship_poly <- st_as_sf(ship_poly)
+           ship_poly <- st_transform(ship_poly, crs = crs_use) # convert coordinates
+           
+           ship_poly$year <- ship$year
+           ship_poly$value <- ship$ship_time
+           
+           assign('ship_poly', ship_poly, envir = parent.frame())
+           
+         }
+         
   )
-  
-  
-  # # Match to spatial data on ecoregions
-  # ship_poly <- eco[eco$ECO_CODE_X %in% ship$Ecoregion.number,]
-  # ship_poly$Number.of.visits <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Number.of.visits[ship$Ecoregion.number == z])
-  # ship_poly$Mean.time.in.ecoregion <- sapply(ship_poly$ECO_CODE_X, function(z) ship$Mean.time.in.ecoregion..days.[ship$Ecoregion.number == z])
-  # ship_poly$time_total <- sapply(ship_poly$ECO_CODE_X, function(z) ship$time_total[ship$Ecoregion.number == z])
-  
-  
-  assign('ship_poly', ship_poly, envir = parent.frame())
-  
-  
+
   # Load plastic data -----------------------------------------------------
   
   # filepath = 'data/plastic_quantity'
@@ -576,22 +645,22 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   sigDigits <- 2
   KRILL$value <- signif(KRILL$value, sigDigits)
   
-  # I think this function is too complicated -- maybe only need call to Polygon function, and not the Polygons function...
-  createPolygons <- function(dat){
-    # Returns list of polygons describing lon/lat bounding box for each row of dat
-    n = nrow(dat)
-    lapply(1:n, FUN = function(z){
-      x = dat[z,]
-      Polygons(
-        list(
-          Polygon(
-            cbind(
-              c(x$lonmin, x$lonmax, x$lonmax, x$lonmin, x$lonmin),
-              c(x$latmin, x$latmin, x$latmax, x$latmax, x$latmin)
-            ))), paste0('row', z)
-      )}
-    )
-  }
+  # # I think this function is too complicated -- maybe only need call to Polygon function, and not the Polygons function...
+  # createPolygons <- function(dat){
+  #   # Returns list of polygons describing lon/lat bounding box for each row of dat
+  #   n = nrow(dat)
+  #   lapply(1:n, FUN = function(z){
+  #     x = dat[z,]
+  #     Polygons(
+  #       list(
+  #         Polygon(
+  #           cbind(
+  #             c(x$lonmin, x$lonmax, x$lonmax, x$lonmin, x$lonmin),
+  #             c(x$latmin, x$latmin, x$latmax, x$latmax, x$latmin)
+  #           ))), paste0('row', z)
+  #     )}
+  #   )
+  # }
   
   krill_poly <- createPolygons(KRILL) # generate polygons
   krill_poly <- SpatialPolygons(krill_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object

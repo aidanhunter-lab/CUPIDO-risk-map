@@ -2,7 +2,7 @@
 
 # 1. background data
 
-make_background_map <- function(background, group, eco = FALSE){
+make_background_map <- function(background, group, eco = FALSE, trendType = 'unspecified'){
   d <- get(paste(background, 'poly', sep = '_'))
   d <- switch(background,
               chl = subset(d, month == group),
@@ -11,7 +11,8 @@ make_background_map <- function(background, group, eco = FALSE){
               pH = subset(d, month == group),
               ship = subset(d, ship_class == group))
   dat <- list(background = d, plastic = DATA_sf[0,],  stations = STATIONS_sf[0,], pltSymbols = pltSymbols)
-  mp <- make_plot(dat = dat, background = background, backgroundOnly = TRUE, displayEcoregions = eco)
+  mp <- make_plot(dat = dat, background = background, backgroundOnly = TRUE, 
+                  displayEcoregions = eco, sstType = trendType, pHType = trendType)
   mp$plot
 }
 
@@ -37,13 +38,15 @@ p_ship
 # Sea surface temperature
 background <- 'sst'
 month <- 'all'
-p_sst <- make_background_map(background, month)# + theme_nothing()
+type = 'trend'
+p_sst <- make_background_map(background, month, trendType = type)# + theme_nothing()
 p_sst
 
 # pH
 background <- 'pH'
 month <- 'all'
-p_pH <- make_background_map(background, month)# + theme_nothing()
+type = 'trend'
+p_pH <- make_background_map(background, month, trendType = type)# + theme_nothing()
 p_pH
 
 npanels <- 5

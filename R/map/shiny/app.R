@@ -36,10 +36,16 @@ wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
 source('functions.R')
 
 # source('import_data.R') # function (get_data) to load/organise data
-
 get_data(res = '3x1', baseDirectory = wd_base, shinyDirectory = wd_orig, 
         sstType = 'trend', pHType = 'trend',
-        sstTrend_significantOnly = TRUE, pHTrend_significantOnly = TRUE)
+        sstTrend_significantOnly = TRUE, pHTrend_significantOnly = TRUE,
+        shipSummaryDataOrRaw = 'raw')
+
+# It will be nice to able to select between trend data and anomalies from within
+# the Shiny app. This will involve returning both data sets from the get_data
+# function, then including a selection option in the Shiny dashboard that chooses
+# between them. This is not critical to include, but would be a nice extension
+# to what I've already produced
 
 sst_poly <- sst_poly[sst_poly$metric != 'p-value',]
 pH_poly <- pH_poly[pH_poly$metric != 'p-value',]
@@ -128,7 +134,7 @@ linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
 
 # Plotting function -------------------------------------------------------
 
-make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio, pHType = 'unspecified', sstType = 'unspecified'){
+make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio, pHType = 'unspecified', sstType = 'unspecified', shipSummaryDataOrRaw = 'unspecified'){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
@@ -259,16 +265,62 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
          },
          
          ship = {
-           shipType <- unique(dat_background$ship_class)
-           ShipType <- paste0(toupper(substr(shipType,1,1)), substr(shipType,2,nchar(shipType)))
-           leg_lab <- bquote(.(paste0('Ship time:', '\n', shipType, ' vessels', '\n', '(days)')))
-           vesselsPresent <- !is.na(dat_background$total_time)
            
-           plt_background <- 
-             ggplot() + 
-             geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +              scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
-                                  name = leg_lab) +
-             geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
+           plt_background <-switch(shipSummaryDataOrRaw,
+                                   
+                  summary = {
+                    shipType <- unique(dat_background$ship_class)
+                    ShipType <- paste0(toupper(substr(shipType,1,1)), substr(shipType,2,nchar(shipType)))
+                    leg_lab <- bquote(.(paste0('Ship time:', '\n', shipType, ' vessels', '\n', '(days)')))
+                    vesselsPresent <- !is.na(dat_background$total_time)
+                    plt <- 
+                      ggplot() + 
+                      geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +
+                      scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
+                                           name = leg_lab) +
+                      geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
+                    plt
+                  },
+                  
+                  raw = {
+                    
+                    shipYear <- unique(dat_background$year)
+                    if(shipYear != 'all'){
+                      leg_lab <- bquote(.(paste0('Ship time:', '\n', shipYear, '\n', '(days/yr)')))
+                    }else{
+                      leg_lab <- bquote(.(paste0('Ship time:', '\n', '2014-18 mean', '\n', '(days/yr)')))
+                    }
+                    plt <- 
+                      ggplot() + 
+                      geom_sf(data = dat_background, aes(fill = value), colour = 'black', linewidth = polyLineWidth) +
+                      scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
+                                           name = leg_lab) # +
+                      # geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
+                    plt
+                  },
+                  
+                  unspecified = {
+                    plt <- ggplot()
+                    plt
+                  }
+                  )
+           
+           
+           
+           # shipType <- unique(dat_background$ship_class)
+           # ShipType <- paste0(toupper(substr(shipType,1,1)), substr(shipType,2,nchar(shipType)))
+           # leg_lab <- bquote(.(paste0('Ship time:', '\n', shipType, ' vessels', '\n', '(days)')))
+           # vesselsPresent <- !is.na(dat_background$total_time)
+           # 
+           # plt_background <- 
+           #   ggplot() + 
+           #   geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +
+           #   scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
+           #                        name = leg_lab) +
+           #   geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
+           # 
+           
+           
          }
   )
   
@@ -468,6 +520,78 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
 }
 
 # Define UI for plastic data map app ----
+
+# Define lists of names for background data
+backgroundData_choiceNames <- list(
+  'None',
+  'Krill (Jan--Mar)',
+  'Krill (Jan)',
+  'Krill (Feb)',
+  'Krill (Mar)',
+  'Chlorophyll (Jan--Mar)',
+  'Chlorophyll (Jan)',
+  'Chlorophyll (Feb)',
+  'Chlorophyll (Mar)',
+  paste('SST', sstType, '(Jan--Mar)', sep = ' '),
+  paste('SST', sstType, '(Jan)', sep = ' '),
+  paste('SST', sstType, '(Feb)', sep = ' '),
+  paste('SST', sstType, '(Mar)', sep = ' '),
+  paste('pH', pHType, '(Jan--Mar)', sep = ' '),
+  paste('pH', pHType, '(Jan)', sep = ' '),
+  paste('pH', pHType, '(Feb)', sep = ' '),
+  paste('pH', pHType, '(Mar)', sep = ' ')
+)
+
+backgroundData_choiceValues = list(
+  'none',
+  'krill_all',
+  'krill_1',
+  'krill_2',
+  'krill_3',
+  'chl_all',
+  'chl_1',
+  'chl_2',
+  'chl_3',
+  'sst_all',
+  'sst_1',
+  'sst_2',
+  'sst_3',
+  'pH_all',
+  'pH_1',
+  'pH_2',
+  'pH_3'
+)
+
+backgroundData_choiceNames<- switch(shipSummaryDataOrRaw,
+                                    summary = c(backgroundData_choiceNames, c('Shipping (all)',
+                                                                              'Shipping (fishing)',
+                                                                              'Shipping (tourism)',
+                                                                              'Shipping (research)',
+                                                                              'Shipping (supply)',
+                                                                              'Shipping (other)')),
+                                    raw = c(backgroundData_choiceNames, c('Shipping (2014-18)',
+                                                                          'Shipping (2014)',
+                                                                          'Shipping (2015)',
+                                                                          'Shipping (2016)',
+                                                                          'Shipping (2017)',
+                                                                          'Shipping (2018)'))
+)
+
+backgroundData_choiceValues <- switch(shipSummaryDataOrRaw,
+                                      summary = c(backgroundData_choiceValues, c('ship_all',
+                                                                                 'ship_fishing',
+                                                                                 'ship_tourism',
+                                                                                 'ship_research',
+                                                                                 'ship_supply',
+                                                                                 'ship_other')),
+                                      raw = c(backgroundData_choiceValues, c('ship_all',
+                                                                             'ship_2014',
+                                                                             'ship_2015',
+                                                                             'ship_2016',
+                                                                             'ship_2017',
+                                                                             'ship_2018'))
+)
+
 ui <- fluidPage(
   
   # App title
@@ -541,62 +665,12 @@ ui <- fluidPage(
              # Input: display ecoregions
              checkboxInput('DisplayEcoregions','Display ecoregions',
                            value = FALSE),
-
+             
              # Input: background layers
              radioButtons('background', 'Background data:',
-                          choiceNames = list(
-                            'None',
-                            'Krill (Jan--Mar)',
-                            'Krill (Jan)',
-                            'Krill (Feb)',
-                            'Krill (Mar)',
-                            'Chlorophyll (Jan--Mar)',
-                            'Chlorophyll (Jan)',
-                            'Chlorophyll (Feb)',
-                            'Chlorophyll (Mar)',
-                            paste('SST', sstType, '(Jan--Mar)', sep = ' '),
-                            paste('SST', sstType, '(Jan)', sep = ' '),
-                            paste('SST', sstType, '(Feb)', sep = ' '),
-                            paste('SST', sstType, '(Mar)', sep = ' '),
-                            paste('pH', pHType, '(Jan--Mar)', sep = ' '),
-                            paste('pH', pHType, '(Jan)', sep = ' '),
-                            paste('pH', pHType, '(Feb)', sep = ' '),
-                            paste('pH', pHType, '(Mar)', sep = ' '),
-                            'Shipping (all)',
-                            'Shipping (fishing)',
-                            'Shipping (tourism)',
-                            'Shipping (research)',
-                            'Shipping (supply)',
-                            'Shipping (other)'
-                          ),
-                          choiceValues = list(
-                            'none',
-                            'krill_all',
-                            'krill_1',
-                            'krill_2',
-                            'krill_3',
-                            'chl_all',
-                            'chl_1',
-                            'chl_2',
-                            'chl_3',
-                            'sst_all',
-                            'sst_1',
-                            'sst_2',
-                            'sst_3',
-                            'pH_all',
-                            'pH_1',
-                            'pH_2',
-                            'pH_3',
-                            'ship_all',
-                            'ship_fishing',
-                            'ship_tourism',
-                            'ship_research',
-                            'ship_supply',
-                            'ship_other'
-                          ),
+                          choiceNames = backgroundData_choiceNames,
+                          choiceValues = backgroundData_choiceValues,
                           selected = 'none')
-             
-             
              
              # # Input: plot value transformation
              # radioButtons('tran', 'Scale:',
@@ -729,11 +803,30 @@ server <- function(input, output, session) {
           background_dat <- subset(background_dat, month == m) # filter by month
         } else warning('Background data cannot be filtered by month: check that R Shiny ui input options match the data.')
       }else{
+        
         if(background == 'ship'){
-          x <- strsplit(input$background, '_')[[1]]
-          if(x[2] %in% background_dat$ship_class){
-            background_dat <- subset(background_dat, ship_class == x[2])
-          } else warning('Background data cannot be filtered by ship type: check that R Shiny input options match the data.')}}
+          background_dat <- switch(shipSummaryDataOrRaw,
+                                   summary = {
+                                     x <- strsplit(input$background, '_')[[1]]
+                                     if(x[2] %in% background_dat$ship_class){
+                                       background_dat <- subset(background_dat, ship_class == x[2])
+                                     } else{warning('Background data cannot be filtered by ship type: check that R Shiny input options match the data.')}
+                                   },
+                                   raw = {
+                                     x <- strsplit(input$background, '_')[[1]]
+                                     if(x[2] %in% background_dat$year){
+                                       background_dat <- subset(background_dat, year == x[2])
+                                     } else{warning('Background ship data cannot be filtered by year: check that R Shiny input options match the data.')}
+                                   })
+        }
+        # if(background == 'ship'){
+        #   x <- strsplit(input$background, '_')[[1]]
+        #   if(x[2] %in% background_dat$ship_class){
+        #     background_dat <- subset(background_dat, ship_class == x[2])
+        #   } else{warning('Background data cannot be filtered by ship type: check that R Shiny input options match the data.')}
+        #   }
+        
+        }
     }
     return(background_dat)
   })
@@ -777,7 +870,8 @@ server <- function(input, output, session) {
   
   plot_main <- reactive({
     return(
-      make_plot(dat = listData(), background = which_background(), displayEcoregions = display_ecoregions(), sstType = sstType, pHType = pHType)
+      make_plot(dat = listData(), background = which_background(), displayEcoregions = display_ecoregions(),
+                sstType = sstType, pHType = pHType, shipSummaryDataOrRaw = shipSummaryDataOrRaw)
     )
   })
 
