@@ -7,7 +7,8 @@
 library(shiny)
 library(sp)
 library(sf)
-library(mapdata)
+library(mapdata) # for Antarctic coastline data used to estimate distance of facilities from the coast (I would prefer a higher-res shape file...)
+library(maptools) # for the ContourLines2SLDF() function used to map contour lines
 library(ggplot2)
 library(gtable)
 library(grid)

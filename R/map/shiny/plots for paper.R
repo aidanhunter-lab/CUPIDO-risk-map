@@ -2,12 +2,13 @@
 
 # Packages ----------------------------------------------------------------
 
-library(shiny)
+# library(shiny)
 library(sp)
 library(sf)
-library(mapdata)
+# library(mapdata)
+library(maptools) # for the ContourLines2SLDF() function used to map contour lines
 library(ggplot2)
-library(gtable)
+# library(gtable)
 library(grid)
 library(gridExtra)
 library(cowplot)
@@ -17,9 +18,9 @@ library(scales)
 library(ggiraph) # this is good for interactivity, but cannot be converted to grobs for layout...
 # library(ggpubr) # maybe this package's 'ggarrange' function can help.
 library(reshape2)
-library(flextable) # for displaying tables when mouse hovers over mapped data points
+# library(flextable) # for displaying tables when mouse hovers over mapped data points
 # library(tidyverse)
-library(DT)
+# library(DT)
 # library(shinybrowser) # get browser dimension & other info
 
 # library(ggnewscale)
@@ -242,7 +243,7 @@ ggsave('environ background data.png', plot = p_all, device = 'png', width = pw, 
 
 make_plastic_map <- function(plastic, stations, ptSize, background = 'none', group = NA, eco = FALSE){
   if(background == 'none'){
-    dat <- list(background = NULL, plastic = plastic, stations = stations, symbols = pltSymbols)
+    dat <- list(nc = nc, background = NULL, plastic = plastic, stations = stations, symbols = pltSymbols)
   } else return(NULL)
   mp <- make_plot(dat = dat, background = background, plasticOnly = TRUE, displayEcoregions = eco, ptSize = ptSize)
   mp$plot

@@ -1259,7 +1259,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
       }
       cL <- contourLines(xgrid, ygrid, zgrid, levels = significanceContours)      
       # Transform contour lines to spatial object
-      library(maptools)
+      # library(maptools)
       crs_world_ <- paste0('+init=epsg:', crs_world)
       cLdf <- ContourLines2SLDF(cL, proj4string = CRS(crs_world_))
       # Transform to sf
