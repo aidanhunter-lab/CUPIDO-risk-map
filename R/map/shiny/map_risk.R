@@ -14,13 +14,16 @@ library(ggplot2)
 library(ggnewscale)
 
 # Load/create functions
-source('import_data.R') # function (get_data) to load/organise data
+source('functions.R') # function (get_data) to load/organise data
 
-significantTrendsOnly <- FALSE
+significantTrendsOnly <- TRUE
 
 get_data(res = '9x3', baseDirectory = wd_base, shinyDirectory = wd_orig, 
          sstType = 'trend', pHType = 'trend',
-         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly)
+         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
+         shipSummaryDataOrRaw = 'raw')
+
+
 
 sst_poly <- sst_poly[sst_poly$metric != 'p-value',]
 pH_poly <- pH_poly[pH_poly$metric != 'p-value',]

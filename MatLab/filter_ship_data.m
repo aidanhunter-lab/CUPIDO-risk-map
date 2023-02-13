@@ -15,6 +15,11 @@ filename = 'so_obs_aidan.csv';
 filepath = fullfile(dataDirectory, filename);
 data = readtable(filepath);
 
+filename = 'vessels_main_aidan.csv';
+filepath = fullfile(dataDirectory, filename);
+metadata = readtable(filepath);
+
+
 %% Basic filtering/cleaning -- get data dimensions
 dates = datevec(data.date_time);
 yrs = unique(dates(:,1));
@@ -335,7 +340,27 @@ ship_time = shipTime_gridded(:);
 output_3x1 = table(vessel_id, vessel_name, year, lonmin, lonmax, latmin, latmax, ship_time);
 
 
+% Incorporate meta vessel metadata
 
+% tmp = unique(output_3x1(:,["year", "vessel_id"]), 'stable');
+
+metadata_vars = ["year" "vessel_id" "dwt" "gross" "vessel_type" "activity_type"];
+md = metadata(:,metadata_vars);
+
+% There appears to be redundancy in the metadata table. Are there are
+% vessels for which useful variables change between years?
+all_vessel_id_md = unique(md.vessel_id);
+nvessels_md = length(all_vessel_id_md);
+% The problem seems to be NaNs in dwt & gross variables
+md.dwt(isnan(md.dwt)) = -inf;
+md.gross(isnan(md.gross)) = -inf;
+md = unique(md(:,2:end));
+md.dwt(md.dwt == -inf) = nan(1,1);
+md.gross(md.gross == -inf) = nan(1,1);
+
+
+output_9x3_ex = innerjoin(output_9x3, md, 'Keys', 'vessel_id');
+output_3x1_ex = innerjoin(output_3x1, md, 'Keys', 'vessel_id');
 
 
 switch saveOutput, case true
@@ -345,11 +370,24 @@ switch saveOutput, case true
         addpath(genpath(path))
     end
 
+    filename = 'vessel_metadata.csv';
+    filepath = fullfile(path, filename);
+    writetable(md, filepath)
+
     filename = 'ship_time_res_9x3.csv';
     filepath = fullfile(path, filename);
     writetable(output_9x3, filepath)
 
+    filename = 'ship_time_res_9x3_withMetaData.csv';
+    filepath = fullfile(path, filename);
+    writetable(output_9x3, filepath)
+
+
     filename = 'ship_time_res_3x1.csv';
+    filepath = fullfile(path, filename);
+    writetable(output_3x1, filepath)
+
+    filename = 'ship_time_res_3x1_withMetaData.csv.csv';
     filepath = fullfile(path, filename);
     writetable(output_3x1, filepath)
 
