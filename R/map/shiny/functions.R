@@ -24,7 +24,9 @@ createPolygons <- function(dat){
 # Load and organise data required for map
 get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHType = 'trend',
                      shipSummaryDataOrRaw = 'summary', sstTrend_significantOnly = TRUE,
-                     pHTrend_significantOnly = TRUE, significanceLevel = 0.05, significanceContours = c(0.05, 0.25, 0.5)){
+                     pHTrend_significantOnly = TRUE, significanceLevel = 0.05, significanceContours = c(0.05, 0.25, 0.5),
+                     SST_overallTrend = TRUE, pH_overallTrend = TRUE,
+                     roundShipTime = FALSE, indexGridCells = TRUE){
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Load data with spatial resolution given by res = '3x1' or '9x3'.
   # Required outputs are assigned to the function calling environment.
@@ -38,11 +40,60 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   library(sf)
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
+  res_map <- setNames(as.numeric(strsplit(res, 'x')[[1]]), c('lon','lat'))
+  assign('res_map', res_map, envir = parent.frame())
   assign('sstType', sstType, envir = parent.frame())
   assign('pHType', pHType, envir = parent.frame())
   assign('shipSummaryDataOrRaw', shipSummaryDataOrRaw, envir = parent.frame())
   assign('significanceContours', significanceContours, envir = parent.frame())
+  
+  assign('SST_overallTrend', SST_overallTrend, envir = parent.frame())
+  assign('pH_overallTrend', pH_overallTrend, envir = parent.frame())
+  
+  # Coordinate reference system
+  crs_world <- 4326 # standard longitude-latitude coordinates for world map
+  crs_use <- 3031 # Antarctic projection
+  assign('crs_world', crs_world, envir = parent.frame())
+  assign('crs_use', crs_use, envir = parent.frame())
+  
 
+  # Map grid cells ----------------------------------------------------------
+  if(indexGridCells){
+    
+    lonrange <- c(-180, 180)
+    latrange <- c(-90, -45)
+    longrid <- seq(lonrange[1], lonrange[2], res_map['lon'])
+    latgrid <- seq(latrange[1], latrange[2], res_map['lat'])
+    nlon <- length(longrid) - 1
+    nlat <- length(latgrid) - 1
+    lonmin <- head(longrid, -1)
+    lonmax <- tail(longrid, -1)
+    latmin <- head(latgrid, -1)
+    latmax <- tail(latgrid, -1)
+    lonmin <- as.numeric(matrix(lonmin, ncol = 1)[,rep(1,nlat)])
+    lonmax <- as.numeric(matrix(lonmax, ncol = 1)[,rep(1,nlat)])
+    latmin <- as.numeric(matrix(latmin, nrow = 1)[rep(1,nlon),])
+    latmax <- as.numeric(matrix(latmax, nrow = 1)[rep(1,nlon),])
+    grid_cells_all <- data.frame(lonmin = lonmin, lonmax = lonmax, latmin = latmin, latmax = latmax)
+    # Generate spatial polygons
+    grid_cells_all <- createPolygons(grid_cells_all)
+    grid_cells_all <- SpatialPolygons(grid_cells_all, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
+    grid_cells_all <- st_as_sf(grid_cells_all)
+    grid_cells_all$cell_index <- 1:nrow(grid_cells_all)
+    grid_cell_areas <- st_area(grid_cells_all) # get grid cell areas
+    if(all(attr(grid_cell_areas, 'units')$numerator == 'm')) grid_cell_areas <- grid_cell_areas * 1e-6  # convert m^2 to km^2
+    grid_cells_all$area <- as.numeric(grid_cell_areas)
+    grid_centroids <- st_centroid(grid_cells_all)
+    centroid_coords <- st_coordinates(grid_centroids)
+    grid_cells_all$centroid_lon <- centroid_coords[,1]
+    grid_cells_all$centroid_lat <- centroid_coords[,2]
+    grid_centroids_xy <- st_transform(grid_centroids, crs_use)
+    centroid_coords <- st_coordinates(grid_centroids_xy)
+    grid_cells_all$centroid_x <- centroid_coords[,1]
+    grid_cells_all$centroid_y <- centroid_coords[,2]
+    
+  }
+  
   # Load map shape files -----------------------------------------------------
   verbose <- FALSE
   f1 <- 'data/map/Antarctic coastline polygons/medium res/add_coastline_medium_res_polygon_v7_6.shp'
@@ -60,12 +111,6 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   nc2 <- nc2[,c('location','surface','geometry')]
   nc <- rbind(nc1, nc2)
   
-  # Coordinate reference system
-  crs_world <- 4326
-  crs_use <- 3031
-  assign('crs_world', crs_world, envir = parent.frame())
-  assign('crs_use', crs_use, envir = parent.frame())
-
   # attr(crs_world, 'class') <- 'crs'
   
   # Reset coastline bounding box to map limits -- defined by most northern latitude
@@ -195,15 +240,17 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
            # Use the annual average only, discard data pertaining to specific years
            ship <- subset(ship, year == 'all')
            
-           # Round ship_time to nearest day -- this removes grid cells with negligible
-           # ship presence, creating a more useful colour scale with greater focus
-           # on areas of high traffic
-           # ship$ship_time <- round(ship$ship_time)
-           # Hmmm, I only want to crop the small measures, so do this instead of
-           # rounding all data.
-           lowTraffic <- ship$ship_time < 1
-           ship$ship_time[lowTraffic] <- round(ship$ship_time[lowTraffic])
-           
+           if(roundShipTime){
+             # Round ship_time to nearest day -- this removes grid cells with negligible
+             # ship presence, creating a more useful colour scale with greater focus
+             # on areas of high traffic
+             # ship$ship_time <- round(ship$ship_time)
+             # Hmmm, I only want to crop the small measures, so do this instead of
+             # rounding all data.
+             lowTraffic <- ship$ship_time < 1
+             ship$ship_time[lowTraffic] <- round(ship$ship_time[lowTraffic])
+           }
+
            ship <- subset(ship, ship_time != 0) # remove zero measures
            
            ship$activity_type <- factor(ship$activity_type, 
@@ -214,17 +261,26 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
            ship_poly <- createPolygons(ship)
            ship_poly <- SpatialPolygons(ship_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
            ship_poly <- st_as_sf(ship_poly)
-           ship_poly <- st_transform(ship_poly, crs = crs_use) # convert coordinates
            
+           if(indexGridCells){
+             # Match each ship grid cell to one listed in grid_cells_all
+             ship_centroids <- st_centroid(ship_poly)
+             distBetweenCells <- st_distance(grid_centroids, ship_centroids)
+             ship_poly$cell_index <- grid_cells_all$cell_index[apply(distBetweenCells, 2, which.min)]
+           }
+           ship_poly <- st_transform(ship_poly, crs = crs_use) # convert coordinates
            ship_poly$year <- ship$year
            ship_poly$activity <- ship$activity_type
            ship_poly$value <- ship$ship_time
            
-           assign('ship_poly', ship_poly, envir = parent.frame())
+           # assign('ship_poly', ship_poly, envir = parent.frame())
            
          }
-         
   )
+  
+  weblink_shipping <- 'https://doi.org/10.1073/pnas.2110303118'
+  assign('weblink_shipping', weblink_shipping, envir = parent.frame())
+  
 
   # Load plastic data -----------------------------------------------------
   
@@ -566,6 +622,9 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   f <- paste(baseDirectory, filepath, filename, sep = '/')
   STATIONS <- read.csv(f, stringsAsFactors = TRUE)
   
+  weblink_facilities <- 'https://github.com/PolarGeospatialCenter/comnap-antarctic-facilities'
+  assign('weblink_facilities', weblink_facilities, envir = parent.frame())
+
   # Data pre-processing ----
   STATIONS$Type = reorder(STATIONS$Type, rep(1, nrow(STATIONS)), sum, decreasing = TRUE)
   
@@ -616,6 +675,13 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   
   # Mapping coordinates
   STATIONS_sf = st_as_sf(STATIONS, coords = c('Longitude_DD', 'Latitude_DD'), crs = crs_world)
+  
+  
+  # Match each station to a grid cell listed in grid_cells_all
+  # station_centroids <- st_centroid(STATIONS_sf)
+  # distBetweenCells <- st_distance(grid_centroids, STATIONS_sf)
+  # STATIONS_sf$cell_index <- grid_cells_all$cell_index[apply(distBetweenCells, 2, which.min)]
+
   STATIONS_sf = st_transform(STATIONS_sf, crs_use)
   xy = matrix(unlist(STATIONS_sf$geometry), 2, nrow(STATIONS))
   STATIONS$x = xy[1,]
@@ -666,6 +732,9 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   f <- paste(baseDirectory, filepath, filename, sep = '/')
   KRILL = read.csv(f, stringsAsFactors = TRUE)
   
+  weblink_krill <- 'https://www.doi.org/10.5285/8b00a915-94e3-4a04-a903-dd4956346439'
+  assign('weblink_krill', weblink_krill, envir = parent.frame())
+
   # Data pre-processing -----------------------------------------------------
   KRILL <- KRILL[!is.nan(KRILL$value),] # omit missing data
   # Mean abundance across months for each grid cell
@@ -697,6 +766,12 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   krill_poly <- createPolygons(KRILL) # generate polygons
   krill_poly <- SpatialPolygons(krill_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
   krill_poly <- st_as_sf(krill_poly)
+  if(indexGridCells){
+    # Match polygons to those listed in grid_cells_all
+    krill_centroids <- st_centroid(krill_poly)
+    distBetweenCells <- st_distance(grid_centroids, krill_centroids)
+    krill_poly$cell_index <- grid_cells_all$cell_index[apply(distBetweenCells, 2, which.min)]
+  }
   krill_poly <- st_transform(krill_poly, crs = crs_use) # convert coordinates
   krill_poly$month <- KRILL$month
   krill_poly$value <- KRILL$value
@@ -716,7 +791,7 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   # krill_poly$colourgroup[is.na(krill_poly$value)] <- colgroup[ncols+1]
   krill_poly$colourgroup <- factor(krill_poly$colourgroup, levels = colgroup)
   
-  assign('krill_poly', krill_poly, envir = parent.frame())
+  # assign('krill_poly', krill_poly, envir = parent.frame())
   
   
   # Load chlorophyll data ---------------------------------------------------------
@@ -726,6 +801,9 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   f <- paste(baseDirectory, filepath, filename, sep = '/')
   
   CHL <- read.csv(f, stringsAsFactors = TRUE)
+  
+  weblink_chlorophyll <- 'https://catalogue.ceda.ac.uk/uuid/a91ae89c4c6d011f84cdfbc3d41a73c8'
+  assign('weblink_chlorophyll', weblink_chlorophyll, envir = parent.frame())
   
   # Data pre-processing -----------------------------------------------------
   CHL <- CHL[!is.nan(CHL$value),] # omit missing data
@@ -741,49 +819,43 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   chl_poly <- createPolygons(CHL) # generate polygons
   chl_poly <- SpatialPolygons(chl_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
   chl_poly <- st_as_sf(chl_poly)
+  if(indexGridCells){
+    # Match polygons to those listed in grid_cells_all
+    chl_centroids <- st_centroid(chl_poly)
+    distBetweenCells <- st_distance(grid_centroids, chl_centroids)
+    chl_poly$cell_index <- grid_cells_all$cell_index[apply(distBetweenCells, 2, which.min)]
+  }
   chl_poly <- st_transform(chl_poly, crs = crs_use) # convert coordinates
   chl_poly$month <- CHL$month
   chl_poly$value <- CHL$value
   
-  assign('chl_poly', chl_poly, envir = parent.frame())
+  # assign('chl_poly', chl_poly, envir = parent.frame())
   
   
   # Load SST trend (or anomaly) data --------------------------------------
   
   # sstType = 'trend' # 'trend' or 'anomaly
   # res <- '3x1' # choose data resolution: either  '3x1' or '9x3'
-  filename <- paste0('sst_', sstType, '_res_', res, '.csv')
+  
+  if(SST_overallTrend){
+    filename <- paste0('sst_time_series_trend_res_', res, '.csv') # my month-by-month trend calculation    
+  }else{
+    filename <- paste0('sst_', sstType, '_res_', res, '.csv') # my month-by-month trend calculation
+  }
   filepath <- 'MatLab/temp'
   f <- paste(baseDirectory, filepath, filename, sep = '/')
   
   SST <- read.csv(f)
   
+  weblink_sst <- 'https://data.marine.copernicus.eu/product/SST_GLO_SST_L4_REP_OBSERVATIONS_010_024/download?dataset=ESACCI-GLO-SST-L4-REP-OBS-SST'
+  assign('weblink_sst', weblink_sst, envir = parent.frame())
+  
   # Data pre-processing -----------------------------------------------------     
   
-  if(sstType == 'anomaly'){
-    sst_ymax <- max(SST$year)
-    SST <- subset(SST, year == sst_ymax, select = -c(year, value))
-    names(SST)[ncol(SST)] = 'value'
-    SST <- subset(SST, !is.nan(value))  # omit missing data
-    mon <- 1:3
-    SST <- subset(SST, month %in% mon)
-    # Mean SST anomaly across selected (summer) months
-    SST_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, SST, 'mean')
-    SST_allMonths$month <- 'all'
-    SST_allMonths <- SST_allMonths[,c(1:4,6,5)]
-    SST <- rbind(SST, SST_allMonths)
-  }
-  
-  if(sstType == 'trend'){
+  if(SST_overallTrend){
+
     coords <- c('lonmin','lonmax','latmin','latmax')
-    pvals <- SST[,c(names(SST) %in% coords | grepl('pValue', names(SST)))]
-    names(pvals) <- gsub('pValue_', '', names(pvals))
-    SST <- SST[,!grepl('pValue', names(SST))]
-    SST <- melt(SST, id.vars = coords, variable.name = 'month', value.name = 'value')
-    pvals <- melt(pvals, id.vars = coords, variable.name = 'month', value.name = 'value')
-    
-    SST$metric <- sstType
-    SST$pval <- pvals$value
+    SST <- cbind(SST[,coords], metric = 'trend', value = SST$linearTrend, pval = SST$pValue)
     
     if(sstTrend_significantOnly){
       # Set to zero any non-significant linear trends
@@ -801,19 +873,71 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
     siglabels <- c(paste('p <=', significanceContours), paste('p >', tail(significanceContours, 1)))
     SST$plevel <- factor(SST$plevel, levels = 1:nsiglevels, labels = siglabels)
     
-    # Include summer months only
-    mon <- month.abb[1:3]
-    SST <- subset(SST, month %in% mon | month == 'Summer')
-    SST$month <- as.character(SST$month)
-    SST$month[SST$month == 'Summer'] <- 'all'
-    for(i in 1:length(mon)) SST$month[SST$month == mon[i]] <- i
-    SST$month <- as.factor(SST$month)
+  }else{
+    
+    if(sstType == 'anomaly'){
+      sst_ymax <- max(SST$year)
+      SST <- subset(SST, year == sst_ymax, select = -c(year, value))
+      names(SST)[ncol(SST)] = 'value'
+      SST <- subset(SST, !is.nan(value))  # omit missing data
+      mon <- 1:3
+      SST <- subset(SST, month %in% mon)
+      # Mean SST anomaly across selected (summer) months
+      SST_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, SST, 'mean')
+      SST_allMonths$month <- 'all'
+      SST_allMonths <- SST_allMonths[,c(1:4,6,5)]
+      SST <- rbind(SST, SST_allMonths)
+    }
+    
+    if(sstType == 'trend'){
+      coords <- c('lonmin','lonmax','latmin','latmax')
+      pvals <- SST[,c(names(SST) %in% coords | grepl('pValue', names(SST)))]
+      names(pvals) <- gsub('pValue_', '', names(pvals))
+      SST <- SST[,!grepl('pValue', names(SST))]
+      SST <- melt(SST, id.vars = coords, variable.name = 'month', value.name = 'value')
+      pvals <- melt(pvals, id.vars = coords, variable.name = 'month', value.name = 'value')
+      
+      SST$metric <- sstType
+      SST$pval <- pvals$value
+      
+      if(sstTrend_significantOnly){
+        # Set to zero any non-significant linear trends
+        insignificant <- SST$pval > significanceLevel
+        insignificant[is.na(insignificant)] <- FALSE
+        SST$value[insignificant] <- 0
+      }
+      
+      SST <- subset(SST, !is.nan(value))  # omit missing data
+      
+      # To make it easier to plot according to p-value, or to somehow highlight
+      # p-values, define p-level as a category variable
+      nsiglevels <- length(significanceContours) + 1
+      SST$plevel <- apply(outer(SST$pval, significanceContours, '>'), 1, sum) + 1
+      siglabels <- c(paste('p <=', significanceContours), paste('p >', tail(significanceContours, 1)))
+      SST$plevel <- factor(SST$plevel, levels = 1:nsiglevels, labels = siglabels)
+      
+      # Include summer months only
+      mon <- month.abb[1:3]
+      SST <- subset(SST, month %in% mon | month == 'Summer')
+      SST$month <- as.character(SST$month)
+      SST$month[SST$month == 'Summer'] <- 'all'
+      for(i in 1:length(mon)) SST$month[SST$month == mon[i]] <- i
+      SST$month <- as.factor(SST$month)
+    }
+    
   }
-  
+
   # Generate spatial polygons
   sst_poly <- createPolygons(SST)
   sst_poly <- SpatialPolygons(sst_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
   sst_poly <- st_as_sf(sst_poly)
+  
+  if(indexGridCells){
+    # Match polygons to those listed in grid_cells_all
+    sst_centroids <- st_centroid(sst_poly)
+    distBetweenCells <- st_distance(grid_centroids, sst_centroids)
+    sst_poly$cell_index <- grid_cells_all$cell_index[apply(distBetweenCells, 2, which.min)]
+  }
   sst_poly <- st_transform(sst_poly, crs = crs_use) # convert coordinates
   sst_poly$month <- SST$month
   sst_poly$metric <- SST$metric
@@ -821,53 +945,38 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   
   # Get p-values for linear trends if returning all trends regardless of their
   # statistical significance
-  if(sstType == 'trend' & !sstTrend_significantOnly){
+  if(sstType != 'anomaly'){
     sst_poly$pval <- SST$pval
     sst_poly$plevel <- SST$plevel
   }
-
-  assign('sst_poly', sst_poly, envir = parent.frame())
+  
+  # assign('sst_poly', sst_poly, envir = parent.frame())
   
   # Load pH trend (or anomaly) data -----------------------------------------
   
   # pHType = 'trend' # 'trend' or 'anomaly
   # res <- '3x1' # choose data resolution: either  '3x1' or '9x3'
-  filename <- paste0('pH_', pHType, '_res_', res, '.csv')
+
+  if(pH_overallTrend){
+    filename <- paste0('pH_time_series_trend_res_', res, '.csv') # my month-by-month trend calculation    
+  }else{
+    filename <- paste0('pH_', pHType, '_res_', res, '.csv') # my month-by-month trend calculation
+  }
   filepath <- 'MatLab/temp'
   f <- paste(baseDirectory, filepath, filename, sep = '/')
   
   pH <- read.csv(f)
   
+  weblink_pH <- 'https://data.marine.copernicus.eu/product/MULTIOBS_GLO_BIO_CARBON_SURFACE_REP_015_008/description'
+  assign('weblink_pH', weblink_pH, envir = parent.frame())
+  
+  
   # Data pre-processing -----------------------------------------------------     
   
-  if(pHType == 'anomaly'){
-    pH_ymax <- max(pH$year)
-    pH <- subset(pH, year == pH_ymax, select = -c(year, pH, pH_sd))
-    names(pH)[ncol(pH)] = 'value'
-    pH <- subset(pH, !is.nan(value))  # omit missing data
-    mon <- 1:3
-    pH <- subset(pH, month %in% mon)
-    # Mean pH anomaly across selected (summer) months
-    pH_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, pH, 'mean')
-    pH_allMonths$month <- 'all'
-    pH_allMonths <- pH_allMonths[,c(1:4,6,5)]
-    pH <- rbind(pH, pH_allMonths)
-    pH$month <- as.factor(pH$month)
-  }
-  
-  if(pHType == 'trend'){
+  if(pH_overallTrend){
+    
     coords <- c('lonmin','lonmax','latmin','latmax')
-    pvals <- pH[,c(names(pH) %in% coords | grepl('pValue', names(pH)))]
-    names(pvals) <- gsub('pValue_', '', names(pvals))
-    pH <- pH[,!grepl('pValue', names(pH))]
-    pH <- melt(pH, id.vars = coords, variable.name = 'month', value.name = 'value')
-    pvals <- melt(pvals, id.vars = coords, variable.name = 'month', value.name = 'value')
-    
-    pH$metric <- pHType
-    pH$pval <- pvals$value
-    
-    # A small number of grid cells have p-value = NA due to few (only 2?) measurements -- set these p-values to 1
-    pH$pval[!is.na(pH$value) & is.na(pH$pval)] <- 1
+    pH <- cbind(pH[,coords], metric = 'trend', value = pH$linearTrend, pval = pH$pValue)
     
     if(pHTrend_significantOnly){
       # Set to zero any non-significant linear trends
@@ -885,19 +994,75 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
     siglabels <- c(paste('p <=', significanceContours), paste('p >', tail(significanceContours, 1)))
     pH$plevel <- factor(pH$plevel, levels = 1:nsiglevels, labels = siglabels)
     
-    # Include summer months only
-    mon <- month.abb[1:3]
-    pH <- subset(pH, month %in% mon | month == 'Summer')
-    pH$month <- as.character(pH$month)
-    pH$month[pH$month == 'Summer'] <- 'all'
-    for(i in 1:length(mon)) pH$month[pH$month == mon[i]] <- i
-    pH$month <- as.factor(pH$month)
+  }else{
+    
+    if(pHType == 'anomaly'){
+      pH_ymax <- max(pH$year)
+      pH <- subset(pH, year == pH_ymax, select = -c(year, pH, pH_sd))
+      names(pH)[ncol(pH)] = 'value'
+      pH <- subset(pH, !is.nan(value))  # omit missing data
+      mon <- 1:3
+      pH <- subset(pH, month %in% mon)
+      # Mean pH anomaly across selected (summer) months
+      pH_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, pH, 'mean')
+      pH_allMonths$month <- 'all'
+      pH_allMonths <- pH_allMonths[,c(1:4,6,5)]
+      pH <- rbind(pH, pH_allMonths)
+      pH$month <- as.factor(pH$month)
+    }
+    
+    if(pHType == 'trend'){
+      coords <- c('lonmin','lonmax','latmin','latmax')
+      pvals <- pH[,c(names(pH) %in% coords | grepl('pValue', names(pH)))]
+      names(pvals) <- gsub('pValue_', '', names(pvals))
+      pH <- pH[,!grepl('pValue', names(pH))]
+      pH <- melt(pH, id.vars = coords, variable.name = 'month', value.name = 'value')
+      pvals <- melt(pvals, id.vars = coords, variable.name = 'month', value.name = 'value')
+      
+      pH$metric <- pHType
+      pH$pval <- pvals$value
+      
+      # A small number of grid cells have p-value = NA due to few (only 2?) measurements -- set these p-values to 1
+      pH$pval[!is.na(pH$value) & is.na(pH$pval)] <- 1
+      
+      if(pHTrend_significantOnly){
+        # Set to zero any non-significant linear trends
+        insignificant <- pH$pval > significanceLevel
+        insignificant[is.na(insignificant)] <- FALSE
+        pH$value[insignificant] <- 0
+      }
+      
+      pH <- subset(pH, !is.nan(value))  # omit missing data
+      
+      # To make it easier to plot according to p-value, or to somehow highlight
+      # p-values, define p-level as a category variable
+      nsiglevels <- length(significanceContours) + 1
+      pH$plevel <- apply(outer(pH$pval, significanceContours, '>'), 1, sum) + 1
+      siglabels <- c(paste('p <=', significanceContours), paste('p >', tail(significanceContours, 1)))
+      pH$plevel <- factor(pH$plevel, levels = 1:nsiglevels, labels = siglabels)
+      
+      # Include summer months only
+      mon <- month.abb[1:3]
+      pH <- subset(pH, month %in% mon | month == 'Summer')
+      pH$month <- as.character(pH$month)
+      pH$month[pH$month == 'Summer'] <- 'all'
+      for(i in 1:length(mon)) pH$month[pH$month == mon[i]] <- i
+      pH$month <- as.factor(pH$month)
+    }
+    
   }
   
   # Generate spatial polygons
   pH_poly <- createPolygons(pH)
   pH_poly <- SpatialPolygons(pH_poly, proj4string = CRS(paste0('+init=epsg:', as.character(crs_world)))) # create spatial object
   pH_poly <- st_as_sf(pH_poly)
+  
+  if(indexGridCells){
+    # Match polygons to those listed in grid_cells_all
+    pH_centroids <- st_centroid(pH_poly)
+    distBetweenCells <- st_distance(grid_centroids, pH_centroids)
+    pH_poly$cell_index <- grid_cells_all$cell_index[apply(distBetweenCells, 2, which.min)]
+  }
   pH_poly <- st_transform(pH_poly, crs = crs_use) # convert coordinates
   pH_poly$month <- pH$month
   pH_poly$metric <- pH$metric
@@ -905,13 +1070,70 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   
   # Get p-values for linear trends if returning all trends regardless of their
   # statistical significance
-  if(pHType == 'trend' & !pHTrend_significantOnly){
+  if(pHType != 'anomaly'){
     pH_poly$pval <- pH$pval
     pH_poly$plevel <- pH$plevel
   }
   
-  assign('pH_poly', pH_poly, envir = parent.frame())
+  # assign('pH_poly', pH_poly, envir = parent.frame())
   
+  # Tidy up indexing --------------------------------------------------------
+
+  if(indexGridCells){
+    
+    gridCellsWithData <- unique(c(
+      ship_poly$cell_index,
+      # STATIONS_sf$cell_index,
+      chl_poly$cell_index,
+      krill_poly$cell_index,
+      sst_poly$cell_index,
+      pH_poly$cell_index
+    ))
+    
+    i <- grid_cells_all$cell_index %in% gridCellsWithData
+    grid_cells_all <- grid_cells_all[i,]
+    relabelCells <- data.frame(old = grid_cells_all$cell_index)
+    relabelCells$new <- 1:nrow(relabelCells)
+    
+    relabelFun <- function(dat) sapply(1:nrow(dat), function(z) relabelCells$new[relabelCells$old == dat$cell_index[z]])
+    ship_poly$cell_index <- relabelFun(ship_poly)
+    # STATIONS_sf$cell_index <- relabelFun(STATIONS_sf)
+    chl_poly$cell_index <- relabelFun(chl_poly)
+    krill_poly$cell_index <- relabelFun(krill_poly)
+    sst_poly$cell_index <- relabelFun(sst_poly)
+    pH_poly$cell_index <- relabelFun(pH_poly)
+    grid_cells_all$cell_index <- relabelFun(grid_cells_all)
+    
+    grid_cells_all <- st_transform(grid_cells_all, crs = crs_use) # convert coordinates
+    
+    assign('grid_cells_all', grid_cells_all, envir = parent.frame())
+    
+    plt_map_cells <-
+      ggplot(grid_cells_all) +
+      geom_sf(data = nc,
+              aes(fill = surface),
+              show.legend = FALSE) +
+      scale_fill_manual(values = c('grey','skyblue','skyblue','grey')) +
+      geom_sf(alpha = 0) +
+      geom_sf_text(aes(label = cell_index), size = 3) +
+      theme(
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_rect(fill = 'white', colour = 'white'),
+        plot.background = element_rect(fill = 'white', colour = 'white')
+      )
+    
+    assign('plt_map_cells', plt_map_cells, envir = parent.frame())
+    
+  }
+  
+  assign('ship_poly', ship_poly, envir = parent.frame())
+  assign('krill_poly', krill_poly, envir = parent.frame())
+  assign('chl_poly', chl_poly, envir = parent.frame())
+  assign('sst_poly', sst_poly, envir = parent.frame())
+  assign('pH_poly', pH_poly, envir = parent.frame())
+
 }
 
 # Define interactive tooltip for plastic data
@@ -1019,11 +1241,75 @@ fun_flextable <- function(x, longVars, singleRowVars, sampleType, DATA_name_swap
   }
 }
 
+# Set the plotting parameters
+set_plot_params <- function(base_map, plastics, stations){
+  
+  # Plot symbols - store in separate data frame
+  # Research stations use (mostly) unfilled symbols
+  pltShapes <- c(1, 0, 5, 2, 6, 19)
+  stationTypes <- levels(stations$Type)
+  nstationTypes <- length(stationTypes)
+  pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
+  # Plastic samples use filled plot symbols (21:25) that differ according to sample type.
+  pltShapes <- 21:25
+  sampleTypes <- levels(plastics$SampleType_grouped)
+  nsampleTypes <- length(sampleTypes)
+  pltSymbols <- rbind(pltSymbols,
+                      data.frame(Class = rep('PlasticSample', nsampleTypes), Type = sampleTypes, symbol = pltShapes[1:nsampleTypes]))
+  pltSymbols$Type <- factor(pltSymbols$Type, levels = pltSymbols$Type)
+  
+  # Plot colours
+  # Use a qualitative palette for plastic sources -- the default is limited to 12 colours
+  ncol <- length(unique(plastics$Source))
+  pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
+  # plot(1:12,1:12, col=pltColours, pch = 19)
+  if(ncol < 13){
+    pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
+  }else{
+    # make new colours as gradient between existing Paired palette colours
+    ne <- ceiling({ncol - 12} / 6)
+    mc <- matrix(pltColours, 2)
+    mc <- sapply(1:6, function(z){
+      cf <- colorRampPalette(c(mc[1,z], mc[2,z]))
+      cf <- cf(ne+2)
+      cf[2:{ne+1}]
+    })
+    mc <- matrix(mc, ne, 6)
+    pltColours <- c(
+      pltColours[seq(2, 12, 2)],
+      pltColours[seq(1, 11, 2)],
+      as.vector(t(mc[seq(ne, 1, -1),]))
+    )
+  }
+  
+  sources <- levels(plastics$Source)
+  nsources <- length(sources)
+  pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
+  
+  du <- unique(data.frame(Source = plastics$Source, URL = plastics$URL))
+  pltColours <- merge(pltColours, du, by = 'Source')
+  
+  # Plot bounding box
+  bbox_map <- st_bbox(base_map)
+  bbox_dat <- st_bbox(plastics)
+  # bbox_krill <- st_bbox(krill_poly)
+  # bbox_chl <- st_bbox(chl_poly)
+  BBox <- bbox_map
+  aspectRatio = unname(diff(BBox[c(1,3)]) / diff(BBox[c(2,4)]))
+  linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
+  
+  assign('pltSymbols', pltSymbols, envir = parent.frame())
+  assign('pltColours', pltColours, envir = parent.frame())
+  assign('BBox', BBox, envir = parent.frame())
+  assign('aspectRatio', aspectRatio, envir = parent.frame())
+  assign('linebreaks', linebreaks, envir = parent.frame())
+  
+  
+}
+
+
 # The main plotting function
 make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75, contourLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio, plotSignificanceContours = FALSE, significanceContours = NULL, sst_sigContours = significanceContours, pH_sigContours = significanceContours){
-  
-  # pHType = 'unspecified', sstType = 'unspecified', shipSummaryDataOrRaw = 'unspecified', 
-  
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
@@ -1057,35 +1343,60 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
          },
          
          krill = {
-           plt_background <-
-             ggplot() +
-             geom_sf(data = dat_background, aes(fill = colourgroup)) +
-             scale_fill_viridis_d(option = 'plasma',
-                                  name = bquote(atop(Krill, (number / m^2))))
+           legTitle <- 'Krill\n(number/m\u00B2)'
+           if(exists('weblink_krill')){
+             plt_background <- 
+               ggplot() +
+               geom_sf(data = dat_background, aes(fill = colourgroup)) +
+               scale_fill_viridis_d_interactive(option = 'plasma',
+                                                name = label_interactive(legTitle,
+                                                                         data_id = 'legend.title',
+                                                                         hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                         onclick = paste0("window.open(`", as.character(weblink_krill), "`);"),
+                                                                         tooltip = weblink_krill))
+           }else{
+             plt_background <- 
+               ggplot() +
+               geom_sf(data = dat_background, aes(fill = colourgroup)) +
+               scale_fill_viridis_d(option = 'plasma', name = legTitle)
+           }
+           
          },
          
          chl = {
-           plt_background <-
-             ggplot() +
-             geom_sf(data = dat_background, aes(fill = value)) +
-             scale_fill_viridis_c(option = 'viridis', trans = 'log10',
-                                  name = bquote(atop(Chlorophyll, (mg / m^3))))
+           legTitle <- 'Chlorophyll\n(mg/m\u00B3)'
+           # legTitle <- 'Chlorophyll\u1D44E\n(mg/m\u00B3)'
+           # legTitle <- 'Chlorophyll 𝑎\n(mg/m\u00B3)'
+
+           if(exists('weblink_chlorophyll')){
+             plt_background <-
+               ggplot() +
+               geom_sf(data = dat_background, aes(fill = value)) +
+               scale_fill_viridis_c_interactive(option = 'viridis', trans = 'log10',
+                                                name = label_interactive(legTitle,
+                                                                         data_id = 'legend.title',
+                                                                         hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                         onclick = paste0("window.open(`", as.character(weblink_chlorophyll), "`);"),
+                                                                         tooltip = weblink_chlorophyll))
+           }else{
+             plt_background <-
+               ggplot() +
+               geom_sf(data = dat_background, aes(fill = value)) +
+               scale_fill_viridis_c(option = 'viridis', trans = 'log10',
+                                    name = legTitle)
+           }
+           
          },
          
          sst = {
-           
            if(exists('sstType')){
              legLabel <- switch(sstType,
-                                trend = bquote(atop(SST ~ trend, (degree * C / year))),
-                                anomaly = bquote(atop(SST ~ anomaly, (degree * C))))
+                                trend = 'SST trend\n(\u00B0C/year)',# 'SST trend\n(\u2103/year)',
+                                anomaly = 'SST anomaly\n(\u00B0C)')# 'SST anomaly\n(\u2103)')
            }else{
-             legLabel <- bquote(SST)
+             legLabel <- 'SST'
            }
-
-           # legLabel <- switch(sstType,
-           #                    unspecified = bquote(SST),
-           #                    trend = bquote(atop(SST ~ trend, (degree * C / year))),
-           #                    anomaly = bquote(atop(SST ~ anomaly, (degree * C))))
+           weblink_exists <- exists('weblink_sst')
            nv <- dat_background$value[dat_background$value < 0]
            pv <- dat_background$value[dat_background$value > 0]
            any_positive <- length(pv) > 0
@@ -1097,27 +1408,63 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
            cval <- c(quantile(nv, seq(0, 1, length = ncol_sst_ + 1))[1:ncol_sst_], 0, quantile(pv, seq(0, 1, length = ncol_sst_ + 1))[2:{ncol_sst_ + 1}])
            if(any_positive & any_negative){
              cval <- {cval - min(cval)} / diff(range(cval))
-             plt_background <-
-               ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
-               scale_fill_gradientn(colours = Cols, values = cval,
-                                    name = legLabel)
+             if(weblink_exists){
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn_interactive(colours = Cols, values = cval,
+                                                  name = label_interactive(legLabel,
+                                                                           data_id = 'legend.title',
+                                                                           hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                           onclick = paste0("window.open(`", as.character(weblink_sst), "`);"),
+                                                                           tooltip = weblink_sst))
+             }else{
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn(colours = Cols, values = cval,
+                                      name = legLabel)
+             }
            }else{if(any_negative){
              cval <- {cval[1:{ncol_sst_+1}] - min(cval[1:{ncol_sst_+1}])} / diff(range(cval[1:{ncol_sst_+1}]))
              cval <- {cval - min(cval)} / diff(range(cval))
-             plt_background <-
-               ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
-               scale_fill_gradientn(colours = Cols[1:{ncol_sst_+1}], values = cval,
-                                    name = legLabel)
+             if(weblink_exists){
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn_interactive(colours = Cols[1:{ncol_sst_+1}], values = cval,
+                                                  name = label_interactive(legLabel,
+                                                                           data_id = 'legend.title',
+                                                                           hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                           onclick = paste0("window.open(`", as.character(weblink_sst), "`);"),
+                                                                           tooltip = weblink_sst))
+             }else{
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn(colours = Cols[1:{ncol_sst_+1}], values = cval,
+                                      name = legLabel)
+             }
            }else{if(any_positive){
              cval <- {cval[{ncol_sst_+1}:ncol_sst] - min(cval[{ncol_sst_+1}:ncol_sst])} / diff(range(cval[{ncol_sst_+1}:ncol_sst]))
              cval <- {cval - min(cval)} / diff(range(cval))
-             plt_background <-
-               ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
-               scale_fill_gradientn(colours = Cols[{ncol_sst_+1}:ncol_sst], values = cval,
-                                    name = legLabel)
+             if(weblink_exists){
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn_interactive(colours = Cols[{ncol_sst_+1}:ncol_sst], values = cval,
+                                                  name = label_interactive(legLabel,
+                                                                           data_id = 'legend.title',
+                                                                           hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                           onclick = paste0("window.open(`", as.character(weblink_sst), "`);"),
+                                                                           tooltip = weblink_sst))
+             }else{
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn(colours = Cols[{ncol_sst_+1}:ncol_sst], values = cval,
+                                      name = legLabel)
+             }
            }}}
          },
          
@@ -1125,12 +1472,12 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
            
            if(exists('pHtype')){
              legLabel <- switch(pHType,
-                                trend = bquote(atop(pH ~ trend, (1/year))),
-                                anomaly = bquote(pH ~ anomaly))
+                                trend = 'pH trend\n(year\u207B\u00B9)',# bquote(atop(pH ~ trend, (1/year))),
+                                anomaly = 'pH anomaly\n(dimensionless)')# bquote(pH ~ anomaly))
            }else{
-             legLabel <- bquote(pH)
+             legLabel <- 'pH'# bquote(pH)
            }
-           
+           weblink_exists <- exists('weblink_pH')
            nv <- dat_background$value[dat_background$value < 0]
            pv <- dat_background$value[dat_background$value > 0]
            any_positive <- length(pv) > 0
@@ -1143,33 +1490,72 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
            # Colour scale selection depends on range of values
            if(any_positive & any_negative){
              cval <- {cval - min(cval)} / diff(range(cval))
-             plt_background <-
-               ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
-               scale_fill_gradientn(colours = Cols, values = cval,
-                                    name = legLabel)
+             if(weblink_exists){
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn_interactive(colours = Cols, values = cval,
+                                                  name = label_interactive(legLabel,
+                                                                           data_id = 'legend.title',
+                                                                           hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                           onclick = paste0("window.open(`", as.character(weblink_pH), "`);"),
+                                                                           tooltip = weblink_pH))
+             }else{
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn(colours = Cols, values = cval,
+                                      name = legLabel)
+             }
            }else{if(any_negative){
              cval <- {cval[1:{ncol_pH_+1}] - min(cval[1:{ncol_pH_+1}])} / diff(range(cval[1:{ncol_pH_+1}]))
              cval <- {cval - min(cval)} / diff(range(cval))
-             plt_background <-
-               ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
-               scale_fill_gradientn(colours = Cols[1:{ncol_pH_+1}], values = cval,
-                                    name = legLabel)
+             if(weblink_exists){
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn_interactive(colours = Cols[1:{ncol_pH_+1}], values = cval,
+                                                  name = label_interactive(legLabel,
+                                                                           data_id = 'legend.title',
+                                                                           hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                           onclick = paste0("window.open(`", as.character(weblink_pH), "`);"),
+                                                                           tooltip = weblink_pH))
+             }else{
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn(colours = Cols[1:{ncol_pH_+1}], values = cval,
+                                      name = legLabel)
+             }
            }else{if(any_positive){
              cval <- {cval[{ncol_pH_+1}:ncol_pH] - min(cval[{ncol_pH_+1}:ncol_pH])} / diff(range(cval[{ncol_pH_+1}:ncol_pH]))
              cval <- {cval - min(cval)} / diff(range(cval))
-             plt_background <-
-               ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
-               scale_fill_gradientn(colours = Cols[{ncol_pH_+1}:ncol_pH], values = cval,
-                                    name = legLabel)
+             
+             if(weblink_exists){
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn_interactive(colours = Cols[{ncol_pH_+1}:ncol_pH], values = cval,
+                                                  name = label_interactive(legLabel,
+                                                                           data_id = 'legend.title',
+                                                                           hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                           onclick = paste0("window.open(`", as.character(weblink_pH), "`);"),
+                                                                           tooltip = weblink_pH))
+             }else{
+               plt_background <-
+                 ggplot() +
+                 geom_sf(data = dat_background, aes(fill = value)) +
+                 scale_fill_gradientn(colours = Cols[{ncol_pH_+1}:ncol_pH], values = cval,
+                                      name = legLabel)  
+             }
            }}}
          },
          
          ship = {
            
            if(exists(shipSummaryDataOrRaw)){
+             
+             weblink_exists <- exists('weblink_shipping')
              
              plt_background <-switch(shipSummaryDataOrRaw,
                                      
@@ -1178,27 +1564,53 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                                        ShipType <- paste0(toupper(substr(shipType,1,1)), substr(shipType,2,nchar(shipType)))
                                        leg_lab <- bquote(.(paste0('Ship time:', '\n', shipType, ' vessels', '\n', '(days)')))
                                        vesselsPresent <- !is.na(dat_background$total_time)
-                                       plt <- 
-                                         ggplot() + 
-                                         geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +
-                                         scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
-                                                              name = leg_lab) +
-                                         geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
-                                       plt
+                                       if(weblink_exists){
+                                         plt <- 
+                                           ggplot() + 
+                                           geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +
+                                           scale_fill_viridis_c_interactive(option = 'mako', trans = 'log10', direction = -1,
+                                                                            name = label_interactive(leg_lab,
+                                                                                                     data_id = 'legend.title',
+                                                                                                     hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                                                     onclick = paste0("window.open(`", weblink_shipping, "`);"),
+                                                                                                     tooltip = weblink_shipping)) +
+                                           geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
+                                         plt
+                                       }else{
+                                         plt <- 
+                                           ggplot() + 
+                                           geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +
+                                           scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
+                                                                name = leg_lab) +
+                                           geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
+                                         plt
+                                       }
                                      },
                                      
                                      raw = {
-                                       
                                        shipActivity <- unique(dat_background$activity)
-                                       leg_lab <- bquote(.(paste0('Ship time:', '\n', shipActivity, ' vessels', '\n', '(days/yr)')))
-                                       plt <- 
-                                         ggplot() + 
-                                         geom_sf(data = dat_background, aes(fill = value), colour = 'black', linewidth = polyLineWidth) +
-                                         scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
-                                                              name = leg_lab) # +
-                                       # geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
-                                       plt
-                                       
+                                       leg_lab <- paste0('Ship time\n', shipActivity, ' vessels\n', '(days/year)')
+                                       # leg_lab <- bquote(.(paste0('Ship time:', '\n', shipActivity, ' vessels', '\n', '(days/yr)')))
+                                       if(weblink_exists){
+                                         plt <- 
+                                           ggplot() + 
+                                           geom_sf(data = dat_background, aes(fill = value), colour = 'black', linewidth = polyLineWidth) +
+                                           scale_fill_viridis_c_interactive(option = 'mako', trans = 'log10', direction = -1,
+                                                                            name = label_interactive(leg_lab,
+                                                                                                     data_id = 'legend.title',
+                                                                                                     hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                                                     onclick = paste0("window.open(`", weblink_shipping, "`);"),
+                                                                                                     tooltip = weblink_shipping))
+                                         plt
+                                       }else{
+                                         plt <- 
+                                           ggplot() + 
+                                           geom_sf(data = dat_background, aes(fill = value), colour = 'black', linewidth = polyLineWidth) +
+                                           scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
+                                                                name = leg_lab) # +
+                                         # geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
+                                         plt
+                                       }
                                      }
              )
              
@@ -1208,21 +1620,6 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              plt
              
            }
-           
-           # shipType <- unique(dat_background$ship_class)
-           # ShipType <- paste0(toupper(substr(shipType,1,1)), substr(shipType,2,nchar(shipType)))
-           # leg_lab <- bquote(.(paste0('Ship time:', '\n', shipType, ' vessels', '\n', '(days)')))
-           # vesselsPresent <- !is.na(dat_background$total_time)
-           # 
-           # plt_background <- 
-           #   ggplot() + 
-           #   geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +
-           #   scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
-           #                        name = leg_lab) +
-           #   geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
-           # 
-           
-           
          }
   )
   
@@ -1323,8 +1720,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
       new_scale_colour() +
       geom_sf_interactive(data = dat_stations,
                           aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
-                          alpha = alpha, size = ptSize, stroke = 1, show.legend = FALSE) +
-      scale_colour_manual(values = c('forestgreen','firebrick'))
+                          alpha = alpha, size = ptSize, stroke = 2, show.legend = FALSE) +
+      scale_colour_manual(values = c('forestgreen','purple'))
+    # scale_colour_manual(values = c('forestgreen','firebrick'))
   }
   
   # Plastic samples
@@ -1350,17 +1748,35 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
   
   # Research stations
   if(anyStations){
+    weblink_exists <- exists('weblink_facilities')
     symbols_ <- symbols[symbols$Class == 'ResearchStation',]
     plt_stations <-
       ggplot() +
       geom_sf(data = dat_stations,
               aes(shape = Type, colour = Seasonality),
-              alpha = 1, size = ptSize, stroke = 1) +
-      scale_colour_manual(values = c('forestgreen','firebrick')) +
-      scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
-      theme(legend.key = element_blank()) +
-      guides(shape = guide_legend(title = 'Facility', override.aes = list(size = legPtSize)),
-             colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
+              alpha = 1, size = ptSize, stroke = 2) +
+      scale_colour_manual(values = c('forestgreen','purple'))
+    # scale_colour_manual(values = c('forestgreen','firebrick'))
+    if(weblink_exists){
+      plt_stations <- plt_stations +
+        scale_shape_manual_interactive(values = setNames(symbols_$symbol, symbols_$Type),
+                                       name = label_interactive(label = 'Facility',
+                                                                data_id = 'legend.title',
+                                                                hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                                                                onclick = paste0("window.open(`", weblink_facilities, "`);"),
+                                                                tooltip = weblink_facilities)) +
+        guides(shape = guide_legend_interactive(override.aes = list(size = legPtSize, stroke = 1)),
+               colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
+    }else{
+      plt_stations <- plt_stations +
+        scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
+        guides(shape = guide_legend(title = 'Facility', override.aes = list(size = legPtSize)),
+               colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
+    }
+    plt_stations <- plt_stations +
+      theme(legend.key = element_blank())# +
+      # guides(shape = guide_legend(override.aes = list(size = legPtSize)),
+      #        colour = guide_legend(override.aes = list(size = legPtSize, shape = 1)))
     leg_stations <- get_legend(plt_stations)
     # get legend dimensions
     lw = (leg_stations$widths)
@@ -1401,6 +1817,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
             label_interactive(
               as.character(s),
               data_id = as.character(s),
+              hover_css = 'fill:blue;font-size:13px;font-weight:bold',
               onclick = paste0("window.open(`", as.character(u), "`);"),
               tooltip = as.character(u)
             )

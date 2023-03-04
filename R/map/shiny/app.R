@@ -47,9 +47,16 @@ if(!ggnewscale_available){
    }
 }
 
+# library(this.path)
+
 # Directory info ----------------------------------------------------------
 
+# wd_orig <- this.dir()
 wd_orig <- getwd()
+
+# I will need to move all required files into sub-directories stored in the same
+# directory (wd_orig) as app.R
+
 wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
 # setwd('~/Documents/Git Repos/CUPIDO-risk-map')
 
@@ -57,12 +64,13 @@ wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
 
 source('functions.R', local = TRUE)
 
-significantTrendsOnly <- FALSE
+significantTrendsOnly <- TRUE
 
 # source('import_data.R') # function (get_data) to load/organise data
 get_data(res = '3x1', baseDirectory = wd_base, shinyDirectory = wd_orig, 
-        sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
-        sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly)
+         sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
+         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
+         roundShipTime = TRUE, indexGridCells = FALSE)
 
 # It will be nice to able to select between trend data and anomalies from within
 # the Shiny app. This will involve returning both data sets from the get_data
@@ -70,12 +78,12 @@ get_data(res = '3x1', baseDirectory = wd_base, shinyDirectory = wd_orig,
 # between them. This is not critical to include, but would be a nice extension
 # to what I've already produced
 
-if(significantTrendsOnly){
-  # If all insignificant trends are omitted (plotted in white) then we don't need
-  # to keep the p-values
-  sst_poly <- sst_poly[sst_poly$metric != 'p-value',]
-  pH_poly <- pH_poly[pH_poly$metric != 'p-value',]
-}
+# if(significantTrendsOnly){
+#   # If all insignificant trends are omitted (plotted in white) then we don't need
+#   # to keep the p-values
+#   sst_poly <- sst_poly[sst_poly$metric != 'p-value',]
+#   pH_poly <- pH_poly[pH_poly$metric != 'p-value',]
+# }
 
 
 # Flextable options ------------------------------------------------------
@@ -87,77 +95,81 @@ set_flextable_defaults(
 )
 
 # Plotting parameters -----------------------------------------------------
-# Plot symbols - store in separate data frame
-# Research stations use (mostly) unfilled symbols
-pltShapes <- c(1, 0, 5, 2, 6, 19) 
-# stationTypes <- unique(STATIONS$Type)
-stationTypes <- levels(STATIONS_sf$Type)
-# stationTypes <- levels(STATIONS$Type)
-nstationTypes <- length(stationTypes)
-pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
-# Plastic samples use filled plot symbols (21:25) that differ according to sample type.
-pltShapes <- 21:25
-sampleTypes <- levels(DATA_sf$SampleType_grouped)
-# sampleTypes <- levels(DATA$SampleType_grouped)
-# sampleTypes <- levels(DATA$SampleType)
-# sampleTypes <- levels(DATA$'Sample type')
-nsampleTypes <- length(sampleTypes)
-pltSymbols <- rbind(pltSymbols,
-                    data.frame(Class = rep('PlasticSample', nsampleTypes), Type = sampleTypes, symbol = pltShapes[1:nsampleTypes]))
-pltSymbols$Type <- factor(pltSymbols$Type, levels = pltSymbols$Type)
 
-# Plot colours
-# Use a qualitative palette for plastic sources -- the default is limited to 12 colours
-ncol <- length(unique(DATA_sf$Source))
-pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
-# plot(1:12,1:12, col=pltColours, pch = 19)
-if(ncol < 13){
-  pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
-}else{
-  # make new colours as gradient between existing Paired palette colours
-  ne <- ceiling({ncol - 12} / 6)
-  mc <- matrix(pltColours, 2)
-  mc <- sapply(1:6, function(z){
-    cf <- colorRampPalette(c(mc[1,z], mc[2,z]))
-    cf <- cf(ne+2)
-    cf[2:{ne+1}]
-  })
-  mc <- matrix(mc, ne, 6)
-  pltColours <- c(
-    pltColours[seq(2, 12, 2)],
-    pltColours[seq(1, 11, 2)],
-    as.vector(t(mc[seq(ne, 1, -1),]))
-    )
-  }
+set_plot_params(nc, DATA_sf, STATIONS_sf)
+  
 
+# # Plot symbols - store in separate data frame
+# # Research stations use (mostly) unfilled symbols
+# pltShapes <- c(1, 0, 5, 2, 6, 19) 
+# # stationTypes <- unique(STATIONS$Type)
+# stationTypes <- levels(STATIONS_sf$Type)
+# # stationTypes <- levels(STATIONS$Type)
+# nstationTypes <- length(stationTypes)
+# pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
+# # Plastic samples use filled plot symbols (21:25) that differ according to sample type.
+# pltShapes <- 21:25
+# sampleTypes <- levels(DATA_sf$SampleType_grouped)
+# # sampleTypes <- levels(DATA$SampleType_grouped)
+# # sampleTypes <- levels(DATA$SampleType)
+# # sampleTypes <- levels(DATA$'Sample type')
+# nsampleTypes <- length(sampleTypes)
+# pltSymbols <- rbind(pltSymbols,
+#                     data.frame(Class = rep('PlasticSample', nsampleTypes), Type = sampleTypes, symbol = pltShapes[1:nsampleTypes]))
+# pltSymbols$Type <- factor(pltSymbols$Type, levels = pltSymbols$Type)
+# 
+# # Plot colours
+# # Use a qualitative palette for plastic sources -- the default is limited to 12 colours
+# ncol <- length(unique(DATA_sf$Source))
 # pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
-# pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
-
-sources <- levels(DATA_sf$Source)
-# sources <- levels(DATA$Source)
-nsources <- length(sources)
-pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
-
-du <- unique(data.frame(Source = DATA_sf$Source, URL = DATA_sf$URL))
-# du <- unique(DATA[c('Source', 'URL')])
-pltColours <- merge(pltColours, du, by = 'Source')
-
-# Plot bounding box
-bbox_map <- st_bbox(nc)
-# st_bbox(eco)
-bbox_dat <- st_bbox(DATA_sf)
-bbox_krill <- st_bbox(krill_poly)
-bbox_chl <- st_bbox(chl_poly)
-# bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin, bbox_chl$xmin),
-#                    min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin, bbox_chl$ymin),
-#                    max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax, bbox_chl$xmax),
-#                    max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax, bbox_chl$ymax)), names(bbox_map))
-
-BBox <- bbox_map
-
-aspectRatio = unname(diff(BBox[c(1,3)]) / diff(BBox[c(2,4)]))
-
-linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
+# # plot(1:12,1:12, col=pltColours, pch = 19)
+# if(ncol < 13){
+#   pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
+# }else{
+#   # make new colours as gradient between existing Paired palette colours
+#   ne <- ceiling({ncol - 12} / 6)
+#   mc <- matrix(pltColours, 2)
+#   mc <- sapply(1:6, function(z){
+#     cf <- colorRampPalette(c(mc[1,z], mc[2,z]))
+#     cf <- cf(ne+2)
+#     cf[2:{ne+1}]
+#   })
+#   mc <- matrix(mc, ne, 6)
+#   pltColours <- c(
+#     pltColours[seq(2, 12, 2)],
+#     pltColours[seq(1, 11, 2)],
+#     as.vector(t(mc[seq(ne, 1, -1),]))
+#     )
+#   }
+# 
+# # pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
+# # pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
+# 
+# sources <- levels(DATA_sf$Source)
+# # sources <- levels(DATA$Source)
+# nsources <- length(sources)
+# pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
+# 
+# du <- unique(data.frame(Source = DATA_sf$Source, URL = DATA_sf$URL))
+# # du <- unique(DATA[c('Source', 'URL')])
+# pltColours <- merge(pltColours, du, by = 'Source')
+# 
+# # Plot bounding box
+# bbox_map <- st_bbox(nc)
+# # st_bbox(eco)
+# bbox_dat <- st_bbox(DATA_sf)
+# bbox_krill <- st_bbox(krill_poly)
+# bbox_chl <- st_bbox(chl_poly)
+# # bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin, bbox_chl$xmin),
+# #                    min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin, bbox_chl$ymin),
+# #                    max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax, bbox_chl$xmax),
+# #                    max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax, bbox_chl$ymax)), names(bbox_map))
+# 
+# BBox <- bbox_map
+# 
+# aspectRatio = unname(diff(BBox[c(1,3)]) / diff(BBox[c(2,4)]))
+# 
+# linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
 
 
 # Plotting function -------------------------------------------------------
@@ -605,15 +617,7 @@ backgroundData_choiceNames <- list(
   'Chlorophyll (Jan--Mar)',
   'Chlorophyll (Jan)',
   'Chlorophyll (Feb)',
-  'Chlorophyll (Mar)',
-  paste('SST', sstType, '(Jan--Mar)', sep = ' '),
-  paste('SST', sstType, '(Jan)', sep = ' '),
-  paste('SST', sstType, '(Feb)', sep = ' '),
-  paste('SST', sstType, '(Mar)', sep = ' '),
-  paste('pH', pHType, '(Jan--Mar)', sep = ' '),
-  paste('pH', pHType, '(Jan)', sep = ' '),
-  paste('pH', pHType, '(Feb)', sep = ' '),
-  paste('pH', pHType, '(Mar)', sep = ' ')
+  'Chlorophyll (Mar)'
 )
 
 backgroundData_choiceValues = list(
@@ -625,16 +629,36 @@ backgroundData_choiceValues = list(
   'chl_all',
   'chl_1',
   'chl_2',
-  'chl_3',
-  'sst_all',
-  'sst_1',
-  'sst_2',
-  'sst_3',
-  'pH_all',
-  'pH_1',
-  'pH_2',
-  'pH_3'
+  'chl_3'
 )
+
+if(SST_overallTrend){
+  backgroundData_choiceNames <- c(backgroundData_choiceNames, 'SST trend')
+  backgroundData_choiceValues <- c(backgroundData_choiceValues, 'sst')
+}else{
+  backgroundData_choiceNames <- c(backgroundData_choiceNames, c(paste('SST', sstType, '(Jan--Mar)', sep = ' '),
+                                                               paste('SST', sstType, '(Jan)', sep = ' '),
+                                                               paste('SST', sstType, '(Feb)', sep = ' '),
+                                                               paste('SST', sstType, '(Mar)', sep = ' ')))
+  backgroundData_choiceValues <- c(backgroundData_choiceValues, c('sst_all',
+                                                                  'sst_1',
+                                                                  'sst_2',
+                                                                  'sst_3'))
+}
+
+if(pH_overallTrend){
+  backgroundData_choiceNames <- c(backgroundData_choiceNames, 'pH trend')
+  backgroundData_choiceValues <- c(backgroundData_choiceValues, 'pH')
+}else{
+  backgroundData_choiceNames <- c(backgroundData_choiceNames, c(paste('pH', pHType, '(Jan--Mar)', sep = ' '),
+                                                                paste('pH', pHType, '(Jan)', sep = ' '),
+                                                                paste('pH', pHType, '(Feb)', sep = ' '),
+                                                                paste('pH', pHType, '(Mar)', sep = ' ')))
+  backgroundData_choiceValues <- c(backgroundData_choiceValues, c('pH_all',
+                                                                  'pH_1',
+                                                                  'pH_2',
+                                                                  'pH_3'))
+}
 
 # These shipSummaryDataOrRaw switches have become redundant, but keep them in case
 # the code is modified in future -- it may be useful again...
@@ -787,10 +811,10 @@ ui <- fluidPage(
   fluidRow(
     column(width = 12, #offset = 3,
            
-           wellPanel(
+           # wellPanel(
              h4('Selected plastic data'),
              dataTableOutput('datatab_plastic')
-           )
+           # )
            
     )
   ),
@@ -798,10 +822,10 @@ ui <- fluidPage(
   fluidRow(
     column(width = 12,
            
-           wellPanel(
+           # wellPanel(
              h4('Selected facilities'),
              dataTableOutput('datatab_stations')
-           )
+           # )
            
     )
   )
@@ -881,7 +905,7 @@ server <- function(input, output, session) {
         if(length(x) == 2){
           m <- x[2] # get the chosen month(s)
           background_dat <- subset(background_dat, month == m) # filter by month
-        } else warning('Background data cannot be filtered by month: check that R Shiny ui input options match the data.')
+        }# else warning('Background data cannot be filtered by month: check that R Shiny ui input options match the data.')
       }else{
         
         if(background == 'ship'){
@@ -975,9 +999,11 @@ server <- function(input, output, session) {
                         opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE),
                         opts_hover_inv(css = 'opacity:0.2;cursor:pointer;'),
                         opts_selection(type = 'multiple', css = 'opacity:1.0;stroke-width:4;'),
-                        opts_selection_key(css = girafe_css("stroke:red; stroke-width:2px",
-                                                            text = "stroke:none;fill:red;font-size:12px")),
-                        opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE)
+                        opts_selection_key(css = girafe_css("stroke:none;",
+                                                            text = "stroke:none;fill:black;"))#,
+                        # opts_selection_key(css = girafe_css("stroke:red; stroke-width:2px",
+                        #                                     text = "stroke:none;fill:red;font-size:12px"))#,
+                        # opts_hover(css = 'opacity:1.0;stroke-width:4;cursor:pointer;', reactive = TRUE)
     )
     x
   }
@@ -995,14 +1021,11 @@ server <- function(input, output, session) {
     input$plt_selected
   })
 
-  output$datatab_plastic <- renderDataTable({
-    # fd <- filtered_data()
-    # fp <- fd$plastic_wide
+  displayed_data_table_plastic <- reactive({
     fp <- filtered_plastic_data()
     d <- fp$data
     d <- d[d$data_id %in% selected_data(),]
     if(nrow(d) < 1) return(NULL)
-    
     d <- d[DATA_name_swap$original] # display only columns appearing in original data set
     names(d) <- sapply(1:ncol(d), function(z){
       n <- names(d)[z]
@@ -1010,37 +1033,51 @@ server <- function(input, output, session) {
       if(any(i)) n <- DATA_name_swap$spaces[i]
       n
     })
-    
-    d$URL <- paste0("<a href='", d$URL, "'>", d$URL,"</a>")
-    # d <- subset(d, select = -c(Year, Coordinates, data_id))
+    # d$URL <- paste0("<a href='", d$URL, "'>", d$URL,"</a>")
+    d$URL <- paste0("<a href='", d$URL, "' target=_blank", ">", d$URL,"</a>")
     row.names(d) <- NULL
     d <- datatable(d,
+                   extensions = 'Buttons',
                    options = list(
-                     paging = FALSE, searching = FALSE # ,fillContainer = TRUE,
-                    # bPaginate = FALSE,  searching = FALSE, fillContainer = TRUE
-                     # autoWidth = TRUE
+                     paging = TRUE, searching = TRUE, autoWidth = TRUE, scrollX = TRUE,
+                     # fillContainer = TRUE,
+                     # bPaginate = FALSE,
+                     # autoWidth = TRUE,
+                     dom = 'Bftp',
+                     buttons = c('copy', 'csv')
                    ), escape = FALSE)
     d
   })
+  
+  output$datatab_plastic <- renderDataTable(displayed_data_table_plastic())#,
+                                            # extensions = 'Buttons',
+                                            # options = list(dom = 'Bfrtip',
+                                            #                buttons = c('copy', 'csv')))
+  
 
-  output$datatab_stations <- renderDataTable({
-    # fd <- filtered_data()
-    # d <- fd$stations
+  
+  display_data_table_stations <- reactive({
     d <- filtered_station_data()
     d <- as.data.frame(d)
     d <- d[d$Record_ID %in% selected_data(),]
     if(nrow(d) < 1) return(NULL)
-    d <- subset(d, select = -c(Record_ID, Elevation_Datum, tooltip, geometry, order, Webcam_URL))
-    # d <- subset(d, select = -c(Elevation_Datum, tooltip, geometry, order, Webcam_URL))
+    d <- subset(d, select = -c(Record_ID, Elevation_Datum, tooltip, geometry, order, Distance_From_Coast))#, Webcam_URL))
+    d$Photo_URL <- paste0("<a href='", d$Photo_URL, "' target=_blank", ">", d$Photo_URL,"</a>")
+    d$Webcam_URL <- paste0("<a href='", d$Webcam_URL, "' target=_blank", ">", d$Webcam_URL,"</a>")
     row.names(d) <- NULL
     d <- datatable(d,
+                   extensions = 'Buttons',
                    options = list(
-                     paging = FALSE, searching = FALSE, autoWidth = TRUE, scrollX = TRUE
-                   ))
+                     paging = TRUE, searching = TRUE, autoWidth = TRUE, scrollX = TRUE,
+                     dom = 'Bftp',
+                     buttons = c('copy', 'csv')
+                   ), escape = FALSE)
     d
   })
   
+  output$datatab_stations <- renderDataTable(display_data_table_stations())
   
+
       
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
@@ -1071,4 +1108,4 @@ server <- function(input, output, session) {
 }
 
 # Create Shiny app ----
-shinyApp(ui, server)
+shinyApp(ui, server, options = list(launch.browser = TRUE))
