@@ -55,129 +55,73 @@ wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
 
 source('functions.R', local = TRUE)
 
-significantTrendsOnly <- FALSE
+significantTrendsOnly <- TRUE
+
+res <- '3x1'
 
 # source('import_data.R') # function (get_data) to load/organise data
-get_data(res = '3x1', baseDirectory = wd_base, shinyDirectory = wd_orig, 
+get_data(res = res, baseDirectory = wd_base, shinyDirectory = wd_orig, 
          sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
-         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly)
-
+         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
+         roundShipTime = TRUE, indexGridCells = FALSE)
 
 # Plotting parameters -----------------------------------------------------
-# Plot symbols - store in separate data frame
-# Research stations use (mostly) unfilled symbols
-pltShapes <- c(1, 0, 5, 2, 6, 19) 
-# stationTypes <- unique(STATIONS$Type)
-stationTypes <- levels(STATIONS_sf$Type)
-# stationTypes <- levels(STATIONS$Type)
-nstationTypes <- length(stationTypes)
-pltSymbols <- data.frame(Class = rep('ResearchStation', nstationTypes), Type = stationTypes, symbol = pltShapes[1:nstationTypes])
-# Plastic samples use filled plot symbols (21:25) that differ according to sample type.
-pltShapes <- 21:25
-sampleTypes <- levels(DATA_sf$SampleType_grouped)
-# sampleTypes <- levels(DATA$SampleType_grouped)
-# sampleTypes <- levels(DATA$SampleType)
-# sampleTypes <- levels(DATA$'Sample type')
-nsampleTypes <- length(sampleTypes)
-pltSymbols <- rbind(pltSymbols,
-                    data.frame(Class = rep('PlasticSample', nsampleTypes), Type = sampleTypes, symbol = pltShapes[1:nsampleTypes]))
-pltSymbols$Type <- factor(pltSymbols$Type, levels = pltSymbols$Type)
-
-# Plot colours
-# Use a qualitative palette for plastic sources -- the default is limited to 12 colours
-ncol <- length(unique(DATA_sf$Source))
-pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
-# plot(1:12,1:12, col=pltColours, pch = 19)
-if(ncol < 13){
-  pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
-}else{
-  # make new colours as gradient between existing Paired palette colours
-  ne <- ceiling({ncol - 12} / 6)
-  mc <- matrix(pltColours, 2)
-  mc <- sapply(1:6, function(z){
-    cf <- colorRampPalette(c(mc[1,z], mc[2,z]))
-    cf <- cf(ne+2)
-    cf[2:{ne+1}]
-  })
-  mc <- matrix(mc, ne, 6)
-  pltColours <- c(
-    pltColours[seq(2, 12, 2)],
-    pltColours[seq(1, 11, 2)],
-    as.vector(t(mc[seq(ne, 1, -1),]))
-  )
-}
-
-# pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
-# pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
-
-sources <- levels(DATA_sf$Source)
-# sources <- levels(DATA$Source)
-nsources <- length(sources)
-pltColours <- data.frame(Source = sources, colour = pltColours[1:nsources])
-
-du <- unique(data.frame(Source = DATA_sf$Source, URL = DATA_sf$URL))
-# du <- unique(DATA[c('Source', 'URL')])
-pltColours <- merge(pltColours, du, by = 'Source')
-
-# Plot bounding box
-bbox_map <- st_bbox(nc)
-# st_bbox(eco)
-bbox_dat <- st_bbox(DATA_sf)
-bbox_krill <- st_bbox(krill_poly)
-bbox_chl <- st_bbox(chl_poly)
-# bbox <- setNames(c(min(bbox_map$xmin, bbox_dat$xmin, bbox_krill$xmin, bbox_chl$xmin),
-#                    min(bbox_map$ymin, bbox_dat$ymin, bbox_krill$ymin, bbox_chl$ymin),
-#                    max(bbox_map$xmax, bbox_dat$xmax, bbox_krill$xmax, bbox_chl$xmax),
-#                    max(bbox_map$ymax, bbox_dat$ymax, bbox_krill$ymax, bbox_chl$ymax)), names(bbox_map))
-
-BBox <- bbox_map
-
-aspectRatio = unname(diff(BBox[c(1,3)]) / diff(BBox[c(2,4)]))
-
-linebreaks <- function(n){HTML(strrep(br(), n))} # convenience function
-
-
+set_plot_params(nc, DATA_sf, STATIONS_sf)
 
 # Plots -------------------------------------------------------------------
 
 # 1. background data
 
-make_background_map <- function(background, group, eco = FALSE, trendType = 'unspecified', ship_data = 'unspecified', pval_contours = FALSE, contourLineWidth = 0.25){
-  d <- get(paste(background, 'poly', sep = '_'))
-  d <- switch(background,
-              chl = subset(d, month == group),
-              krill = subset(d, month == group),
-              sst = subset(d, month == group),
-              pH = subset(d, month == group),
-              ship = switch(ship_data,
-                            summary = subset(d, ship_class == group),
-                            raw = subset(d, activity == group))
-  )
-  dat <- list(nc = nc, background = d, plastic = DATA_sf[0,],  stations = STATIONS_sf[0,], pltSymbols = pltSymbols)
-  mp <- make_plot(dat = dat, background = background, backgroundOnly = TRUE, 
-                  displayEcoregions = eco, plotSignificanceContours = pval_contours, contourLineWidth = contourLineWidth)
-  mp$plot
+make_background_map <- function(background, group, backgroundOnly = TRUE, stationsOnly = FALSE, stationPopSize = FALSE, eco = FALSE, trendType = 'unspecified', ship_data = 'unspecified', pval_contours = FALSE, contourLineWidth = 0.25, ptStroke = 1){
+  if(backgroundOnly & stationsOnly){
+    warning('Cannot select both backgroundOnly and stationsOnly')
+    return(NULL)}
+  if(!backgroundOnly & !stationsOnly){
+    warning('Either backgroundOnly or stationsOnly must be TRUE')
+    return(NULL)}
+  if(backgroundOnly){
+    d <- get(paste(background, 'poly', sep = '_'))
+    d <- switch(background,
+                chl = subset(d, month == group),
+                krill = subset(d, month == group),
+                sst = subset(d, month == group),
+                pH = subset(d, month == group),
+                ship = switch(ship_data,
+                              summary = subset(d, ship_class == group),
+                              raw = subset(d, activity == group))
+    )
+    dat <- list(nc = nc, background = d, plastic = DATA_sf[0,],  stations = STATIONS_sf[0,], symbols = pltSymbols)
+  }
+  if(stationsOnly){
+    d <- STATIONS_sf
+    if(group %in% d$Type) d <- subset(d, Type == group)
+    dat <- list(nc = nc, background = NULL, plastic = DATA_sf[0,],  stations = d, symbols = pltSymbols)
+  }
+  # dat <- list(nc = nc, background = d, plastic = DATA_sf[0,],  stations = STATIONS_sf[0,], pltSymbols = pltSymbols)
+  mp <- make_plot(dat = dat, background = background, backgroundOnly = backgroundOnly, stationsOnly = stationsOnly, 
+                  stationPopSize = stationPopSize, displayEcoregions = eco, plotSignificanceContours = pval_contours, contourLineWidth = contourLineWidth, ptStroke = ptStroke)
+  # mp$plot
+  mp
 }
 
 # Chlorophyll
 background <- 'chl'
 month <- 'all'
 p_chl <- make_background_map(background, month)
-p_chl
-
+p_chl$plot_complete
 
 # Krill
 background <- 'krill'
 month <- 'all'
 p_krill <- make_background_map(background, month)# + theme_nothing()
-p_krill
+p_krill$plot_complete
 
 # Shipping
 background <- 'ship'
 ship_data = 'raw'
 ship_class <- 'all'
 p_ship <- make_background_map(background, ship_class, eco = FALSE, ship_data = ship_data)# + theme_nothing()
-p_ship
+p_ship$plot_complete
 
 ship_classes <- levels(ship_poly$activity)
 for(i in 1:length(ship_classes)){
@@ -187,14 +131,33 @@ for(i in 1:length(ship_classes)){
   assign(plt_name, p)
 }
 
-ncl <- 2
-nrw <- 3
-p_ship_combine <- grid.arrange(p_ship_all, p_ship_fishing, p_ship_tourism,
-                               p_ship_supply, p_ship_research, p_ship_other,
-                               nrow = nrw, ncol = ncl)
-pw <- 6 * ncl
-ph <- 4.15 * nrw
-ggsave('ship traffic data.png', plot = p_ship_combine, device = 'png', width = pw, height = ph, units = 'in')
+npanels <- 6
+rw <- c(0.9, 0.1)
+ra <- 2
+p_ship1 <- plot_grid(p_ship_fishing$plot, p_ship_fishing$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')), rel_widths = rw)
+p_ship2 <- plot_grid(p_ship_tourism$plot, p_ship_tourism$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')), rel_widths = rw)
+p_ship3 <- plot_grid(p_ship_supply$plot, p_ship_supply$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')), rel_widths = rw)
+p_ship4 <- plot_grid(p_ship_research$plot, p_ship_research$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')), rel_widths = rw)
+p_ship5 <- plot_grid(p_ship_other$plot, p_ship_other$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')), rel_widths = rw)
+p_ship6 <- plot_grid(p_ship_all$plot, p_ship_all$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')), rel_widths = rw)
+
+p_ship_combine <- plot_grid(p_ship1, p_ship2,
+                   p_ship3, p_ship4,
+                   p_ship5, p_ship6,
+                   nrow = nrw, ncol = ncl, align = 'hv', axis = 'tblr',
+                   labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9)  + 
+  theme(plot.margin = unit(c(0,0,0,0), 'cm'), plot.background = element_rect(fill = 'white', colour = 'white'))
+
+A4_w <- 8.3 # A4 dimensions
+A4_h <- 11.7
+sc_w <- 1.45 # scaling factors
+sc_h <- 0.9
+pw <- sc_w * A4_w
+ph <- sc_h * A4_h
+
+fileName <- paste0('ship traffic data_', res, '.png')
+ggsave(fileName, plot = p_ship_combine, device = 'png', width = pw, height = ph, units = 'in')
+
 
 
 
@@ -202,61 +165,131 @@ ggsave('ship traffic data.png', plot = p_ship_combine, device = 'png', width = p
 background <- 'sst'
 month <- 'all'
 type <- 'trend'
-pval_contours <- TRUE
+pval_contours <- FALSE
 contourLineWidth <- 0.25
 p_sst <- make_background_map(background, month, trendType = type, pval_contours = pval_contours, contourLineWidth = contourLineWidth)# + theme_nothing()
-p_sst
+p_sst$plot_complete
 
-ggsave('sst.png', plot = p_sst, device = 'png', width = 6, height = 4.15, units = 'in')
+# ggsave('sst.png', plot = p_sst, device = 'png', width = 6, height = 4.15, units = 'in')
 
 # pH
 background <- 'pH'
 month <- 'all'
 type <- 'trend'
-pval_contours <- TRUE
+pval_contours <- FALSE
 contourLineWidth <- 0.25
 p_pH <- make_background_map(background, month, trendType = type, pval_contours = pval_contours, contourLineWidth = contourLineWidth)# + theme_nothing()
-p_pH
+p_pH$plot_complete
 
-ggsave('pH.png', plot = p_pH, device = 'png', width = 6, height = 4.15, units = 'in')
+# ggsave('pH.png', plot = p_pH, device = 'png', width = 6, height = 4.15, units = 'in')
+
+# stations
+background <- 'none'
+group <- 'all'
+p_stations <- make_background_map(background, group, backgroundOnly = FALSE, stationsOnly = TRUE, stationPopSize = TRUE)
+p_stations$plot_complete
 
 
+# combine all plots
+npanels <- 6
+rw <- c(0.8, 0.2)
+p_chl_ <- plot_grid(p_chl$plot, p_chl$legend, rel_widths = rw) + theme(plot.margin = unit(c(0,0,0,0), 'cm'))
+p_krill_ <- plot_grid(p_krill$plot, p_krill$legend, rel_widths = rw) + theme(plot.margin = unit(c(0,0,0,0), 'cm'))
+p_sst_ <- plot_grid(p_sst$plot, p_sst$legend, rel_widths = rw) + theme(plot.margin = unit(c(0,0,0,0), 'cm'))
+p_pH_ <- plot_grid(p_pH$plot, p_pH$legend, rel_widths = rw) + theme(plot.margin = unit(c(0,0,0,0), 'cm'))
+p_ship_ <- plot_grid(p_ship$plot, p_ship$legend, rel_widths = rw) + theme(plot.margin = unit(c(0,0,0,0), 'cm'))
+p_stations_ <- plot_grid(p_stations$plot, p_stations$legend, rel_widths = rw) + theme(plot.margin = unit(c(0,0,0,0), 'cm'))
 
-npanels <- 5
-nrw <- ceiling(npanels ^ 0.5)
-ncl <- ceiling(npanels / nrw)
-p_all <- plot_grid(p_chl, p_krill, p_ship, p_sst, p_pH,
+p_all <- plot_grid(p_chl_, p_krill_,
+                   p_sst_, p_pH_,
+                   p_ship_, p_stations_,
                    nrow = nrw, ncol = ncl, align = 'hv', axis = 'tblr',
-                   labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9) + 
-  theme(plot.margin = unit(c(0,0,0,0), 'cm'))
+                   labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9)  + 
+  theme(plot.margin = unit(c(0,0,0,0), 'cm'), plot.background = element_rect(fill = 'white', colour = 'white'))
 
-p_all
+A4_w <- 8.3 # A4 dimensions
+A4_h <- 11.7
+sc_w <- 1.5 # scaling factors
+sc_h <- 1.2
+pw <- sc_w * A4_w
+ph <- sc_h * A4_h
 
-
-pw <- 5 * ncl
-ph <- 4.15 * nrw
-
-ggsave('environ background data.png', plot = p_all, device = 'png', width = pw, height = ph, units = 'in')
+fileName <- paste0('environ background data_', res, '.png')
+ggsave(fileName, plot = p_all, device = 'png', width = pw, height = ph, units = 'in')
 
 
 # 2. plastic data
 
-make_plastic_map <- function(plastic, stations, ptSize, background = 'none', group = NA, eco = FALSE){
+make_plastic_map <- function(plastic, stations, ptSize, Symbols, background = 'none', group = NA, eco = FALSE){
   if(background == 'none'){
-    dat <- list(nc = nc, background = NULL, plastic = plastic, stations = stations, symbols = pltSymbols)
+    dat <- list(nc = nc, background = NULL, plastic = plastic, stations = stations, symbols = Symbols)
   } else return(NULL)
   mp <- make_plot(dat = dat, background = background, plasticOnly = TRUE, displayEcoregions = eco, ptSize = ptSize)
-  mp$plot
+  mp
 }
+
 
 background <- 'none'
 plastic <- DATA_sf
-stations <- STATIONS_sf
+# Get line breaks in legend
+sg <- levels(plastic$SampleType_grouped)
+ll <- strsplit(sg, '/')
+sgnew <- sapply(ll, function(z) if(length(z) == 1) return(z) else paste(z, collapse = '/\n'))
+plastic$SampleType_grouped <- factor(plastic$SampleType_grouped, levels = sg, labels = sgnew)
+Symbols <- pltSymbols
+Symbols$Type <- as.character(Symbols$Type)
+for(i in 1:nrow(Symbols)){
+  j <- Symbols$Type[i]
+  if(j %in% sg) Symbols$Type[i] <- sgnew[which(sg == j)]}
+Symbols$Type <- as.factor(Symbols$Type)
+stations <- NULL
 ptSize <- 4
-p_pla <- make_plastic_map(plastic, stations, ptSize) + theme(plot.margin = unit(c(0,0,0,0), 'cm'))
-p_pla
+# Trim off some points at the map boundaries -- this is tricky, and should maybe be done later...
 
-ggsave('plastic samples and stations.png', plot = p_pla, device = 'png', width = 10, height = 8.3, units = 'in')
+# i <- plastic$Source == 'Suaria (2020)'
+# lat <- as.numeric(sapply(strsplit(plastic$Coordinates, ' '), function(z) z[3]))
+# lat_ <- lat[!is.na(lat)]
+# lat_ <- sort(lat_)
+# lm <- lat_[1:2]
+# plastic <- plastic[!{lat %in% lm},]
+
+# lat_start <- as.numeric(sapply(strsplit(plastic$`Coordinates (start)`, ' '), function(z) z[3]))
+# lat_end <- as.numeric(sapply(strsplit(plastic$`Coordinates (end)`, ' '), function(z) z[3]))
+# lat_start_ <- lat_start[!is.na(lat_start)]
+# lat_end_ <- lat_end[!is.na(lat_end)]
+# lat_ <- cbind(lat_start_, lat_end_)
+# lat_ <- apply(lat_, 1, min)
+# lat_ <- sort(lat_)
+# lm <- lat_[1:2]
+# plastic <- plastic[!{{lat_start %in% lm} | {lat_end %in% lm}},]
+
+
+p_pla <- make_plastic_map(plastic, stations, ptSize, Symbols)
+
+p_plastic <- p_pla$plot_complete + 
+  theme(plot.background = element_rect(fill = 'white', colour = 'white'))
+
+A4_w <- 8.3 # A4 dimensions
+A4_h <- 11.7
+sc_w <- 1.1 # scaling factors
+sc_h <- 0.8
+pw <- sc_w * A4_w
+ph <- sc_h * pw
+# ph <- sc_h * A4_h
+
+ggsave('plastic samples_trim.png', plot = p_plastic, device = 'png', width = pw, height = ph, units = 'in')
+
+
+
+
+# background <- 'none'
+# plastic <- DATA_sf
+# stations <- STATIONS_sf
+# ptSize <- 4
+# p_pla <- make_plastic_map(plastic, stations, ptSize) + theme(plot.margin = unit(c(0,0,0,0), 'cm'))
+# p_pla
+# 
+# ggsave('plastic samples and stations.png', plot = p_pla, device = 'png', width = 10, height = 8.3, units = 'in')
 
 
 

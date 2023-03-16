@@ -65,12 +65,15 @@ wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
 source('functions.R', local = TRUE)
 
 significantTrendsOnly <- TRUE
+loadTooltipFromFile <- TRUE # set to FALSE when new plastic data is included or any modifications are made to the data
+displayAllLitterTypes <- TRUE # If FALSE then only plastics are displayed. Set to TRUE to show samples of non-plastics -- this is important when trawls bring up items that appear to be plastic (e.g., Kuklinski data)
 
 # source('import_data.R') # function (get_data) to load/organise data
-get_data(res = '3x1', baseDirectory = wd_base, shinyDirectory = wd_orig, 
+get_data(res = '3x1', baseDirectory = wd_base, shinyDirectory = wd_orig,
+         allLitterTypes = displayAllLitterTypes,
          sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
          sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
-         roundShipTime = TRUE, indexGridCells = FALSE)
+         roundShipTime = TRUE, indexGridCells = FALSE, loadTooltipFromFile = loadTooltipFromFile)
 
 # It will be nice to able to select between trend data and anomalies from within
 # the Shiny app. This will involve returning both data sets from the get_data

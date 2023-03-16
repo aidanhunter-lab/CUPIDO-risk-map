@@ -22,11 +22,12 @@ createPolygons <- function(dat){
 }
 
 # Load and organise data required for map
-get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHType = 'trend',
-                     shipSummaryDataOrRaw = 'summary', sstTrend_significantOnly = TRUE,
-                     pHTrend_significantOnly = TRUE, significanceLevel = 0.05, significanceContours = c(0.05, 0.25, 0.5),
+get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
+                     sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'summary',
+                     sstTrend_significantOnly = TRUE, pHTrend_significantOnly = TRUE,
+                     significanceLevel = 0.05, significanceContours = c(0.05, 0.25, 0.5),
                      SST_overallTrend = TRUE, pH_overallTrend = TRUE,
-                     roundShipTime = FALSE, indexGridCells = TRUE){
+                     roundShipTime = FALSE, indexGridCells = TRUE, loadTooltipFromFile = TRUE){
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Load data with spatial resolution given by res = '3x1' or '9x3'.
   # Required outputs are assigned to the function calling environment.
@@ -290,11 +291,11 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   # f <- paste(wd_base, filepath, filename, sep = '/')
   # DATA = read.csv(f, stringsAsFactors = TRUE)
   
-  filename = 'plastic_quantity_new3.csv'
+  filename = 'plastic_quantity_new4.csv'
   f <- paste(shinyDirectory, filename, sep = '/')
   DATA = read.csv(f, stringsAsFactors = TRUE)
   
-  loadTooltipFromFile <- TRUE
+  # loadTooltipFromFile <- TRUE
   saveTooltipData <- TRUE
   # Does data with tooltip variable exist?
   fw <- paste0(paste(sub('.csv', '', f), 'tooltip', 'wide', sep = '_'), '.Rds')
@@ -391,7 +392,7 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   lon_lab[east_ind] <- paste(lon_lab[east_ind], 'E')
   lat_lab <- paste(abs(round(DATA$Latitude, 2)), 'S')
   coord_lab <- paste0('(', lon_lab, ', ', lat_lab, ')')
-  DATA$Coordinates[DATA$SampleAtStation] <- coord_lab[DATA$SampleAtStation]
+  DATA$Coordinates[as.logical(DATA$SampleAtStation)] <- coord_lab[as.logical(DATA$SampleAtStation)]
   # Longer tows...
   notAtStation <- !DATA$SampleAtStation
   west_ind1 <- DATA$Longitude_start < 0 & notAtStation
@@ -471,7 +472,9 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   # Litter category -- only include plastic litter
   # unique(DATA$LitterCategory)
   DATA$LitterCategory <- as.character(DATA$LitterCategory)
-  DATA <- subset(DATA, LitterCategory == 'plastic')
+  if(!allLitterTypes){
+    DATA <- subset(DATA, LitterCategory == 'plastic')
+  }
   
   # # How many LitterScales are in each sample?
   # ns = rep(0, length(unique(DATA$data_id)))
@@ -488,7 +491,8 @@ get_data <- function(res, baseDirectory, shinyDirectory, sstType = 'trend', pHTy
   DATA$Statistic <- factor(DATA$Statistic, levels = c('raw','mean','s.d.','min','max','none'))
   
   # Set non-numeric Values to -Inf to distinguish them from NAs -- this for presence/absence data
-  DATA$Value[is.na(DATA$Value) & DATA$Observation != ''] <- -Inf
+  DATA$Value[is.na(DATA$Value) & DATA$Variable == 'presence/absence'] <- -Inf
+  # DATA$Value[is.na(DATA$Value) & DATA$Observation != ''] <- -Inf
   
   #DATA$Observation <- as.character(DATA$Observation)
   
@@ -1309,7 +1313,7 @@ set_plot_params <- function(base_map, plastics, stations){
 
 
 # The main plotting function
-make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4, alpha = 0.6, polyLineWidth = 0.75, contourLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio, plotSignificanceContours = FALSE, significanceContours = NULL, sst_sigContours = significanceContours, pH_sigContours = significanceContours){
+make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE, stationsOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4, ptStroke = 2, alpha = 0.6, polyLineWidth = 0.75, contourLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio, plotSignificanceContours = FALSE, significanceContours = NULL, sst_sigContours = significanceContours, pH_sigContours = significanceContours, stationPopSize = FALSE){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
@@ -1329,6 +1333,10 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
   symbols <- dat$symbols
   # pltColours <- dat$pltColours
   
+  if(is.null(dat_background)) dat_background <- data.frame()
+  if(is.null(dat_plastic)) dat_plastic <- data.frame()
+  if(is.null(dat_stations)) dat_stations <- data.frame()
+
   anyPlastic <- nrow(dat_plastic) > 0
   anyStations <- nrow(dat_stations) > 0
   anyBackground <- background != 'none'
@@ -1345,33 +1353,66 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
          krill = {
            legTitle <- 'Krill\n(number/m\u00B2)'
            if(exists('weblink_krill')){
+             # Plot with discrete legend
+             # plt_background <- 
+             #   ggplot() +
+             #   geom_sf(data = dat_background, aes(fill = colourgroup, colour = colourgroup)) +
+             #   scale_colour_viridis_d(option = 'plasma') +
+             #   guides(colour = 'none') +
+             #   scale_fill_viridis_d_interactive(option = 'plasma',
+             #                                    name = label_interactive(legTitle,
+             #                                                             data_id = 'legend.title',
+             #                                                             hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+             #                                                             onclick = paste0("window.open(`", as.character(weblink_krill), "`);"),
+             #                                                             tooltip = weblink_krill))
+             
+             # Plot with continuous legend -- in keeping with other background plots.
+             dat_background$value[dat_background$value == 0] <- NA # handle zeros in log-scale using NA functionality
+             zero_col <- viridis_pal(begin = 0, end = 0, option = 'plasma')(1)
              plt_background <- 
                ggplot() +
-               geom_sf(data = dat_background, aes(fill = colourgroup)) +
-               scale_fill_viridis_d_interactive(option = 'plasma',
+               geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+               scale_colour_viridis_c(option = 'plasma', trans = 'log10', na.value = zero_col) +
+               guides(colour = 'none') +
+               scale_fill_viridis_c_interactive(option = 'plasma', trans = 'log10', na.value = zero_col, labels = comma,
                                                 name = label_interactive(legTitle,
                                                                          data_id = 'legend.title',
                                                                          hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                          onclick = paste0("window.open(`", as.character(weblink_krill), "`);"),
                                                                          tooltip = weblink_krill))
            }else{
+             # Plot with discrete legend
+             # plt_background <- 
+             #   ggplot() +
+             #   geom_sf(data = dat_background, aes(fill = colourgroup, colour = colourgroup)) +
+             #   scale_colour_viridis_d(option = 'plasma') +
+             #   guides(colour = 'none') +
+             #   scale_fill_viridis_d(option = 'plasma', name = legTitle)
+             
+             # Plot with continuous legend -- in keeping with other background plots.
+             dat_background$value[dat_background$value == 0] <- NA # handle zeros in log-scale using NA functionality
+             zero_col <- viridis_pal(begin = 0, end = 0, option = 'plasma')(1)
              plt_background <- 
                ggplot() +
-               geom_sf(data = dat_background, aes(fill = colourgroup)) +
-               scale_fill_viridis_d(option = 'plasma', name = legTitle)
+               geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+               scale_colour_viridis_c(option = 'plasma', trans = 'log10', na.value = zero_col) +
+               guides(colour = 'none') +
+               scale_fill_viridis_c(option = 'plasma', name = legTitle, trans = 'log10', na.value = zero_col, labels = comma)
            }
            
          },
          
          chl = {
-           legTitle <- 'Chlorophyll\n(mg/m\u00B3)'
+           legTitle <- 'Chlorophyll a\n(mg/m\u00B3)'
            # legTitle <- 'Chlorophyll\u1D44E\n(mg/m\u00B3)'
            # legTitle <- 'Chlorophyll 𝑎\n(mg/m\u00B3)'
 
            if(exists('weblink_chlorophyll')){
              plt_background <-
                ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
+               geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+               scale_colour_viridis_c(option = 'viridis', trans = 'log10') +
+               guides(colour = 'none') +
                scale_fill_viridis_c_interactive(option = 'viridis', trans = 'log10',
                                                 name = label_interactive(legTitle,
                                                                          data_id = 'legend.title',
@@ -1381,7 +1422,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
            }else{
              plt_background <-
                ggplot() +
-               geom_sf(data = dat_background, aes(fill = value)) +
+               geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+               scale_colour_viridis_c(option = 'viridis', trans = 'log10') +
+               guides(colour = 'none') +
                scale_fill_viridis_c(option = 'viridis', trans = 'log10',
                                     name = legTitle)
            }
@@ -1411,7 +1454,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              if(weblink_exists){
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols, values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols, values = cval,
                                                   name = label_interactive(legLabel,
                                                                            data_id = 'legend.title',
@@ -1421,7 +1466,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              }else{
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols, values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn(colours = Cols, values = cval,
                                       name = legLabel)
              }
@@ -1431,7 +1478,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              if(weblink_exists){
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols[1:{ncol_sst_+1}], values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols[1:{ncol_sst_+1}], values = cval,
                                                   name = label_interactive(legLabel,
                                                                            data_id = 'legend.title',
@@ -1441,7 +1490,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              }else{
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols[1:{ncol_sst_+1}], values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn(colours = Cols[1:{ncol_sst_+1}], values = cval,
                                       name = legLabel)
              }
@@ -1451,7 +1502,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              if(weblink_exists){
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols[{ncol_sst_+1}:ncol_sst], values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols[{ncol_sst_+1}:ncol_sst], values = cval,
                                                   name = label_interactive(legLabel,
                                                                            data_id = 'legend.title',
@@ -1461,7 +1514,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              }else{
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols[{ncol_sst_+1}:ncol_sst], values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn(colours = Cols[{ncol_sst_+1}:ncol_sst], values = cval,
                                       name = legLabel)
              }
@@ -1470,7 +1525,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
          
          pH = {
            
-           if(exists('pHtype')){
+           if(exists('pHType')){
              legLabel <- switch(pHType,
                                 trend = 'pH trend\n(year\u207B\u00B9)',# bquote(atop(pH ~ trend, (1/year))),
                                 anomaly = 'pH anomaly\n(dimensionless)')# bquote(pH ~ anomaly))
@@ -1493,7 +1548,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              if(weblink_exists){
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols, values = cval) + 
+                 guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols, values = cval,
                                                   name = label_interactive(legLabel,
                                                                            data_id = 'legend.title',
@@ -1503,7 +1560,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              }else{
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols, values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn(colours = Cols, values = cval,
                                       name = legLabel)
              }
@@ -1513,7 +1572,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              if(weblink_exists){
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols[1:{ncol_pH_+1}], values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols[1:{ncol_pH_+1}], values = cval,
                                                   name = label_interactive(legLabel,
                                                                            data_id = 'legend.title',
@@ -1523,7 +1584,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              }else{
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols[1:{ncol_pH_+1}], values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn(colours = Cols[1:{ncol_pH_+1}], values = cval,
                                       name = legLabel)
              }
@@ -1534,7 +1597,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              if(weblink_exists){
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols[{ncol_pH_+1}:ncol_pH], values = cval) +
+                 guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols[{ncol_pH_+1}:ncol_pH], values = cval,
                                                   name = label_interactive(legLabel,
                                                                            data_id = 'legend.title',
@@ -1544,7 +1609,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
              }else{
                plt_background <-
                  ggplot() +
-                 geom_sf(data = dat_background, aes(fill = value)) +
+                 geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                 scale_colour_gradientn(colours = Cols[{ncol_pH_+1}:ncol_pH], values = cval) +
+                 gudies(colour = 'none') +
                  scale_fill_gradientn(colours = Cols[{ncol_pH_+1}:ncol_pH], values = cval,
                                       name = legLabel)  
              }
@@ -1594,7 +1661,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                                        if(weblink_exists){
                                          plt <- 
                                            ggplot() + 
-                                           geom_sf(data = dat_background, aes(fill = value), colour = 'black', linewidth = polyLineWidth) +
+                                           geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                                           scale_colour_viridis_c(option = 'mako', trans = 'log10', direction = -1) +
+                                           guides(colour = 'none') +
                                            scale_fill_viridis_c_interactive(option = 'mako', trans = 'log10', direction = -1,
                                                                             name = label_interactive(leg_lab,
                                                                                                      data_id = 'legend.title',
@@ -1605,10 +1674,11 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                                        }else{
                                          plt <- 
                                            ggplot() + 
-                                           geom_sf(data = dat_background, aes(fill = value), colour = 'black', linewidth = polyLineWidth) +
-                                           scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
-                                                                name = leg_lab) # +
-                                         # geom_sf(data = dat_background[!vesselsPresent,], fill = 'white', colour = 'black', linewidth = polyLineWidth)
+                                           geom_sf(data = dat_background, aes(fill = value, colour = value)) +
+                                           scale_colour_viridis_c(option = 'mako', trans = 'log10', direction = -1) + 
+                                           guides(colour = 'none') +
+                                         scale_fill_viridis_c(option = 'mako', trans = 'log10', direction = -1,
+                                                                name = leg_lab)
                                          plt
                                        }
                                      }
@@ -1705,7 +1775,9 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
   
   if(backgroundOnly){
     return(
-      list(plot = ggdraw(plot_grid(plt_map, leg_background, ncol = 2, rel_widths = c(0.8, 0.2))))
+      list(plot = ggdraw(plt_map),
+           legend = ggdraw(leg_background),
+           plot_complete = ggdraw(plot_grid(plt_map, leg_background, ncol = 2, rel_widths = c(0.8, 0.2))))
     )
   }
   
@@ -1716,15 +1788,56 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
   
   # Research stations
   if(anyStations){
-    plt_map <- plt_map +
-      new_scale_colour() +
-      geom_sf_interactive(data = dat_stations,
-                          aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
-                          alpha = alpha, size = ptSize, stroke = 2, show.legend = FALSE) +
-      scale_colour_manual(values = c('forestgreen','purple'))
-    # scale_colour_manual(values = c('forestgreen','firebrick'))
+    if(!stationsOnly) showStationLegend <- FALSE else showStationLegend <- TRUE
+    if(!stationPopSize){
+      plt_map <- plt_map +
+        new_scale_colour() +
+        geom_sf_interactive(data = dat_stations,
+                            aes(shape = Type, colour = Seasonality, data_id = Record_ID, tooltip = tooltip),
+                            alpha = alpha, size = ptSize, stroke = ptStroke, show.legend = showStationLegend) +
+        scale_colour_manual(values = c('forestgreen','purple'), guide = guide_legend(order = 2))
+    }else{
+      # Infill missing values using means
+      i <- is.na(dat_stations$Peak_Population)
+      typesMissing <- unique(dat_stations$Type[i])
+      for(j in 1:length(typesMissing)){
+        m <- dat_stations$Type == typesMissing[j]
+        p <- dat_stations$Peak_Population[m & !i]
+        infill <- round(prod(p) ^ {1/length(p)})
+        dat_stations$Peak_Population[m & i] <- infill
+      }
+      popRanks <- c(0, 10, 25, 50, 100, Inf)
+      nranks <- length(popRanks) - 1
+      tt <- outer(dat_stations$Peak_Population, popRanks[1:nranks], '>=') & outer(dat_stations$Peak_Population, popRanks[2:{nranks+1}], '<')
+      dat_stations$Population <- apply(tt, 1 , which)
+      dat_stations$Population <- factor(dat_stations$Population, levels = 1:nranks, labels = c(paste('\u2265', popRanks[1:nranks])))
+      plt_map <- plt_map +
+        new_scale_colour() +
+        geom_sf_interactive(data = dat_stations,
+                            aes(shape = Type, colour = Seasonality, size = Population, data_id = Record_ID, tooltip = tooltip),
+                            alpha = alpha, stroke = ptStroke, show.legend = showStationLegend) +
+        scale_colour_manual(values = c('forestgreen','purple'))
+      }
   }
   
+  if(stationsOnly){
+    plt_map <- plt_map +
+      guides(shape = guide_legend(override.aes = list(size = legPtSize, stroke = 1), order = 1),
+             colour = guide_legend(override.aes = list(size = legPtSize, shape = symbols$symbol[symbols$Type == 'Station']), order = 2))
+    if(stationPopSize){
+      plt_map <- plt_map + 
+        guides(size = guide_legend(override.aes = list(shape = symbols$symbol[symbols$Type == 'Station'], stroke = 1), order = 3))
+    }
+    plt_map <- plt_map + theme(legend.key = element_blank())
+    leg_stations <- get_legend(plt_map)
+    plt_map <- plt_map + theme(legend.position = 'none')
+    return(
+      list(plot = ggdraw(plt_map),
+           legend = ggdraw(leg_stations),
+           plot_complete = ggdraw(plot_grid(plt_map, leg_stations, ncol = 2, rel_widths = c(0.8, 0.2))))
+    )
+  }
+
   # Plastic samples
   if(anyPlastic){
     plt_map <- plt_map +
@@ -1735,10 +1848,8 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
       scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
   }
   
-  plt_map <- plt_map + guides(fill_new_new = 'none')
+  plt_map <- plt_map + guides(fill_new_new = 'none', colour_new = 'none')
   
-  # plt_map <- plt_map +
-  #   coord_sf(xlim = c(bbox['xmin'], bbox['xmax']), ylim = c(bbox['ymin'], bbox['ymax']))# +
   plt_map <- plt_map +
     coord_sf(xlim = c(BBox['xmin'], BBox['xmax']), ylim = c(BBox['ymin'], BBox['ymax']))# +
   
@@ -1754,7 +1865,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
       ggplot() +
       geom_sf(data = dat_stations,
               aes(shape = Type, colour = Seasonality),
-              alpha = 1, size = ptSize, stroke = 2) +
+              alpha = 1, size = ptSize, stroke = ptStroke) +
       scale_colour_manual(values = c('forestgreen','purple'))
     # scale_colour_manual(values = c('forestgreen','firebrick'))
     if(weblink_exists){
@@ -1801,8 +1912,10 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
       guides(
         shape = guide_legend(
           title = 'Sample type',
+          order = 1,
           override.aes = list(size = legPtSize)),
         fill = guide_legend_interactive(
+          order = 2,
           override.aes = list(
             shape = 21,
             size = legPtSize))
@@ -1858,7 +1971,10 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
   
   if(plasticOnly){
     return(
-      list(plot = ggdraw(plot_grid(plt_map, leg_plastic, leg_stations, ncol = 3, rel_widths = c(0.7, 0.15, 0.15))))
+      list(plot = plt_map,
+           legend = ggdraw(leg_plastic),
+           plot_complete = ggdraw(plot_grid(plt_map, leg_plastic, ncol = 2, rel_widths = c(0.8, 0.2)))
+      )
     )
   }
   

@@ -638,6 +638,14 @@ get_data(res = '9x3', baseDirectory = wd_base, shinyDirectory = wd_orig,
          sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
          sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly)
 
+
+geomean <- function(x, na.rm = FALSE){
+  # geometric mean of vector x
+  if(na.rm) x <- x[!is.na(x)]
+  return(exp(sum(log(x)) / length(x)))
+}
+
+
 plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
                      legend_title = 'risk', Title = NULL, show_legend = TRUE){
   # function to plot risk levels
@@ -825,10 +833,12 @@ plot(x, y, log = 'y')
 # 
 # rank_limits_chl <- r
 
-
-yl <- log10(y)
+yr <- y[-c({length(y)-1}:length(y))]
+yl <- log10(yr)
 r <- 10 ^ seq(min(yl), max(yl), length = nranks + 1) # even spread on log scale
-r <- round(r * 10) / 10 # round to nearest 0.1
+r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10}
+# r <- round(r * 10) / 10 # round to nearest 0.1
+r[c(1,nranks+1)] <- range(y)
 # r[2:5] <- c(0.2, 0.4, 0.6, 1) # manually adjust for nice rounded values
 rank_limits_chl <- r
 abline(h = r)
@@ -854,21 +864,20 @@ chl <- chl[order(chl$value),]
 chl$index <- 1:nrow(chl)
 chl <- chl[order(chl$order),]
 
-options(scipen = 999)
 plt_chl_raw <- 
   ggplot(chl) + 
-  geom_point(aes(x = index, y = value, fill = rank), shape = 21, size = 4, alpha = 0.8) +
-  scale_fill_viridis_c(guide = 'legend') +
-  guides(fill = guide_legend(title = 'prevalence', reverse = TRUE)) +
+  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'prevalence', guide = 'legend') +
+  scale_fill_viridis_c(name = 'prevalence', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
-  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0) +
-  xlab(expression(measurement ~ index)) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
   ylab(expression(chlorophyll ~ abundance ~ (mg / m^3))) +
-  scale_y_log10() +
+  scale_y_continuous(trans = 'log10', labels = function(x) format(x, scientific = FALSE)) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
-options(scipen = 0)
 
 # Krill -------------------------------------------------------------------
 
@@ -912,17 +921,19 @@ abline(h = r[-1])
 
 rank_limits_krill <- r
 
-# The above, manually specified, ranks are nice and sensible, but try specifying
+o# The above, manually specified, ranks are nice and sensible, but try specifying
 # rankings as an even spread on log scale after removing outliers.
 plot(x_p, y_p, log = 'y')
-y_r <- y_p[-c(1,length(y_p))]
+# y_r <- y_p[-c(1,{length(y_p)-7}:length(y_p))]
+y_r <- y_p[-c(1,{length(y_p)-2}:length(y_p))]
 x_r <- 1:length(y_r)
 plot(x_r, y_r, log = 'y')
 yl <- log10(y_r)
 
 r <- 10 ^ seq(min(yl), max(yl), length = nranks + 1)
+r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10} # round to nice values
+# r <- round(r / orderOfMagnitude(r)) * orderOfMagnitude(r) # round to nice values
 r[c(1, nranks+1)] <- c(0, max(y)) # adjust for outliers and measurement zeros
-r <- round(r / orderOfMagnitude(r)) * orderOfMagnitude(r) # round to nice values
 abline(h = r)
 
 rank_limits_krill <- r
@@ -949,21 +960,22 @@ krill <- krill[order(krill$value),]
 krill$index <- 1:nrow(krill)
 krill <- krill[order(krill$order),]
 
-options(scipen = 999)
 plt_krill_raw <- 
   ggplot(krill) + 
-  geom_point(aes(x = index, y = value, fill = rank), shape = 21, size = 4, alpha = 0.8) +
-  scale_fill_viridis_c(guide = 'legend') +
-  guides(fill = guide_legend(title = 'prevalence', reverse = TRUE)) +
+  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'prevalence', guide = 'legend') +
+  scale_fill_viridis_c(name = 'prevalence', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
-  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0) +
-  xlab(expression(measurement ~ index)) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
   ylab(expression(krill ~ abundance ~ (individuals / m^2))) +
-  scale_y_log10() +
+  # scale_y_continuous(trans = scales::pseudo_log_trans(base = 10)) + 
+  scale_y_continuous(trans = 'log10', labels = function(x) format(x, scientific = FALSE)) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
-options(scipen = 0)
+
 
 
 # Temperature -------------------------------------------------------------
@@ -1033,12 +1045,12 @@ x_r <- 1:length(y_r)
 
 yrange <- range(y_r)
 # rlo <- round(yrange[1] / orderOfMagnitude(yrange[1])) * orderOfMagnitude(yrange[1]) # round to nearest 0.001
-rlo <- floor(yrange[1] / orderOfMagnitude(yrange[1])) * orderOfMagnitude(yrange[1]) # round to nearest 0.001
+rlo <- floor(yrange[1] / orderOfMagnitude(yrange[1]) * 10) * orderOfMagnitude(yrange[1]) /10 # round to nearest 0.001
 # rhi <- ceiling(yrange[2] / {orderOfMagnitude(yrange[2]) / 10 * 5}) * orderOfMagnitude(yrange[2]) / 10 * 5 # round up to nearest 0.005
 rhi <- ceiling(yrange[2] / orderOfMagnitude(yrange[2]) * 10) * orderOfMagnitude(yrange[2]) / 10 # round up
 # r <- c(0, seq(rlo, rhi, length = nranks))
 r <- c(seq(rlo, rhi, length = nranks + 1))
-r <- round(r / orderOfMagnitude(r) * 1) * orderOfMagnitude(r) / 1
+r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10}
 r[c(1, nranks + 1)] <- range(y)
 abline(h = r[2:nranks], lty = 3)
 
@@ -1067,21 +1079,20 @@ sst <- sst[order(sst$value),]
 sst$index <- 1:nrow(sst)
 sst <- sst[order(sst$order),]
 
-options(scipen = 999)
 plt_sst_raw <- 
   ggplot(sst) + 
-  geom_point(aes(x = index, y = value, fill = rank), shape = 21, size = 4, alpha = 0.8) +
-  scale_fill_viridis_c(guide = 'legend') +
-  guides(fill = guide_legend(title = 'stress', reverse = TRUE)) +
+  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'stress', guide = 'legend') +
+  scale_fill_viridis_c(name = 'stress', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
-  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0) +
-  xlab(expression(measurement ~ index)) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
   ylab(expression(SST ~ trend ~ (degree * C / year))) +
-#  scale_y_log10() +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
-options(scipen = 0)
 
 
 
@@ -1108,7 +1119,7 @@ yrange <- range(y_r)
 rlo <- floor(yrange[1] / orderOfMagnitude(yrange[1]) * 10) * orderOfMagnitude(yrange[1]) / 10 # round to nearest 0.0001
 rhi <- ceiling(yrange[2] / orderOfMagnitude(yrange[2]) *10) * orderOfMagnitude(yrange[2]) / 10 # round up to nearest 0.0001
 r <- seq(rlo, rhi, length = nranks+1)
-r <- round(r / orderOfMagnitude(r) * 10) * orderOfMagnitude(r) / 10
+r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10}
 r[1] <- min(y)
 r[nranks + 1] <- max(y)
 abline(h = r[2:nranks], lty = 3)
@@ -1137,21 +1148,20 @@ pH <- pH[order(pH$value),]
 pH$index <- 1:nrow(pH)
 pH <- pH[order(pH$order),]
 
-options(scipen = 999)
 plt_pH_raw <- 
   ggplot(pH) + 
-  geom_point(aes(x = index, y = value, fill = rank), shape = 21, size = 4, alpha = 0.8) +
-  scale_fill_viridis_c(guide = 'legend') +
-  guides(fill = guide_legend(title = 'stress', reverse = TRUE)) +
+  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'stress', guide = 'legend') +
+  scale_fill_viridis_c(name = 'stress', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
-  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0) +
-  xlab(expression(measurement ~ index)) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
   ylab(expression(pH ~ trend ~ (1 / year))) +
-  # scale_y_log10() +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
-options(scipen = 0)
 
 
 # Shipping ----------------------------------------------------------------
@@ -1182,7 +1192,8 @@ yl <- log10(y_r)
 r <- 10 ^ seq(min(yl), max(yl), length = nranks)
 r[1] <- 1
 r <- c(0, r)
-r <- round(r / orderOfMagnitude(r)) * orderOfMagnitude(r) # round to nice values
+r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10} # round to nice values
+# r <- round(r / orderOfMagnitude(r)) * orderOfMagnitude(r) # round to nice values
 r[nranks + 1] <- max(y) # include outliers
 plot(x, y, log = 'y')
 abline(h = r)
@@ -1210,21 +1221,20 @@ ship <- ship[order(ship$value),]
 ship$index <- 1:nrow(ship)
 ship <- ship[order(ship$order),]
 
-options(scipen = 999)
 plt_ship_raw <- 
   ggplot(ship) + 
-  geom_point(aes(x = index, y = value, fill = rank), shape = 21, size = 4, alpha = 0.8) +
-  scale_fill_viridis_c(guide = 'legend') +
-  guides(fill = guide_legend(title = 'prevalence', reverse = TRUE)) +
+  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'disturbance', guide = 'legend') +
+  scale_fill_viridis_c(name = 'disturbance', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
-  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0) +
-  xlab(expression(measurement ~ index)) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
   ylab(expression(ship ~ traffic ~ (ship ~ days / year))) +
-  scale_y_log10() +
+  scale_y_continuous(trans = 'log10', labels = function(x) format(x, scientific = FALSE)) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
-options(scipen = 0)
 
 
 
@@ -1399,8 +1409,8 @@ circleAreaOnGlobe <- function(s, R = 6371, distanceLimit = NULL){
 }
 
 # I'm not sure if it's sensible to set a distance limit -- it seems a bit ad-hoc...
-# distanceLimit <- NULL
-distanceLimit <- 1000 # set a 1000 km distance limit, beyond which facility populations do not have impact
+distanceLimit <- NULL
+# distanceLimit <- 1000 # set a 1000 km distance limit, beyond which facility populations do not have impact
 
 # Area of the circles centred on facilities and intersecting grid cell centroids
 station2cellCircleArea <- circleAreaOnGlobe(dist2cells, distanceLimit = distanceLimit) # km^2
@@ -1456,10 +1466,10 @@ rlo <- floor(y_r[1] / orderOfMagnitude(y_r[1])) * orderOfMagnitude(y_r[1])
 rhi <- floor(y_r[length(y_r)] / orderOfMagnitude(y_r[length(y_r)])) * orderOfMagnitude(y_r[length(y_r)])
 
 rank_limits_stations <- 10 ^ seq(log10(rlo), log10(rhi), length = nranks + 1)
+rank_limits_stations <- round(rank_limits_stations / {orderOfMagnitude(rank_limits_stations) / 10}) * {orderOfMagnitude(rank_limits_stations) / 10}
+rank_limits_stations[c(1,nranks+1)] <- range(y) # account for outliers
+# rank_limits_stations[2:{nranks}] <- round(rank_limits_stations[2:{nranks}] / orderOfMagnitude(rank_limits_stations[2:{nranks}])) * orderOfMagnitude(rank_limits_stations[2:{nranks}])
 
-rank_limits_stations[2:{nranks}] <- round(rank_limits_stations[2:{nranks}] / orderOfMagnitude(rank_limits_stations[2:{nranks}])) * orderOfMagnitude(rank_limits_stations[2:{nranks}])
-
-rank_limits_stations[nranks+1] <- max(y) # account for outliers
 # plot(x_, y_, log = 'y')
 abline(h = rank_limits_stations)
 
@@ -1468,8 +1478,9 @@ if(is.null(distanceLimit))
   rank_limits_stations <- c(0.001, 0.01, 0.1, 1, 10, 200)
 # abline(h = rank_limits_stations)
 
-if(distanceLimit == 1000)
-  rank_limits_stations <- c(0.0001, 0.01, 0.1, 1, 10, 200)
+if(!is.null(distanceLimit))
+  if(distanceLimit == 1000)
+    rank_limits_stations <- c(0.0001, 0.01, 0.1, 1, 10, 200)
 
 r <- rank_limits_stations
 
@@ -1511,25 +1522,20 @@ grid_cells_reduced <- grid_cells_reduced[order(grid_cells_reduced$popDensity),]
 grid_cells_reduced$index <- 1:nrow(grid_cells_reduced)
 grid_cells_reduced <- grid_cells_reduced[order(grid_cells_reduced$order),]
 
-options(scipen = 999)
 plt_stations_raw <- 
   ggplot(grid_cells_reduced) + 
-  geom_point(aes(x = index, y = popDensity, fill = rank), shape = 21, size = 4, alpha = 0.8) +
-  scale_fill_viridis_c(guide = 'legend') +
-  guides(fill = guide_legend(title = 'disturbance', reverse = TRUE)) +
+  geom_point(aes(x = index, y = popDensity, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'disturbance', guide = 'legend') +
+  scale_fill_viridis_c(name = 'disturbance', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
-  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0) +
-  xlab(expression(measurement ~ index)) +
-  # ylab(expression(population ~ density ~ 'in' ~ grid ~ cells ~ (people / 10000*km^2))) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
   ylab(expression(pop. ~ density ~ (people / 10000 ~ km^2))) +
-  scale_y_log10() +
+  scale_y_continuous(trans = 'log10', labels = function(x) format(x, scientific = FALSE)) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
-options(scipen = 0)
-
-
-
 
 
 # Combine -----------------------------------------------------------------
@@ -1557,6 +1563,7 @@ plt_stations_combined <- ggdraw(arrangeGrob(plt_stations_raw,
                                             pltStations$plot + labs(title = element_blank()),
                                             nrow = 2, heights = c(0.35, 0.65), top = pltStations$plot$labels$title))
 
+
 plt_biota <- ggdraw(arrangeGrob(plt_chl$plot + theme(legend.position = 'none'),
                                 plt_krill$plot + theme(legend.position = 'none'),
                                 plt_chl$legend,
@@ -1570,6 +1577,100 @@ plt_activity <- ggdraw(arrangeGrob(plt_ship$plot + theme(legend.position = 'none
                                    pltStations$legend,
                                    nrow = 1, widths = c(0.425, 0.425, 0.15), top = 'Activity'))
 
+# Save these plots for supplementary material
+# Chlorophyll and krill
+plt_raw1 <- plt_chl_raw + theme(legend.position = 'none')
+plt_raw2 <- plt_krill_raw + theme(legend.position = 'none')
+leg_raw <- ggdraw(get_legend(plt_chl_raw))
+plt_map1 <- plt_chl$plot + theme(legend.position = 'none') + labs(title = element_blank())
+plt_map2 <- plt_krill$plot + theme(legend.position = 'none') + labs(title = element_blank())
+leg_map <- plt_chl$legend
+
+rh <- c(0.4, 0.6) # relative heights of panels
+lx <- c(0.05, 0.15) # label adjustment factors
+ly <- c(1, 0.85)
+
+title_left <- ggdraw() + draw_label('Chlorophyll', fontface = 'bold', x = 0.55)
+title_right <- ggdraw() + draw_label('Krill', fontface = 'bold', x = 0.55)
+plt_left <- plot_grid(plt_raw1 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
+                      plt_map1 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
+                      ncol = 1, labels = c('A','C'), rel_heights = rh, align = 'v',
+                      label_x = lx, label_y = ly)
+plt_left <- plot_grid(title_left, plt_left, ncol = 1, rel_heights = c(0.05, 0.95))
+plt_right <- plot_grid(plt_raw2 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
+                       plt_map2 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
+                       ncol = 1, labels = c('B','D'), rel_heights = rh, align = 'v',
+                       label_x = lx, label_y = ly)
+plt_right <- plot_grid(title_right, plt_right, ncol = 1, rel_heights = c(0.05, 0.95))
+plt_leg <- plot_grid(leg_raw, leg_map,
+                     ncol = 1, rel_heights = rh, align = 'v')
+plt_biota_combined <- plot_grid(plt_left, plt_right, plt_leg,
+                                ncol = 3, rel_widths = c(1,1,0.2)) + 
+  theme(plot.background = element_rect(fill = 'white', colour = 'white'))
+
+a4_dim <- c(8.3, 11.7)
+pw <- 1.5 * a4_dim[1]
+ph <- 1.5 * 0.5 * a4_dim[2]
+ggsave('biota_prevalence_ranking.png', plt_biota_combined, 'png', width = pw, height = ph, units = 'in')
+
+# SST and pH
+plt_raw1 <- plt_sst_raw + theme(legend.position = 'none')
+plt_raw2 <- plt_pH_raw + theme(legend.position = 'none')
+leg_raw <- ggdraw(get_legend(plt_sst_raw))
+plt_map1 <- plt_sst$plot + theme(legend.position = 'none') + labs(title = element_blank())
+plt_map2 <- plt_pH$plot + theme(legend.position = 'none') + labs(title = element_blank())
+leg_map <- plt_sst$legend
+
+title_left <- ggdraw() + draw_label('SST', fontface = 'bold', x = 0.55)
+title_right <- ggdraw() + draw_label('pH', fontface = 'bold', x = 0.55)
+plt_left <- plot_grid(plt_raw1 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
+                      plt_map1 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
+                      ncol = 1, labels = c('A','C'), rel_heights = rh, align = 'v',
+                      label_x = lx, label_y = ly)
+plt_left <- plot_grid(title_left, plt_left, ncol = 1, rel_heights = c(0.05, 0.95))
+plt_right <- plot_grid(plt_raw2 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
+                       plt_map2 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
+                       ncol = 1, labels = c('B','D'), rel_heights = rh, align = 'v',
+                       label_x = lx, label_y = ly)
+plt_right <- plot_grid(title_right, plt_right, ncol = 1, rel_heights = c(0.05, 0.95))
+plt_leg <- plot_grid(leg_raw, leg_map,
+                     ncol = 1, rel_heights = rh, align = 'v')
+plt_stress_combined <- plot_grid(plt_left, plt_right, plt_leg,
+                                 ncol = 3, rel_widths = c(1,1,0.2)) + 
+  theme(plot.background = element_rect(fill = 'white', colour = 'white'))
+
+ggsave('physical_stress_ranking.png', plt_stress_combined, 'png', width = pw, height = ph, units = 'in')
+
+# shipping and facilities
+plt_raw1 <- plt_ship_raw + theme(legend.position = 'none')
+plt_raw2 <- plt_stations_raw + theme(legend.position = 'none')
+leg_raw <- ggdraw(get_legend(plt_ship_raw))
+plt_map1 <- plt_ship$plot + theme(legend.position = 'none') + labs(title = element_blank())
+plt_map2 <- pltStations$plot + theme(legend.position = 'none') + labs(title = element_blank())
+leg_map <- pltStations$legend
+
+title_left <- ggdraw() + draw_label('Ship traffic', fontface = 'bold', x = 0.55)
+title_right <- ggdraw() + draw_label('Facilities', fontface = 'bold', x = 0.55)
+plt_left <- plot_grid(plt_raw1 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
+                      plt_map1 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
+                      ncol = 1, labels = c('A','C'), rel_heights = rh, align = 'v',
+                      label_x = lx, label_y = ly)
+plt_left <- plot_grid(title_left, plt_left, ncol = 1, rel_heights = c(0.05, 0.95))
+plt_right <- plot_grid(plt_raw2 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
+                       plt_map2 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
+                       ncol = 1, labels = c('B','D'), rel_heights = rh, align = 'v',
+                       label_x = lx, label_y = ly)
+plt_right <- plot_grid(title_right, plt_right, ncol = 1, rel_heights = c(0.05, 0.95))
+plt_leg <- plot_grid(leg_raw, leg_map,
+                     ncol = 1, rel_heights = rh, align = 'v')
+plt_activity_combined <- plot_grid(plt_left, plt_right, plt_leg,
+                                   ncol = 3, rel_widths = c(1,1,0.2)) + 
+  theme(plot.background = element_rect(fill = 'white', colour = 'white'))
+
+ggsave('human_disturbance_ranking.png', plt_activity_combined, 'png', width = pw, height = ph, units = 'in')
+
+
+
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Merge data sets to create risk rankings
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1581,7 +1682,7 @@ combineTitle <- paste0(toupper(substr(combineMethod, 1, 1)), substr(combineMetho
 
 # Biota
 
-plt_biota
+# plt_biota
 
 chl$type <- 'chl'
 krill$type <- 'krill'
@@ -1594,13 +1695,14 @@ score_poly <- switch(combineMethod,
                      mean = sapply(all_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
                      ) # calculate score for each polygon
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale to 0-5
 dat <- grid_cells_all[grid_cells_all$cell_index %in% all_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
 dat_biota <- dat
 
 plt_chl_krill <- plot_fun(dat_biota, Title = combineTitle, legend_title = 'prevalence')
-plt_chl_krill$plot
+# plt_chl_krill$plot
 
 plt_biota <- ggdraw(arrangeGrob(plt_chl$plot + theme(legend.position = 'none'),
                                 plt_krill$plot + theme(legend.position = 'none'),
@@ -1611,7 +1713,7 @@ plt_biota
 
 # Stressors
 
-plt_stress
+# plt_stress
 
 sst$type <- 'sst'
 pH$type <- 'pH'
@@ -1623,13 +1725,14 @@ score_poly <- switch(combineMethod,
                      mean = sapply(all_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale to 0-5
 dat <- grid_cells_all[grid_cells_all$cell_index %in% all_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
 dat_stress <- dat
 
 plt_sst_pH <- plot_fun(dat, Title = combineTitle, legend_title = 'stress')
-plt_sst_pH$plot
+# plt_sst_pH$plot
 
 plt_stress <- ggdraw(arrangeGrob(plt_sst$plot + theme(legend.position = 'none'),
                                  plt_pH$plot + theme(legend.position = 'none'),
@@ -1640,7 +1743,7 @@ plt_stress
 
 # Activity
 
-plt_activity
+# plt_activity
 
 ship$type <- 'ship'
 grid_cells_reduced$type <- 'station'
@@ -1653,13 +1756,14 @@ score_poly <- switch(combineMethod,
                      mean = sapply(all_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale to 0-5
 dat <- grid_cells_all[grid_cells_all$cell_index %in% all_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
 dat_activity <- dat
 
 plt_ship_station <- plot_fun(dat, Title = combineTitle, legend_title = 'presence')
-plt_ship_station$plot
+# plt_ship_station$plot
 
 plt_activity <- ggdraw(arrangeGrob(plt_ship$plot + theme(legend.position = 'none'),
                                    pltStations$plot + theme(legend.position = 'none'),
@@ -1691,17 +1795,17 @@ joint_polygons <- all_polygons[all_polygons %in% dat_biota$cell_index &
                                  all_polygons %in% dat_activity$cell_index]
 npolys <- length(joint_polygons)
 score_poly <- switch(combineMethod,
-                     mean = sapply(joint_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
+                     mean = sapply(joint_polygons, function(z) geomean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
-
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale
 dat <- grid_cells_all[grid_cells_all$cell_index %in% joint_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
 dat_interaction <- dat
 
 plt_biota_activity <- plot_fun(dat_interaction, Title = combineTitle, legend_title = 'risk')
-plt_biota_activity$plot
+# plt_biota_activity$plot
 
 plt_interaction <- ggdraw(arrangeGrob(plt_chl_krill$plot + labs(title = 'Biota') + theme(legend.position = 'none'),
                                       plt_chl_krill$legend,
@@ -1730,9 +1834,10 @@ joint_polygons <- all_polygons[all_polygons %in% dat_stress$cell_index &
                                  all_polygons %in% dat_activity$cell_index]
 npolys <- length(joint_polygons)
 score_poly <- switch(combineMethod,
-                     mean = sapply(joint_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
+                     mean = sapply(joint_polygons, function(z) geomean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale
 
 dat <- grid_cells_all[grid_cells_all$cell_index %in% joint_polygons,] # create new data frame
 dat$score <- score_poly
@@ -1740,7 +1845,7 @@ dat$rank <- score2rank(dat$score)
 dat_multistressor <- dat
 
 plt_stress_activity <- plot_fun(dat_multistressor, Title = combineTitle, legend_title = 'risk')
-plt_stress_activity$plot
+# plt_stress_activity$plot
 
 plt_multistressor <- ggdraw(arrangeGrob(plt_sst_pH$plot + labs(title = 'Stressors') + theme(legend.position = 'none'),
                                       plt_sst_pH$legend,
@@ -1750,6 +1855,107 @@ plt_multistressor <- ggdraw(arrangeGrob(plt_sst_pH$plot + labs(title = 'Stressor
                                       plt_stress_activity$legend,
                                       nrow = 1, widths = c(0.25, 1/12, 0.25, 1/12, 0.25, 1/12), top = 'Contribution to stressors'))
 plt_multistressor
+
+
+# Total interaction -- activity with biota & stressors
+dat_interaction$type <- 'interaction'
+dat_multistressor$type <- 'multistressor'
+dat <- rbind(dat_interaction, dat_multistressor)
+all_polygons <- sort(unique(dat$cell_index))
+npolys <- length(all_polygons)
+score_poly <- switch(combineMethod,
+                     mean = sapply(all_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
+                     sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
+) # calculate score for each polygon
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale to 0-5
+dat <- grid_cells_all[grid_cells_all$cell_index %in% all_polygons,] # create new data frame
+dat$score <- score_poly
+dat$rank <- score2rank(dat$score)
+dat_hotspot <- dat
+
+plt_hotspot <- plot_fun(dat_hotspot, Title = combineTitle, legend_title = 'risk')
+
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Combine and save these plots for paper
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# We need 6 plots: mean ranks for biota, stressors & activity on left column, and
+# interaction ranks for biota-activity & stressors-activity, and overall interaction
+# rank on the right column.
+
+lx <- 0.05 # label adjustment factors
+ly <- 0.9
+
+# title_left <- ggdraw() + draw_label('Chlorophyll', fontface = 'bold', x = 0.55)
+# title_right <- ggdraw() + draw_label('Krill', fontface = 'bold', x = 0.55)
+# plt_left <- plot_grid(plt_raw1 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
+#                       plt_map1 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
+#                       ncol = 1, labels = c('A','C'), rel_heights = rh, align = 'v',
+#                       label_x = lx, label_y = ly)
+
+
+plt_map1 <- plt_chl_krill$plot + theme(plot.title = element_blank()) + guides(fill_new = guide_legend('biota\nprevalence'))
+leg1 <- ggdraw(get_legend(plt_map1))
+plt_map1 <- plt_map1 + theme(legend.position = 'none')
+
+plt_map2 <- plt_sst_pH$plot + theme(plot.title = element_blank()) + guides(fill_new = guide_legend('physical\nstress')) 
+leg2 <- ggdraw(get_legend(plt_map2))
+plt_map2 <- plt_map2 + theme(legend.position = 'none')
+
+plt_map3 <- plt_ship_station$plot + theme(plot.title = element_blank()) + guides(fill_new = guide_legend('human\nactivity'))
+leg3 <- ggdraw(get_legend(plt_map3))
+plt_map3 <- plt_map3 + theme(legend.position = 'none')
+
+plt_map4 <- plt_biota_activity$plot + theme(plot.title = element_blank()) + guides(fill_new = guide_legend('interaction\nwith biota'))
+leg4 <- ggdraw(get_legend(plt_map4))
+plt_map4 <- plt_map4 + theme(legend.position = 'none')
+
+plt_map5 <- plt_stress_activity$plot + theme(plot.title = element_blank()) + guides(fill_new = guide_legend('interaction\nwith stressors'))
+leg5 <- ggdraw(get_legend(plt_map5))
+plt_map5 <- plt_map5 + theme(legend.position = 'none')
+
+plt_map6 <- plt_hotspot$plot + theme(plot.title = element_blank()) + guides(fill_new = guide_legend('interaction\noverall'))
+leg6 <- ggdraw(get_legend(plt_map6))
+plt_map6 <- plt_map6 + theme(legend.position = 'none')
+
+rw <- c(0.8, 0.2)
+plt_left <- plot_grid(plt_map1,
+                      plt_map2,
+                      plt_map3,
+                      ncol = 1, labels = c('A','C','E'), label_x = lx, label_y = ly)
+leg_left <- plot_grid(leg1,
+                      leg2,
+                      leg3,
+                      ncol = 1)
+plt_left <- plot_grid(plt_left, leg_left,
+                      ncol = 2, rel_widths = rw)
+
+plt_right <- plot_grid(plt_map4,
+                       plt_map5,
+                       plt_map6,
+                       ncol = 1, labels = c('B','D','F'), label_x = lx, label_y = ly)
+leg_right <- plot_grid(leg4,
+                       leg5,
+                       leg6,
+                       ncol = 1)
+plt_right <- plot_grid(plt_right, leg_right,
+                       ncol = 2, rel_widths = rw)
+
+
+plt_results <- plot_grid(plt_left, plt_right,
+                         ncol = 2) +
+  theme(plot.background = element_rect(fill = 'white', colour = 'white'))
+
+
+A4_w <- 8.3 # A4 dimensions
+A4_h <- 11.7
+sc_w <- 1.5 # scaling factors
+sc_h <- 1.2
+pw <- sc_w * A4_w
+ph <- sc_h * A4_h
+ggsave('main_results_ranking.png', plt_results, 'png', width = pw, height = ph, units = 'in')
+
 
 
 
