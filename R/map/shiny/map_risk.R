@@ -1,568 +1,5 @@
 # Create map of risk
 
-# Preamble: packages/functions --------------------------------------------
-
-# Set directories
-wd_orig <- getwd()
-wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
-
-# Load packages
-library(MASS) # for Box-Cox transform
-library(car) # for Yeo-Johnson
-# library(VGAM)
-library(ggplot2)
-library(devtools)
-ggnewscale_version <- '0.4.3'
-ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
-ggnewscale_available <- require(ggnewscale, quietly = TRUE)
-if(!ggnewscale_available){
-  install_github(ggnewscale_download_path)
-  library(ggnewscale)
-}else{
-  if(packageVersion('ggnewscale') != ggnewscale_version){
-    detach("package:ggnewscale", unload = TRUE)
-    remove.packages('ggnewscale')
-    install_github(ggnewscale_download_path)
-    library(ggnewscale)
-  }
-}
-
-
-# Load/create functions
-source('functions.R') # function (get_data) to load/organise data
-
-significantTrendsOnly <- TRUE
-
-get_data(res = '9x3', baseDirectory = wd_base, shinyDirectory = wd_orig, 
-         sstType = 'trend', pHType = 'trend',
-         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
-         shipSummaryDataOrRaw = 'raw')
-
-
-
-sst_poly <- sst_poly[sst_poly$metric != 'p-value',]
-pH_poly <- pH_poly[pH_poly$metric != 'p-value',]
-
-plot_fun <- function(data, n = nranks, clrs = Cols){
-  # function to plot risk levels
-  data$rank <- factor(data$rank, levels = n:1, labels = n:1)
-  plt <-
-    ggplot() +
-    geom_sf(data = data, aes(fill = rank)) +
-    scale_fill_manual(values = clrs, breaks = n:1, name = 'risk') +
-    theme(
-      axis.text = element_blank(),
-      axis.ticks = element_blank(),
-      panel.background = element_rect(fill = 'white', colour = 'white'),
-      plot.background = element_rect(fill = 'white', colour = 'white')
-    ) +
-    new_scale('fill') +
-    geom_sf(data = nc,
-            aes(fill = surface),
-            show.legend = FALSE) +
-    scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
-  plt
-}
-
-
-
-# plot_fun <- function(data, n = nranks){
-#   # function to plot risk levels
-#   data$rank <- factor(data$rank, levels = n:1, labels = n:1)
-#   plt <-
-#     ggplot() +
-#     geom_sf(data = data, aes(fill = rank)) +
-#     scale_fill_brewer(type = 'seq',  palette = 'RdYlGn', direction = 1,
-#                       name = 'risk') +
-#     theme(
-#       axis.text = element_blank(),
-#       axis.ticks = element_blank(),
-#       panel.background = element_rect(fill = 'white', colour = 'white'),
-#       plot.background = element_rect(fill = 'white', colour = 'white')
-#     ) +
-#     new_scale('fill') +
-#     geom_sf(data = nc,
-#             aes(fill = surface),
-#             show.legend = FALSE) +
-#     scale_fill_manual(values = c('grey','skyblue','skyblue','grey'))
-#   plt
-# }
-
-# The 'subset' function doesn't work with sf objects. Use this simple function to subset sf data
-subset_sf <- function(dat, variable, value){
-  x <- dat[dat[[variable]] %in% value,]
-  if(is.factor(x[[variable]])) x[[variable]] <- as.factor(as.character(x[[variable]]))
-  return(x)}
-
-# Use a continuous 'score' to assess risk. This behaves better than integer ranks
-# under averaging and may be transformed into an integer 'rank' by taking the ceiling
-# (or floor).
-score2rank <- function(x, base = 0){
-  y <- ceiling(x)
-  y[y == base] <- base + 1
-  y
-}
-
-
-# Filter by month(s) -- summer months only.
-month <- 'all' # select month: 1, 2, 3, and/or 'all'
-
-chl <- subset_sf(chl_poly, 'month', month)
-krill <- subset_sf(krill_poly, 'month', month)
-sst <- subset_sf(sst_poly, 'month', month)
-pH <- subset_sf(pH_poly, 'month', month)
-
-nranks <- 5 # number of risk categories
-
-colfunc <- colorRampPalette(c('firebrick3', 'yellow', 'forestgreen'))
-Cols <- setNames(colfunc(nranks), nranks:1)
-
-
-# # Take a simple approach of using statistical quantiles to rank each map grid
-# # cell for each data type. This is not appropriate for all the data types...
-# # In fact, it may not be appropriate at all!
-# qvals <- seq(0, 1, length = nranks + 1) # evenly distributed quantiles
-# qgroup_data <- function(x, q) quantile(x, q)
-
-
-# Chlorophyll -------------------------------------------------------------
-
-# High productivity regions are associated with greater potential for environmental
-# risk, so risk increases with chlorophyll concentration.
-
-# Manually specify values for data rankings by observation of data distribution.
-
-x <- {1:nrow(chl)} / nrow(chl)
-y <- sort(chl$value)
-plot(x, y)
-
-r <- rep(NA, nranks + 1)
-r[nranks:{nranks+1}] <- c(1, max(y)) # values greater than 1 have maximum rank
-y_ <- y[y < r[nranks]]
-x_ <- {1:length(y_)} / length(y_)
-plot(x_, y_)
-r[1:2] <- c(min(y), 0.25) # values less than 0.25 have lowest rank
-
-y_ <- y[r[2] < y & y < r[nranks]]
-x_ <- {1:length(y_)} / length(y_)
-plot(x_, y_)
-# Set the remaining ranks evenly across the intermediate values
-rna <- is.na(r)
-nrna <- sum(rna)
-r[rna] <- seq(r[2], r[nranks], length = nrna + 2)[2:{1+nrna}]
-plot(x, y)
-abline(h = r)
-
-rank_limits_chl <- r
-
-for(i in 1:nranks){
-  if(i < nranks){
-    j <- r[i] <= chl$value & chl$value < r[i+1]} else{
-      j <- r[i] <= chl$value & chl$value <= r[i+1]
-    }
-  v <- chl$value[j]
-  p <- r[i:{i+1}]
-  chl$score[j] <- {i-1} + {v - r[i]} / diff(p)
-}
-
-chl$rank <- score2rank(chl$score)
-
-plt_chl <- plot_fun(chl)
-plt_chl
-
-
-# Krill -------------------------------------------------------------------
-
-# Krill is a Southern Ocean key-stone species. Regions with high krill density 
-# have greater potential for environmental risk.
-# The quantile approach will need to be modified for krill because there are lots
-# of grid cells with measurement zeros. Where we have zeros the risk must be assigned
-# the lowest rank.
-
-# Manually specify values for data rankings by observation of data distribution.
-
-x <- {1:nrow(krill)} / nrow(krill)
-y <- sort(krill$value)
-par(mfrow = c(1,1))
-plot(x, y)
-plot(x, log10(y))
-
-zero_krill <- krill$value == 0
-observed_krill <- !zero_krill
-
-krill_p <- krill[observed_krill,] # positive values
-
-x_p <- {1:nrow(krill_p)} / nrow(krill_p)
-y_p <- sort(krill_p$value)
-plot(x_p, y_p)
-plot(x_p, log10(y_p))
-
-r <- rep(NA, nranks + 1)
-r[nranks:{nranks+1}] <- c(50, max(y_p)) # values greater than 1 have maximum rank
-y_ <- y_p[y_p < r[nranks]]
-x_ <- {1:length(y_)} / length(y_)
-plot(x_, y_)
-r[nranks - 1] <- 10
-y_ <- y_[y_ < min(r, na.rm = TRUE)]
-x_ <- {1:length(y_)} / length(y_)
-plot(x_, y_)
-r[1:3] <- c(0,1,5)
-
-plot(x, log10(y))
-abline(h = log10(r[-1]))
-
-rank_limits_krill <- r
-
-for(i in 1:nranks){
-  if(i < nranks){
-    j <- r[i] <= krill$value & krill$value < r[i+1]} else{
-      j <- r[i] <= krill$value & krill$value <= r[i+1]
-    }
-  v <- krill$value[j]
-  p <- r[i:{i+1}]
-  krill$score[j] <- {i-1} + {v - r[i]} / diff(p)
-}
-
-krill$rank <- score2rank(krill$score)
-
-plt_krill <- plot_fun(krill)
-plt_krill
-
-
-# Temperature -------------------------------------------------------------
-
-# Potential environmental risk due to temperature change is typically associated
-# rising temperature, but the SST data record regions of both rising and falling
-# temperatures. I think it must be assumed that a zero trend be associated with
-# zero risk, and that regions of rising OR falling temperatures be associated with
-# greater risk. A problem with this approach is distinguishing between rising and
-# falling temperatures on the resulting risk map. I'm not sure how to address this.
-
-# As above, specify risk rankings by inspection of the data distributions.
-ind_sst_zero <- sst$value == 0
-ind_sst_neg <- sst$value < 0
-ind_sst_pos <- sst$value > 0
-any_neg <- any(ind_sst_neg)
-any_pos <- any(ind_sst_pos)
-sst_neg <- sst$value[ind_sst_neg]
-sst_pos <- sst$value[ind_sst_pos]
-
-# Negative values
-if(any_neg){
-  hist(sst_neg)
-  y <- sort(sst_neg)
-  ny <- length(y)
-  x <- {1:ny} / ny
-  plot(x,y)
-  # In this case I think that simply splitting the data into evenly spaced groups
-  # will produce an appropriate risk distribution.
-  if(significantTrendsOnly){
-    outlier <- rep(FALSE, ny)
-    outlier[c(1:3, ny)] <- TRUE
-    ry <- range(y[!outlier])
-    rneg <- seq(ry[1], ry[2], length = nranks + 1)
-    rneg[c(1, nranks+1)] <- range(y) # adjust to account outlying values
-    abline(h = rneg)
-  }else{
-    outlier <- rep(FALSE, ny)
-    outlier[c(1:4, ny)] <- TRUE
-    ry <- range(y[!outlier])
-    rneg <- seq(ry[1], ry[2], length = nranks + 1)
-    rneg[c(1, nranks+1)] <- range(y) # adjust to account outlying values
-    abline(h = rneg)
-  }
-}
-
-# Positive values
-if(any_pos){
-  # For regions with positive sst trend the same approach will be fine provided the
-  # single outlying point is handled separately
-  hist(sst_pos)
-  y <- sort(sst_pos)
-  ny <- length(y)
-  x <- {1:ny} / ny
-  plot(x,y)
-  if(significantTrendsOnly){
-    outlier <- rep(FALSE, ny)
-    outlier[c(1, ny)] <- TRUE
-    ry <- range(y[!outlier])
-    rpos <- seq(ry[1], ry[2], length = nranks + 1)
-    rpos[c(1, nranks+1)] <- range(y) # adjust to account outlying values
-    abline(h = rpos)
-  }else{
-    outlier <- rep(FALSE, ny)
-    outlier[c({ny-2}:ny)] <- TRUE
-    ry <- range(y[!outlier])
-    rpos <- seq(ry[1], ry[2], length = nranks + 1)
-    rpos[c(1, nranks+1)] <- range(y) # adjust to account outlying values
-    abline(h = rpos)
-  }
-}
-
-rank_limits_sst <- rep(0, 2*nranks)
-if(any_neg) rank_limits_sst[1:nranks] <- rneg[1:nranks]
-if(any_pos) rank_limits_sst[{nranks+1}:{2*nranks}] <- rpos[2:{nranks+1}]
-
-sst$score[ind_sst_zero] <- 0
-for(i in 1:nranks){
-  # negative values
-  rneg <- rank_limits_sst[i:{i+1}]
-  if(i > 2){
-    j <- rneg[1] < sst_neg & sst_neg <= rneg[2]} else{
-      j <- rneg[1] <= sst_neg & sst_neg <= rneg[2]}
-  v <- sst_neg[j]
-  sst$score[ind_sst_neg][j] <- {nranks - i} + {rneg[2] - v} / diff(rneg)
-  # positive values
-  rpos <- rank_limits_sst[{nranks+i-1}:{nranks+i}]
-  if(i < nranks){
-    j <- rpos[1] <= sst_pos & sst_pos < rpos[2]} else{
-      j <- rpos[1] <= sst_pos & sst_pos <= rpos[2]}
-  v <- sst_pos[j]
-  sst$score[ind_sst_pos][j] <- {i - 1} + {v - rpos[1]} / diff(rpos)
-}
-
-sst$rank <- score2rank(sst$score)
-
-plt_sst <- plot_fun(sst)
-plt_sst
-
-
-# pH ----------------------------------------------------------------------
-
-# Handle pH similarly to temperature. Bear in mind that this assumption makes less
-# sense because pH trends are less evenly distributed around zero. This will
-# need changed later...
-# Ask Clara about the nature of risk regarding pH changes... Are increases in pH,
-# in any way, risky? Probably not for calcifying organisms, but what about more
-# generally? Is it reasonable to assign regions exhibiting an increase in pH the
-# minimum risk rating? This would make things easier, but I just don;t know if it makes ecological sense...
-
-ind_pH_zero <- pH$value == 0
-ind_pH_neg <- pH$value < 0
-ind_pH_pos <- pH$value > 0
-any_neg <- any(ind_pH_neg)
-any_pos <- any(ind_pH_pos)
-pH_neg <- pH$value[ind_pH_neg]
-pH_pos <- pH$value[ind_pH_pos]
-
-# Negative values
-if(any_neg){
-  hist(pH_neg)
-  y <- sort(pH_neg)
-  ny <- length(y)
-  x <- {1:ny} / ny
-  plot(x,y)
-  # In this case I think that simply splitting the data into evenly spaced groups
-  # will produce an appropriate risk distribution but, as above, handle outlying
-  # points separately.
-  if(significantTrendsOnly){
-    outlier <- rep(FALSE, ny)
-    outlier[c(1:4, ny)] <- TRUE
-    ry <- range(y[!outlier])
-    rneg <- seq(ry[1], ry[2], length = nranks + 1)
-    rneg[c(1, nranks+1)] <- range(y) # adjust to account for outlying values
-  }else{
-    outlier <- rep(FALSE, ny)
-    outlier[c(1:4, {ny-1}:ny)] <- TRUE
-    ry <- range(y[!outlier])
-    rneg <- seq(ry[1], ry[2], length = nranks + 1)
-    rneg[c(1, nranks+1)] <- range(y) # adjust to account for outlying value
-  }
-  abline(h = rneg)
-}
-
-# Positive values
-if(any_pos){
-  hist(pH_pos)
-  y <- sort(pH_pos)
-  ny <- length(y)
-  x <- {1:ny} / ny
-  plot(x,y)
-  if(significantTrendsOnly){
-    outlier <- rep(FALSE, ny)
-    ry <- range(y[!outlier])
-    rpos <- seq(ry[1], ry[2], length = nranks + 1)
-    rpos[c(1, nranks+1)] <- range(y) # adjust to account for outlying values
-  }else{
-    outlier <- rep(FALSE, ny)
-    ry <- range(y[!outlier])
-    rpos <- seq(ry[1], ry[2], length = nranks + 1)
-    rpos[c(1, nranks+1)] <- range(y) # adjust to account for outlying values
-  }
-  abline(h = rpos)
-}
-
-rank_limits_pH <- rep(0, 2*nranks)
-if(any_neg) rank_limits_pH[1:nranks] <- rneg[1:nranks]
-if(any_pos) rank_limits_pH[{nranks+1}:{2*nranks}] <- rpos[2:{nranks+1}]
-
-pH$score[ind_pH_zero] <- 0
-for(i in 1:nranks){
-  # negative values
-  rneg <- rank_limits_pH[i:{i+1}]
-  if(i > 2){
-    j <- rneg[1] < pH_neg & pH_neg <= rneg[2]} else{
-      j <- rneg[1] <= pH_neg & pH_neg <= rneg[2]}
-  v <- pH_neg[j]
-  pH$score[ind_pH_neg][j] <- {nranks - i} + {rneg[2] - v} / diff(rneg)
-  # positive values
-  rpos <- rank_limits_pH[{nranks+i-1}:{nranks+i}]
-  if(i < nranks){
-    j <- rpos[1] <= pH_pos & pH_pos < rpos[2]} else{
-      j <- rpos[1] <= pH_pos & pH_pos <= rpos[2]}
-  v <- pH_pos[j]
-  pH$score[ind_pH_pos][j] <- {i - 1} + {v - rpos[1]} / diff(rpos)
-}
-
-pH$rank <- score2rank(pH$score)
-
-plt_pH <- plot_fun(pH)
-plt_pH
-
-
-
-# Combine data ------------------------------------------------------------
-
-# Combine data sets to generate single risk metric
-
-chl$type <- 'chl'
-krill$type <- 'krill'
-sst$type <- 'sst'
-pH$type <- 'pH'
-
-cols <- c('type','score')
-
-# Merging & manipulating data frames of class 'sf' seems a bit troublesome...
-# Maybe there's a slick way of doing this, but for now I've just cobbled something together!
-dat <- rbind(chl[cols], krill[cols], sst[cols], pH[cols]) # all data
-dat_ <- as.data.frame(dat$geometry)
-dat_ <- do.call('rbind', lapply(1:nrow(dat_), function(z) unlist(dat_$geometry[z])))
-
-all_polygons <- unique(dat$geometry)
-npolys <- length(all_polygons)
-
-ind_poly <- lapply(1:npolys, function(z){
-  i <- dat_ == matrix(unlist(all_polygons[[z]]), nrow = 1)[rep(1, nrow(dat_)),]
-  which(apply(i, 1, all))
-})
-score_poly <- sapply(1:npolys, function(z){
-  i <- ind_poly[[z]]
-  mean(dat$score[i], na.rm = TRUE)
-})
-
-dat <- unique(dat['geometry'])
-dat$score <- score_poly
-
-dat$rank <- score2rank(dat$score)
-
-# dat$rank <- factor(dat$rank, levels = nranks:1, labels = nranks:1)
-
-
-plt_all <- plot_fun(dat)
-plt_all
-
-plt_chl <- plt_chl + labs(title = 'Chlorophyll')
-plt_krill <- plt_krill + labs(title = 'Krill')
-plt_sst <- plt_sst + labs(title = 'Sea surface temperature')
-plt_pH <- plt_pH + labs(title = 'pH')
-plt_all <- plt_all + labs(title = 'Combined (mean) risk')
-
-plt_combined <- gridExtra::grid.arrange(plt_chl, plt_krill, plt_sst, plt_pH, plt_all,
-                                        nrow = 3)
-
-plot(plt_combined)
-
-
-# Make some summary plots....
-
-# Chlorophyll
-x <- {1:nrow(chl)} / nrow(chl)
-y <- sort(chl$value)
-plot(x, y)
-abline(h = rank_limits_chl)
-
-chl$rank <- factor(chl$rank, levels = nranks:1, labels = nranks:1)
-
-plt_dist_chl <- ggplot(chl) + 
-  geom_histogram(aes(x = value, fill = rank), binwidth = 0.01) +
-  xlab(expression(Chlorophyll~a~(mg~m^{-3}))) +
-  labs(title = 'Data distribution displaying cut-off values used for risk rankings') +
-  scale_fill_manual(values = Cols, name = 'risk') +
-  theme_bw()
-plt_dist_chl
-
-# Krill
-x <- {1:nrow(krill)} / nrow(krill)
-y <- sort(krill$value)
-plot(x, y)
-abline(h = rank_limits_krill)
-plot(x, y, log = 'y')
-abline(h = log10(rank_limits_krill[-1]))
-
-krill$rank <- factor(krill$rank, levels = nranks:1, labels = nranks:1)
-
-plt_dist_krill <- ggplot(krill) + 
-  geom_histogram(aes(x = value, fill = rank), binwidth = 0.05) +
-  scale_x_log10() + 
-  xlab(expression(Krill~(number~m^{-2}))) +
-  labs(title = 'Data distribution displaying cut-off values used for risk rankings', subtitle = 'Note the log scale omits measurement zeros') +
-  scale_fill_manual(values = Cols, name = 'risk') +
-  theme_bw()
-plt_dist_krill
-
-
-# SST
-x <- {1:nrow(sst)} / nrow(sst)
-y <- sort(sst$value)
-plot(x, y)
-abline(h = rank_limits_sst)
-
-sst$rank <- factor(sst$rank, levels = nranks:1, labels = nranks:1)
-
-plt_dist_sst <- ggplot(subset(sst, value != 0)) + 
-  geom_histogram(aes(x = value, fill = rank), binwidth = 0.0005) +
-  xlab(expression(SST~linear~trend~(degree*C~year^{-1}))) +
-  labs(title = 'Data distribution displaying cut-off values used for risk rankings',
-       subtitle = 'Note that both increases & decreases in SST are deemed risky') +
-  scale_fill_manual(values = Cols, name = 'risk') +
-  theme_bw()
-plt_dist_sst
-
-
-# pH
-x <- {1:nrow(pH)} / nrow(pH)
-y <- sort(pH$value)
-plot(x, y)
-abline(h = rank_limits_pH)
-
-pH$rank <- factor(pH$rank, levels = nranks:1, labels = nranks:1)
-
-plt_dist_pH <- ggplot(subset(pH, value != 0)) + 
-  geom_histogram(aes(x = value, fill = rank), binwidth = 0.000025) +
-  xlab(expression(pH~linear~trend~(year^{-1}))) +
-  labs(title = 'Data distribution displaying cut-off values used for risk rankings',
-       subtitle = 'Note that both increases & decreases in pH are deemed risky...\nshould positive trends be ascribed the lowest risk?') +
-  scale_fill_manual(values = Cols, name = 'risk') +
-  theme_bw()
-plt_dist_pH
-
-
-chl_combined <- gridExtra::grid.arrange(plt_dist_chl, plt_chl, nrow = 2)
-krill_combined <- gridExtra::grid.arrange(plt_dist_krill, plt_krill, nrow = 2)
-sst_combined <- gridExtra::grid.arrange(plt_dist_sst, plt_sst, nrow = 2)
-pH_combined <- gridExtra::grid.arrange(plt_dist_pH, plt_pH, nrow = 2)
-
-# save plots
-
-ggsave('chl_risk.png', plot = chl_combined, device = 'png', width = 6, height = 12, units = 'in')
-ggsave('krill_risk.png', plot = krill_combined, device = 'png', width = 6, height = 12, units = 'in')
-ggsave('sst_risk.png', plot = sst_combined, device = 'png', width = 6, height = 12, units = 'in')
-ggsave('pH_risk.png', plot = pH_combined, device = 'png', width = 6, height = 12, units = 'in')
-
-ggsave('combined_risk_map.png', plot = plt_combined, device = 'png', width = 8, height = 12, units = 'in')
-
-
-
 # 2nd attempt -- after meeting with Clara & Sally -------------------------
 
 # The novelty of the work is assessing the potential of plastic to contribute to
@@ -590,8 +27,6 @@ ggsave('combined_risk_map.png', plot = plt_combined, device = 'png', width = 8, 
 # temperature because there is a greater sea surface area of temperature decline
 # than there is of temperature rise, whereas almost all Antarctic waters exhibit
 # a decline in pH.
-
-# Take roughly the same approach as my, above, 1st attempt...
 
 # Preamble: packages/functions --------------------------------------------
 
@@ -632,12 +67,18 @@ if(!mmtable2_available){
 # Load/create functions
 source('functions.R') # function (get_data) to load/organise data
 
-significantTrendsOnly <- TRUE
+# significantTrendsOnly <- TRUE
+significantTrendsOnly <- FALSE
+loadTooltipFromFile <- TRUE
+displayAllLitterTypes <- TRUE
 
-get_data(res = '9x3', baseDirectory = wd_base, shinyDirectory = wd_orig, 
+res <- '9x3'
+
+get_data(res = res, baseDirectory = wd_base, shinyDirectory = wd_orig, 
+         allLitterTypes = displayAllLitterTypes,
          sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
-         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly)
-
+         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
+         loadTooltipFromFile = loadTooltipFromFile)
 
 geomean <- function(x, na.rm = FALSE){
   # geometric mean of vector x
@@ -647,7 +88,8 @@ geomean <- function(x, na.rm = FALSE){
 
 
 plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
-                     legend_title = 'risk', Title = NULL, show_legend = TRUE){
+                     legend_title = 'risk', Title = NULL, show_legend = TRUE,
+                     showAxis = TRUE, axisTextSize = 4){
   # function to plot risk levels
   data$rank <- factor(data$rank, levels = n:1, labels = n:1)
   # get the legend
@@ -673,6 +115,12 @@ plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
     geom_sf(data = nc,
             aes(fill = surface)) +
     scale_fill_manual(values = c('grey','skyblue','skyblue','grey'), guide = 'none')
+  
+  if(showAxis){
+    assign('BBox', st_bbox(nc), envir = .GlobalEnv)
+    plt <- overlay_coordinate_grid(plt, textSize = axisTextSize)
+  }
+  
   if(!is.null(Title)) plt <- plt + labs(title = Title)
   return(list(plot = plt, legend = leg))
 }
@@ -682,7 +130,8 @@ plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
 # We need a separate function to plot stations
 plot_fun_stations <- function(data_stations, data_grid_cells, rank_type = 'additive', n = nranks,
                               v_option = 'viridis', v_direction = -1, alpha = 0.75,
-                              stroke = 1, rank_limits_PopSize = NULL, Title = NULL, show_legend = TRUE){
+                              stroke = 1, rank_limits_PopSize = NULL, Title = NULL, show_legend = TRUE,
+                              showAxis = TRUE, axisTextSize = 4){
 
   # if(!{'rank' %in% names(data_stations)}){
   #   dn <- names(data_stations)
@@ -729,6 +178,11 @@ plot_fun_stations <- function(data_stations, data_grid_cells, rank_type = 'addit
     scale_fill_viridis_d(aesthetics = 'fill_new_new', option = v_option, direction = v_direction, name = 'disturbance', drop = FALSE, na.translate = FALSE, guide = guide_legend(override.aes = list(size = NA, shape = NA))) +
     scale_size_manual(values = 1:n, guide = guide_legend(title = 'population', order = 1, override.aes = list(fill = NA, linetype = 0))) +
     scale_shape_manual(values = c(21, 22), guide = guide_legend(title = 'seasonality', order = 2, override.aes = list(size = n, fill = NA, linetype = 0)))
+  
+  if(showAxis){
+    assign('BBox', st_bbox(nc), envir = .GlobalEnv)
+    plt <- overlay_coordinate_grid(plt, textSize = axisTextSize)
+  }
   
   if(!is.null(Title)) plt <- plt + labs(title = Title)
   leg <- suppressWarnings(ggdraw(get_legend(plt)))
@@ -921,7 +375,7 @@ abline(h = r[-1])
 
 rank_limits_krill <- r
 
-o# The above, manually specified, ranks are nice and sensible, but try specifying
+# The above, manually specified, ranks are nice and sensible, but try specifying
 # rankings as an even spread on log scale after removing outliers.
 plot(x_p, y_p, log = 'y')
 # y_r <- y_p[-c(1,{length(y_p)-7}:length(y_p))]
@@ -992,6 +446,8 @@ plt_krill_raw <-
 # temperature only. I disagree and believe it more honest and useful to map regions 
 # of both increasing and decreasing temperatures, but let's try it their way...
 
+sst_orig <- sst
+
 sst_pos <- sst$value > 0 # index grid cells with trend of increasing temperature (all p-values)
 sst_neg <- !sst_pos # cells with negative values are ignored(!) and assigned either minimum risk rank or omitted from map
 
@@ -1008,10 +464,14 @@ sst_neg <- !sst_pos # cells with negative values are ignored(!) and assigned eit
 #                                                           paste(0.05, '\u2264', 'p', '\u2264', 0.1),
 #                                                           paste(0.1, '\u2264', 'p', '\u2264', 0.2)))
 
-sig_0.05 <- sst_pos & sst$pval <= 0.05 # all significant positive trends
-sig_0.25 <- sst_pos &  0.05 < sst$pval & sst$pval <= 0.25 # insignificant positive trends
-sig_0.5 <- sst_pos &  0.25 < sst$pval & sst$pval <= 0.5 # insignificant positive trends
-sig_1 <- sst_pos &  0.5 < sst$pval & sst$pval <= 1 # even more insignificant positive trends
+sig_0.05 <- sst$pval <= 0.05 # all significant trends
+sig_0.25 <- 0.05 < sst$pval & sst$pval <= 0.25 # insignificant trends
+sig_0.5 <- 0.25 < sst$pval & sst$pval <= 0.5 # insignificant trends
+sig_1 <- 0.5 < sst$pval & sst$pval <= 1 # even more insignificant trends
+# sig_0.05 <- sst_pos & sst$pval <= 0.05 # all significant positive trends
+# sig_0.25 <- sst_pos &  0.05 < sst$pval & sst$pval <= 0.25 # insignificant positive trends
+# sig_0.5 <- sst_pos &  0.25 < sst$pval & sst$pval <= 0.5 # insignificant positive trends
+# sig_1 <- sst_pos &  0.5 < sst$pval & sst$pval <= 1 # even more insignificant positive trends
 # Redefine the categorical variable, plevel
 sst$plevel <- NA
 sst$plevel[sig_0.05] <- 0.05
@@ -1022,8 +482,11 @@ sst$plevel <- factor(sst$plevel, levels = c(0.05, 0.25, 0.5, 1), labels = c(past
                                                                         paste(0.05, '\u2264', 'p', '\u2264', 0.25),
                                                                         paste(0.25, '\u2264', 'p', '\u2264', 0.5),
                                                                         paste(0.5, '\u2264', 'p', '\u2264', 1)))
+sst_issig <- sst$plevel == 'p ≤ 0.05'
 
-sst_selected_cells <- !is.na(sst$plevel)
+sst_selected_cells <- sst_pos & sst_issig # only cells with significant positive trend
+
+# sst_selected_cells <- !is.na(sst$plevel) # only cells with significant positive trend
 sst_selected <- sst[sst_selected_cells,]
 o <- order(sst_selected$value)
 
@@ -1055,6 +518,18 @@ r[c(1, nranks + 1)] <- range(y)
 abline(h = r[2:nranks], lty = 3)
 
 rank_limits_sst <- r
+
+###
+# try taking square root to normalise
+ol <- c(1:4, {length(y)-3}:length(y))
+yl <- y ^ 0.5
+y_r <- yl[-ol]
+yrange <- range(y_r)
+r <- c(seq(yrange[1], yrange[2], length = nranks + 1)) ^ 2
+r[2:nranks] <- round(r[2:nranks] / {orderOfMagnitude(r[2:nranks]) / 10}) * {orderOfMagnitude(r[2:nranks]) / 10}
+r[c(1,nranks+1)] <- range(y)
+rank_limits_sst <- r
+###
 
 for(i in 1:nranks){
   if(i < nranks){
@@ -1089,11 +564,114 @@ plt_sst_raw <-
   annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
   xlab(expression(grid ~ cell ~ index)) +
   ylab(expression(SST ~ trend ~ (degree * C / year))) +
-  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  scale_y_continuous(trans = 'sqrt', labels = function(x) format(x, scientific = FALSE)) +
+  # scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
 
+# I'm still not happy with this because the cells with a declining sst are empty.
+# This results in some areas of maximum risk (purely due to pH) where there are 
+# empty sst trends.
+# Try setting cells with declining or non-significant sst trends to minimum risk.
+
+sst <- sst_orig
+
+sst_pos <- sst$value > 0 # index grid cells with trend of increasing temperature (all p-values)
+sst_neg <- !sst_pos # cells with negative values are assigned either minimum risk rank or omitted from map
+
+insig <- sst$pval > 0.05 # insignificant trends
+min_risk <- sst_neg | insig # cells to assign minimum risk from sst trends
+
+sst_selected_cells <- !min_risk # other cells need ranked based on size of positive trend
+sst_selected <- sst[sst_selected_cells,]
+o <- order(sst_selected$value)
+
+y <- sst_selected$value[o]
+pv <- sst_selected$plevel[o]
+x <- 1:length(y)
+plot(x, y)
+
+# # trim outliers then group
+# # ol <- c(1:2, length(y))
+# # ol <- c(1:4, length(y))
+# ol <- c({length(y)-3}:length(y))
+# y_r <- y[-ol]
+# pv_r <- pv[-ol]
+# x_r <- 1:length(y_r)
+# # plot(x_r, y_r, col = pv_r)
+# # legend('topleft', legend = levels(pv), pch = 1, col = 1:length(levels(pv_r)))
+# 
+# yrange <- range(y_r)
+# # rlo <- round(yrange[1] / orderOfMagnitude(yrange[1])) * orderOfMagnitude(yrange[1]) # round to nearest 0.001
+# rlo <- floor(yrange[1] / orderOfMagnitude(yrange[1]) * 10) * orderOfMagnitude(yrange[1]) /10 # round to nearest 0.001
+# # rhi <- ceiling(yrange[2] / {orderOfMagnitude(yrange[2]) / 10 * 5}) * orderOfMagnitude(yrange[2]) / 10 * 5 # round up to nearest 0.005
+# rhi <- ceiling(yrange[2] / orderOfMagnitude(yrange[2]) * 10) * orderOfMagnitude(yrange[2]) / 10 # round up
+# # r <- c(0, seq(rlo, rhi, length = nranks))
+# r <- c(seq(rlo, rhi, length = nranks + 1))
+# r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10}
+# r[c(1, nranks + 1)] <- range(y)
+# abline(h = r[2:nranks], lty = 3)
+# 
+# rank_limits_sst <- r
+
+# normalise with square root transform
+ol <- c(1:4, {length(y)-3}:length(y))
+yl <- y ^ 0.5
+y_r <- yl[-ol]
+yrange <- range(y_r)
+# Set all positive trends in sst as rank 2-5, leaving rank 1 for the non-significant or negtive trends.
+r <- c(seq(yrange[1], yrange[2], length = nranks)) ^ 2
+r <- c(min(sst$value), r) # account for negative trends
+r[2:nranks] <- round(r[2:nranks] / {orderOfMagnitude(r[2:nranks]) / 10}) * {orderOfMagnitude(r[2:nranks]) / 10}
+# r[2:{nranks-1}] <- round(r[2:{nranks-1}] / {orderOfMagnitude(r[2:{nranks-1}]) / 10}) * {orderOfMagnitude(r[2:{nranks-1}]) / 10}
+r[c(1,nranks+1)] <- range(sst$value)
+# r <- c(min(sst$value), r) # account for negative trends
+rank_limits_sst <- r
+# r <- c(seq(yrange[1], yrange[2], length = nranks + 1)) ^ 2
+# r[2:nranks] <- round(r[2:nranks] / {orderOfMagnitude(r[2:nranks]) / 10}) * {orderOfMagnitude(r[2:nranks]) / 10}
+# r[c(1,nranks+1)] <- range(y)
+# rank_limits_sst <- r
+
+for(i in 1:nranks){
+  if(i < nranks){
+    j <- r[i] <= sst$value & sst$value < r[i+1]} else{
+      j <- r[i] <= sst$value & sst$value <= r[i+1]
+    }
+  v <- sst$value[j]
+  p <- r[i:{i+1}]
+  sst$score[j] <- {i-1} + {v - r[i]} / diff(p)
+}
+# sst$score[!sst_selected_cells] <- NA
+# sst <- sst[sst_selected_cells,]
+
+sst$rank <- score2rank(sst$score)
+
+plt_sst <- plot_fun(sst, Title = 'SST rising trends', legend_title = 'stress')
+plt_sst$plot
+
+# Nice plot of raw data
+sst$order <- 1:nrow(sst)
+sst <- sst[order(sst$value),]
+sst$index <- 1:nrow(sst)
+sst <- sst[order(sst$order),]
+
+plt_sst_raw <- 
+  ggplot(sst) + 
+  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'stress', guide = 'legend') +
+  scale_fill_viridis_c(name = 'stress', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
+  geom_hline(yintercept = r[2:nranks], linetype = 3) +
+  annotate('text', x = 1, y = r[3:nranks], label = as.character(r[3:nranks]), vjust = 0, hjust = 0) +
+  annotate('text', x = 1, y = r[2], label = as.character(r[2]), vjust = 1, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
+  ylab(expression(SST ~ trend ~ (degree * C / year))) +
+  # scale_y_continuous(trans = 'sqrt', labels = function(x) format(x, scientific = FALSE)) +
+  # scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  theme_bw() +
+  theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
+        panel.grid = element_blank())
 
 
 # pH -------------------------------------------------------------
@@ -1590,17 +1168,22 @@ rh <- c(0.4, 0.6) # relative heights of panels
 lx <- c(0.05, 0.15) # label adjustment factors
 ly <- c(1, 0.85)
 
-title_left <- ggdraw() + draw_label('Chlorophyll', fontface = 'bold', x = 0.55)
-title_right <- ggdraw() + draw_label('Krill', fontface = 'bold', x = 0.55)
+label_fontface <- 2
+label_fontfamily <- 'serif'
+
+title_left <- ggdraw() + draw_label('Chlorophyll', fontface = label_fontface, fontfamily = label_fontfamily, x = 0.55)
+title_right <- ggdraw() + draw_label('Krill', fontface = label_fontface, fontfamily = label_fontfamily, x = 0.55)
 plt_left <- plot_grid(plt_raw1 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
                       plt_map1 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
                       ncol = 1, labels = c('A','C'), rel_heights = rh, align = 'v',
-                      label_x = lx, label_y = ly)
+                      label_x = lx, label_y = ly, label_fontface = label_fontface,
+                      label_fontfamily = label_fontfamily)
 plt_left <- plot_grid(title_left, plt_left, ncol = 1, rel_heights = c(0.05, 0.95))
 plt_right <- plot_grid(plt_raw2 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
                        plt_map2 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
                        ncol = 1, labels = c('B','D'), rel_heights = rh, align = 'v',
-                       label_x = lx, label_y = ly)
+                       label_x = lx, label_y = ly, label_fontface = label_fontface,
+                       label_fontfamily = label_fontfamily)
 plt_right <- plot_grid(title_right, plt_right, ncol = 1, rel_heights = c(0.05, 0.95))
 plt_leg <- plot_grid(leg_raw, leg_map,
                      ncol = 1, rel_heights = rh, align = 'v')
@@ -1621,17 +1204,19 @@ plt_map1 <- plt_sst$plot + theme(legend.position = 'none') + labs(title = elemen
 plt_map2 <- plt_pH$plot + theme(legend.position = 'none') + labs(title = element_blank())
 leg_map <- plt_sst$legend
 
-title_left <- ggdraw() + draw_label('SST', fontface = 'bold', x = 0.55)
-title_right <- ggdraw() + draw_label('pH', fontface = 'bold', x = 0.55)
+title_left <- ggdraw() + draw_label('SST', fontface = label_fontface, fontfamily = label_fontfamily, x = 0.55)
+title_right <- ggdraw() + draw_label('pH', fontface = label_fontface, fontfamily = label_fontfamily, x = 0.55)
 plt_left <- plot_grid(plt_raw1 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
                       plt_map1 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
                       ncol = 1, labels = c('A','C'), rel_heights = rh, align = 'v',
-                      label_x = lx, label_y = ly)
+                      label_x = lx, label_y = ly, label_fontface = label_fontface,
+                      label_fontfamily = label_fontfamily)
 plt_left <- plot_grid(title_left, plt_left, ncol = 1, rel_heights = c(0.05, 0.95))
 plt_right <- plot_grid(plt_raw2 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
                        plt_map2 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
                        ncol = 1, labels = c('B','D'), rel_heights = rh, align = 'v',
-                       label_x = lx, label_y = ly)
+                       label_x = lx, label_y = ly, label_fontface = label_fontface,
+                       label_fontfamily = label_fontfamily)
 plt_right <- plot_grid(title_right, plt_right, ncol = 1, rel_heights = c(0.05, 0.95))
 plt_leg <- plot_grid(leg_raw, leg_map,
                      ncol = 1, rel_heights = rh, align = 'v')
@@ -1639,7 +1224,7 @@ plt_stress_combined <- plot_grid(plt_left, plt_right, plt_leg,
                                  ncol = 3, rel_widths = c(1,1,0.2)) + 
   theme(plot.background = element_rect(fill = 'white', colour = 'white'))
 
-ggsave('physical_stress_ranking.png', plt_stress_combined, 'png', width = pw, height = ph, units = 'in')
+ggsave('physical_stress_ranking2.png', plt_stress_combined, 'png', width = pw, height = ph, units = 'in')
 
 # shipping and facilities
 plt_raw1 <- plt_ship_raw + theme(legend.position = 'none')
@@ -1649,17 +1234,19 @@ plt_map1 <- plt_ship$plot + theme(legend.position = 'none') + labs(title = eleme
 plt_map2 <- pltStations$plot + theme(legend.position = 'none') + labs(title = element_blank())
 leg_map <- pltStations$legend
 
-title_left <- ggdraw() + draw_label('Ship traffic', fontface = 'bold', x = 0.55)
-title_right <- ggdraw() + draw_label('Facilities', fontface = 'bold', x = 0.55)
+title_left <- ggdraw() + draw_label('Ship traffic', fontface = label_fontface, fontfamily = label_fontfamily, x = 0.55)
+title_right <- ggdraw() + draw_label('Facilities', fontface = label_fontface, fontfamily = label_fontfamily, x = 0.55)
 plt_left <- plot_grid(plt_raw1 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
                       plt_map1 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
                       ncol = 1, labels = c('A','C'), rel_heights = rh, align = 'v',
-                      label_x = lx, label_y = ly)
+                      label_x = lx, label_y = ly, label_fontface = label_fontface,
+                      label_fontfamily = label_fontfamily)
 plt_left <- plot_grid(title_left, plt_left, ncol = 1, rel_heights = c(0.05, 0.95))
 plt_right <- plot_grid(plt_raw2 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
                        plt_map2 + theme(plot.margin = unit(c(0,0,0,0), 'cm')),
                        ncol = 1, labels = c('B','D'), rel_heights = rh, align = 'v',
-                       label_x = lx, label_y = ly)
+                       label_x = lx, label_y = ly, label_fontface = label_fontface,
+                       label_fontfamily = label_fontfamily)
 plt_right <- plot_grid(title_right, plt_right, ncol = 1, rel_heights = c(0.05, 0.95))
 plt_leg <- plot_grid(leg_raw, leg_map,
                      ncol = 1, rel_heights = rh, align = 'v')
@@ -1695,7 +1282,8 @@ score_poly <- switch(combineMethod,
                      mean = sapply(all_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
                      ) # calculate score for each polygon
-score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale to 0-5
+# Rescale combined ranks to 0-5
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly))
 dat <- grid_cells_all[grid_cells_all$cell_index %in% all_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
@@ -1725,7 +1313,7 @@ score_poly <- switch(combineMethod,
                      mean = sapply(all_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
-score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale to 0-5
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly))
 dat <- grid_cells_all[grid_cells_all$cell_index %in% all_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
@@ -1756,7 +1344,7 @@ score_poly <- switch(combineMethod,
                      mean = sapply(all_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
-score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale to 0-5
+score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly))
 dat <- grid_cells_all[grid_cells_all$cell_index %in% all_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
@@ -1795,10 +1383,12 @@ joint_polygons <- all_polygons[all_polygons %in% dat_biota$cell_index &
                                  all_polygons %in% dat_activity$cell_index]
 npolys <- length(joint_polygons)
 score_poly <- switch(combineMethod,
-                     mean = sapply(joint_polygons, function(z) geomean(dat$score[dat$cell_index == z], na.rm = TRUE)),
+                     mean = sapply(joint_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
-score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale
+score_poly <- switch(combineMethod, # rescale to 0-5 if needed
+                     sum = nranks * {score_poly - min(score_poly)} / diff(range(score_poly)),
+                     mean = score_poly)
 dat <- grid_cells_all[grid_cells_all$cell_index %in% joint_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
@@ -1834,11 +1424,12 @@ joint_polygons <- all_polygons[all_polygons %in% dat_stress$cell_index &
                                  all_polygons %in% dat_activity$cell_index]
 npolys <- length(joint_polygons)
 score_poly <- switch(combineMethod,
-                     mean = sapply(joint_polygons, function(z) geomean(dat$score[dat$cell_index == z], na.rm = TRUE)),
+                     mean = sapply(joint_polygons, function(z) mean(dat$score[dat$cell_index == z], na.rm = TRUE)),
                      sum = pmin(nranks, sapply(all_polygons, function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
-score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly)) # rescale
-
+score_poly <- switch(combineMethod, # rescale to 0-5 if needed
+                     sum = nranks * {score_poly - min(score_poly)} / diff(range(score_poly)),
+                     mean = score_poly)
 dat <- grid_cells_all[grid_cells_all$cell_index %in% joint_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
@@ -1923,7 +1514,8 @@ rw <- c(0.8, 0.2)
 plt_left <- plot_grid(plt_map1,
                       plt_map2,
                       plt_map3,
-                      ncol = 1, labels = c('A','C','E'), label_x = lx, label_y = ly)
+                      ncol = 1, labels = c('A','C','E'), label_x = lx, label_y = ly,
+                      label_fontface = label_fontface, label_fontfamily = label_fontfamily)
 leg_left <- plot_grid(leg1,
                       leg2,
                       leg3,
@@ -1934,7 +1526,8 @@ plt_left <- plot_grid(plt_left, leg_left,
 plt_right <- plot_grid(plt_map4,
                        plt_map5,
                        plt_map6,
-                       ncol = 1, labels = c('B','D','F'), label_x = lx, label_y = ly)
+                       ncol = 1, labels = c('B','D','F'), label_x = lx, label_y = ly,
+                       label_fontface = label_fontface, label_fontfamily = label_fontfamily)
 leg_right <- plot_grid(leg4,
                        leg5,
                        leg6,
@@ -1954,7 +1547,7 @@ sc_w <- 1.5 # scaling factors
 sc_h <- 1.2
 pw <- sc_w * A4_w
 ph <- sc_h * A4_h
-ggsave('main_results_ranking.png', plt_results, 'png', width = pw, height = ph, units = 'in')
+ggsave('main_results_ranking2.png', plt_results, 'png', width = pw, height = ph, units = 'in')
 
 
 

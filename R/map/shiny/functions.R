@@ -21,6 +21,114 @@ createPolygons <- function(dat){
   )
 }
 
+# Define interactive tooltip for plastic data
+fun_flextable <- function(x, longVars, singleRowVars, sampleType, DATA_name_swap){
+  # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
+  # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
+  # (Some nice examples, worth a look, presented here https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html)
+  anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
+  if(anyMeasures){
+    # Arrange data frame
+    x <-suppressMessages(melt(x, id.vars = singleRowVars)) # change to long-form
+    x <- x[!is.na(x$value),]
+    # Disentangle variables...
+    l <- strsplit(as.character(x$variable), '_')
+    # y <- as.data.frame(do.call('rbind', l))
+    # names(y) <- longVars[1:ncol(y)]
+    y <- setNames(as.data.frame(do.call('rbind', l)), longVars)
+    x <- cbind(x, y)
+    # Create empty Value column -- this stores numeric measurement and unit
+    x$Value <- x$value
+    # Remove/compress unnecessary/redundant variables...
+    # Measurement statistics
+    if(all(c('min','max') %in% x$Statistic)){ # convert min/max into range
+      x_ <- x[x$Statistic %in% c('min', 'max'),]
+      n <- nrow(x_)
+      v <- sapply(seq(1, n, 2), function(z) paste0('[', x_$value[z], ', ', x_$value[z+1], ']'))
+      x$Value[x$Statistic == 'min'] <- v
+      x$Statistic[x$Statistic == 'min'] <- 'range'
+      x <- x[x$Statistic != 'max',]
+    }
+    if(all(c('mean','s.d.') %in% x$Statistic)){ # convert mean/s.d. into mean +- s.d.
+      x_ <- x[x$Statistic %in% c('mean', 's.d.'),]
+      n <- nrow(x_)
+      v <- sapply(seq(1, n, 2), function(z) paste0(x_$value[z], ' +- ', x_$value[z+1]))
+      x$Value[x$Statistic == 's.d.'] <- v
+      x$Statistic[x$Statistic == 's.d.'] <- 'mean +- s.d.'
+      x <- x[x$Statistic != 'mean',]
+    }
+    if(any(x$Statistic == 'none')){
+      longVars <- longVars[longVars != 'Statistic']}
+    # Sample replicates
+    if(length(unique(x$Replicate)) == 1){
+      x <- x[,-which(names(x) == 'Replicate')]
+      longVars <- longVars[longVars != 'Replicate']}
+    # Depth
+    if(x$Depth[1] == ''){
+      singleRowVars <- singleRowVars[!singleRowVars == 'Depth']
+    }else{
+      # Include unit if Depth is numeric
+      depth <- suppressWarnings(as.numeric(x$Depth))
+      if(!any(is.na(depth)))
+        x$Depth <- paste(depth, 'm')
+    }
+    x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
+    n <- nrow(x)
+    if(x$SampleAtStation[1]){
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
+    }else{
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
+    if(any(x$Unit == 'none')){
+      longVars <- longVars[longVars != 'Unit']}
+    if(any(x$Value == -Inf)){
+      x$Value <- x$Observation
+    }else{
+      x$Value <- paste(x$Value, x$Unit)}
+    singleRowVars <- singleRowVars[singleRowVars != 'Observation']
+    longVars <- longVars[longVars != 'Unit']
+    
+    for(j in 1:length(singleRowVars)) x[[singleRowVars[j]]] <- as.character(x[[singleRowVars[j]]])
+    
+    if(n > 1) x[singleRowVars][2:n,] <- ''
+    # Include spaces in column names
+    newnames <- sapply(1:ncol(x), function(z){
+      n <- names(x)[z]
+      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
+      c(n,m)
+    })
+    names(x) <- newnames[2,]
+    singleRowVars <- newnames[2,][newnames[1,] %in% singleRowVars]
+    longVars <- newnames[2,][newnames[1,] %in% longVars]
+    # Create flextable
+    ft <- flextable(x, col_keys = c(singleRowVars, longVars, 'Value'))
+    ft <- bold(ft, part = 'header', bold = TRUE)
+    ft <- set_table_properties(ft, layout = 'autofit')
+    as.character(htmltools_value(ft, ft.shadow = FALSE))
+    
+  }else{
+    
+    if(x$SampleAtStation[1]){
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
+    }else{
+      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
+    if(!any(x$Observation != '')) singleRowVars <- singleRowVars[singleRowVars != 'Observation']
+    x <- cbind(x[singleRowVars], Measure = 'none')
+    # Include spaces in column names
+    newnames <- sapply(1:ncol(x), function(z){
+      n <- names(x)[z]
+      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
+      c(n,m)
+    })
+    names(x) <- newnames[2,]
+    # # Remove quotes from column names
+    # names(x) <- gsub('`', '', names(x))
+    ft <- flextable(x)#, 
+    ft <- bold(ft, part = 'header', bold = TRUE)
+    ft <- set_table_properties(ft, layout = 'autofit')
+    as.character(htmltools_value(ft, ft.shadow = FALSE))
+  }
+}
+
 # Load and organise data required for map
 get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
                      sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'summary',
@@ -318,7 +426,20 @@ get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
   # names(DATA) <- DATA_name_swap$spaces
   assign('DATA_name_swap', DATA_name_swap, envir = parent.frame())
   
-    
+  # Replace any (MatLab style) NaN values with (R style) NA values
+  NaN2NA <- function(z, numericOnly = TRUE){
+    if(numericOnly){
+      if(is.numeric(z)){
+        z[is.nan(z)] <- NA
+        as.numeric(z)}else{
+        z}}else{
+      z[is.nan(z)] <- NA
+      z}}
+  for(j in 1:ncol(DATA)) DATA[,j] <- NaN2NA(DATA[,j])
+  
+  # Convert logical variables saved as zeros and one into logical class
+  DATA$SampleAtStation <- as.logical(DATA$SampleAtStation)
+  
   # Date format
   DATA$Date_1 = as.character(as.Date(DATA$Date_1, '%d-%b-%Y'))
   DATA$Date_2 = as.character(as.Date(DATA$Date_2, '%d-%b-%Y'))
@@ -416,7 +537,7 @@ get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
   DATA$Variable <- as.character(DATA$Variable)
   DATA$Variable[DATA$Variable == 'massDensity'] <- 'mass density'
   DATA$Variable[DATA$Variable == 'massConcentration'] <- 'mass concentration'
-  DATA$Variable <- factor(DATA$Variable, levels = c('concentration', 'density', 'mass concentration', 'mass density', 'presence/absence'))
+  DATA$Variable <- factor(DATA$Variable, levels = c('concentration', 'density', 'mass concentration', 'mass density', 'flux', 'presence/absence'))
   
   
   # plastic_units <- unique(DATA[,c('Variable','Unit')])
@@ -508,6 +629,7 @@ get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
   #head(DATA)
   DATA$order <- 1:nrow(DATA)
   d <- unique(DATA[c('Source', 'SampleType', 'SampleAtStation',  'SampleID')])
+  # d <- unique(DATA[c('Source', 'SampleType', 'Year', 'SampleAtStation',  'SampleID')])
   d$data_id <- paste('sample', 1:nrow(d))
   
   DATA <- merge(DATA, d, sort = FALSE)
@@ -533,13 +655,36 @@ get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
     }
   }
   
+  
   if(!loadTooltipFromFile){
-    # d <- DATA
     dn <- names(DATA)
+    # d <- DATA
     # Change to wide-form -- choose variables to produce one row per data_id
     dummyGroupingVariables <- c('PlasticForm_grouped')
-    yvars <- c('LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format
+    yvars <- c('LitterCategory', 'LitterScale', 'PlasticSize', 'PlasticForm', 'Variable', 'Statistic', 'Replicate', 'Unit') # variables to change to wide format -- displayed over multiple rows
     xvars <- dn[!dn %in% c(yvars, 'Value', dummyGroupingVariables)] # everything else, apart from Value and dummy grouping variables, stays in long format
+    # Choose other variables to display in a single row.
+    keepVars <- c('Source', 'SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation', 'Observation') # 
+    # Some of these variables may require multiple rows depending on the data source/sample
+    expandRows <- sapply(1:length(keepVars), function(u){
+      any(sapply(1:length(sources), function(v){
+        d <- DATA[DATA$Source == sources[v],]
+        atStation <- unique(d$SampleAtStation)
+        any(sapply(1:length(atStation), function(w){
+          d2 <- d[d$SampleAtStation == atStation[w],]
+          sampleTypes <- unique(d2$SampleType)
+          any(sapply(1:length(sampleTypes), function(x){
+            allSamples <- unique(d2$SampleID[d2$SampleType == sampleTypes[x]])
+            any(sapply(1:length(allSamples), function(y){
+              length(unique(d2[[keepVars[u]]][d2$SampleID == allSamples[y] & d2$SampleType == sampleTypes[x]])) > 1
+            }))
+          }))
+        }))
+      }))
+    })
+    xvars <- xvars[!xvars %in% keepVars[expandRows]]
+    yvars <- c(keepVars[expandRows], yvars)
+    keepVars <- keepVars[!expandRows]
     # Handle spaces in data column names
     xvars_ <- xvars
     xvars_s <- grepl(' ', xvars)
@@ -553,8 +698,7 @@ get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
     if(!wellOrganised) warning('Data are not well organised! Some samples are associated with multiple rows of data: we require a single row per sample in the wide-form data set.')
     # Define interactive tooltip using flextable...
     # The yvars (now stretched into wide form) are displayed (long form) in
-    # tooltip. Now also choose other variables to display in a single row.
-    keepVars <- c('SampleGear', 'Depth', 'Sample date', 'Coordinates', 'Coordinates (start)', 'Coordinates (end)', 'SampleAtStation', 'Observation') # SampleAtStation and Observation are needed to choose appropriate coordinates display
+    # tooltip.
     omitVars <- xvars[!xvars %in% keepVars]
     temp_dat <- as.data.frame(DATA_wide)[!names(DATA_wide) %in% omitVars]
     temp_dat <- split(temp_dat, seq_len(nrow(temp_dat)))
@@ -601,7 +745,8 @@ get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
     }
     
   }
-  
+    
+
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
@@ -1140,110 +1285,6 @@ get_data <- function(res, baseDirectory, shinyDirectory, allLitterTypes = FALSE,
 
 }
 
-# Define interactive tooltip for plastic data
-fun_flextable <- function(x, longVars, singleRowVars, sampleType, DATA_name_swap){
-  # Function defining tables to interactively display when mouse hovers over mapped (plastic) data points.
-  # Inputs: x = data, pu = plastic_units, singleRowVars = variables only taking one row of table
-  # (Some nice examples, worth a look, presented here https://davidgohel.github.io/ggiraph/articles/offcran/shiny.html)
-  anyMeasures <- any(!is.na(x[,!names(x) %in% singleRowVars]))
-  if(anyMeasures){
-    # Arrange data frame
-    x <-suppressMessages(melt(x, id.vars = singleRowVars)) # change to long-form
-    x <- x[!is.na(x$value),]
-    # Disentangle variables...
-    l <- strsplit(as.character(x$variable), '_')
-    # y <- as.data.frame(do.call('rbind', l))
-    # names(y) <- longVars[1:ncol(y)]
-    y <- setNames(as.data.frame(do.call('rbind', l)), longVars)
-    x <- cbind(x, y)
-    # Create empty Value column -- this stores numeric measurement and unit
-    x$Value <- x$value
-    # Remove/compress unnecessary/redundant variables...
-    # Measurement statistics
-    if(all(c('min','max') %in% x$Statistic)){ # convert min/max into range
-      x_ <- x[x$Statistic %in% c('min', 'max'),]
-      n <- nrow(x_)
-      v <- sapply(seq(1, n, 2), function(z) paste0('[', x_$value[z], ', ', x_$value[z+1], ']'))
-      x$Value[x$Statistic == 'min'] <- v
-      x$Statistic[x$Statistic == 'min'] <- 'range'
-      x <- x[x$Statistic != 'max',]
-    }
-    if(all(c('mean','s.d.') %in% x$Statistic)){ # convert mean/s.d. into mean +- s.d.
-      x_ <- x[x$Statistic %in% c('mean', 's.d.'),]
-      n <- nrow(x_)
-      v <- sapply(seq(1, n, 2), function(z) paste0(x_$value[z], ' +- ', x_$value[z+1]))
-      x$Value[x$Statistic == 's.d.'] <- v
-      x$Statistic[x$Statistic == 's.d.'] <- 'mean +- s.d.'
-      x <- x[x$Statistic != 'mean',]
-    }
-    if(any(x$Statistic == 'none')){
-      longVars <- longVars[longVars != 'Statistic']}
-    # Sample replicates
-    if(length(unique(x$Replicate)) == 1){
-      x <- x[,-which(names(x) == 'Replicate')]
-      longVars <- longVars[longVars != 'Replicate']}
-    # Depth
-    if(x$Depth[1] == ''){
-      singleRowVars <- singleRowVars[!singleRowVars == 'Depth']
-    }else{
-      # Include unit if Depth is numeric
-      depth <- suppressWarnings(as.numeric(x$Depth))
-      if(!any(is.na(depth)))
-        x$Depth <- paste(depth, 'm')
-    }
-    x$Measure <- x$Variable # MAYBE RENAME THE Variable COLUMN AS Measure IN THE MAIN DATA SET...
-    n <- nrow(x)
-    if(x$SampleAtStation[1]){
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
-    }else{
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
-    if(any(x$Unit == 'none')){
-      longVars <- longVars[longVars != 'Unit']}
-    if(any(x$Value == -Inf)){
-      x$Value <- x$Observation
-    }else{
-      x$Value <- paste(x$Value, x$Unit)}
-    singleRowVars <- singleRowVars[singleRowVars != 'Observation']
-    
-    if(n > 1) x[singleRowVars][2:n,] <- ''
-    # Include spaces in column names
-    newnames <- sapply(1:ncol(x), function(z){
-      n <- names(x)[z]
-      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
-      c(n,m)
-    })
-    names(x) <- newnames[2,]
-    singleRowVars <- newnames[2,][newnames[1,] %in% singleRowVars]
-    longVars <- newnames[2,][newnames[1,] %in% longVars]
-    # Create flextable
-    ft <- flextable(x, col_keys = c(singleRowVars, longVars, 'Value'))
-    ft <- bold(ft, part = 'header', bold = TRUE)
-    ft <- set_table_properties(ft, layout = 'autofit')
-    as.character(htmltools_value(ft, ft.shadow = FALSE))
-    
-  }else{
-    
-    if(x$SampleAtStation[1]){
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates (start)', 'Coordinates (end)', 'SampleAtStation')]
-    }else{
-      singleRowVars <- singleRowVars[!singleRowVars %in% c('Coordinates', 'SampleAtStation')]}
-    if(!any(x$Observation != '')) singleRowVars <- singleRowVars[singleRowVars != 'Observation']
-    x <- cbind(x[singleRowVars], Measure = 'none')
-    # Include spaces in column names
-    newnames <- sapply(1:ncol(x), function(z){
-      n <- names(x)[z]
-      if(n %in% DATA_name_swap$original) m <- DATA_name_swap$spaces[n == DATA_name_swap$original] else m <- n
-      c(n,m)
-    })
-    names(x) <- newnames[2,]
-    # # Remove quotes from column names
-    # names(x) <- gsub('`', '', names(x))
-    ft <- flextable(x)#, 
-    ft <- bold(ft, part = 'header', bold = TRUE)
-    ft <- set_table_properties(ft, layout = 'autofit')
-    as.character(htmltools_value(ft, ft.shadow = FALSE))
-  }
-}
 
 # Set the plotting parameters
 set_plot_params <- function(base_map, plastics, stations){
@@ -1265,8 +1306,78 @@ set_plot_params <- function(base_map, plastics, stations){
   # Plot colours
   # Use a qualitative palette for plastic sources -- the default is limited to 12 colours
   ncol <- length(unique(plastics$Source))
-  pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
-  # plot(1:12,1:12, col=pltColours, pch = 19)
+  
+  # Set 6 colour scales: blue, green, red, orange, purple and brown
+  
+  # blues <- c('skyblue', '#00009c') # choose starting colours then adjust to get very light and very dark shades
+  # blues_ <- rgb2hsv(col2rgb(blues))
+  # blues_[2,1] <- 0.35
+  # blues_[3,1] <- 1
+  # blues_[1,2] <- 230/360
+  # blues_[3,2] <- 1
+  # hsv(blues_[1,1],blues_[2,1],blues_[3,1])
+  # hsv(blues_[1,2],blues_[2,2],blues_[3,2])
+  blues <- c('#A6E5FF', '#002BFF') # colours chosen by altering (commented) hsv values above
+  
+  # greens <- c('palegreen', 'darkgreen')
+  # greens_ <- rgb2hsv(col2rgb(greens))
+  # greens_[1,1] <- 150/360
+  # greens_[2,1] <- 0.3
+  # greens_[1,2] <- 150/360
+  # greens_[3,2] <- 0.3
+  # hsv(greens_[1,1],greens_[2,1],greens_[3,1])
+  # hsv(greens_[1,2],greens_[2,2],greens_[3,2])
+  greens <- c('#B0FBD5', '#004D26') # '#004020'
+  
+  # reds <- c('pink', 'red3')
+  # reds_ <- rgb2hsv(col2rgb(reds))
+  # reds_[2,1] <- 0.075
+  # reds_[3,2] <- 0.6
+  # hsv(reds_[1,1],reds_[2,1],reds_[3,1])
+  # hsv(reds_[1,2],reds_[2,2],reds_[3,2])
+  reds <- c('#FFECEF', '#990000')# '#800000' '#990000')
+  
+  # oranges <- c('orange', '#fe5a1d')
+  # oranges_ <- rgb2hsv(col2rgb(oranges))
+  # oranges_[2,1] <- 0.4
+  # oranges_[2,2] <- 1
+  # oranges_[3,2] <- 0.9
+  # hsv(oranges_[1,1],oranges_[2,1],oranges_[3,1])
+  # hsv(oranges_[1,2],oranges_[2,2],oranges_[3,2])
+  oranges <- c('#FFDB99', '#E63E00')
+  
+  # purples <- c('#bf94e4', '#4b0082')
+  # purples_ <- rgb2hsv(col2rgb(purples))
+  # purples_[2,1] <- 0.15
+  # purples_[3,1] <- 1
+  # purples_[3,2] <- 0.6
+  # hsv(purples_[1,1],purples_[2,1],purples_[3,1])
+  # hsv(purples_[1,2],purples_[2,2],purples_[3,2])
+  purples <- c('#EDD9FF', '#580099')
+  
+  # browns <- c('#efcc00', '#7b3f00')
+  # browns_ <- rgb2hsv(col2rgb(browns))
+  # browns_[2,1] <- 0.6
+  # browns_[3,1] <- 1
+  # browns_[3,2] <- 0.4
+  # hsv(browns_[1,1],browns_[2,1],browns_[3,1])
+  # hsv(browns_[1,2],browns_[2,2],browns_[3,2])
+  browns <- c('#FFE966', '#663400')
+  
+  # # create a custom colour palette based on the 'Pairs' palette...
+  # blues <- c('skyblue', '#00009c')
+  # greens <- c('palegreen', 'darkgreen')
+  # reds <- c('#ffc1cc', '#c80815')
+  # oranges <- c('#f8b878', '#fe5a1d')
+  # purples <- c('#dcd0ff', '#663399')
+  # browns <- c('lightgoldenrod1', '#7b3f00')
+  
+  pltColours <- c(blues, reds, purples, oranges, greens, browns)
+  # pltColours <- c(blues, greens, reds, oranges, purples, browns)
+  
+  # pltColours <- brewer.pal(12, 'Paired') # the Set3 and Paired palettes has a maximum of 12 colours
+ # "#A6CEE3" "#1F78B4" "#B2DF8A" "#33A02C" "#FB9A99" "#E31A1C" "#FDBF6F" "#FF7F00" "#CAB2D6" "#6A3D9A" "#FFFF99" "#B15928"
+  
   if(ncol < 13){
     pltColours <- pltColours[c(seq(2, 12, 2), seq(1, 11, 2))]
   }else{
@@ -1281,8 +1392,8 @@ set_plot_params <- function(base_map, plastics, stations){
     mc <- matrix(mc, ne, 6)
     pltColours <- c(
       pltColours[seq(2, 12, 2)],
-      pltColours[seq(1, 11, 2)],
-      as.vector(t(mc[seq(ne, 1, -1),]))
+      as.vector(t(mc[seq(ne, 1, -1),])),
+      pltColours[seq(1, 11, 2)]
     )
   }
   
@@ -1311,9 +1422,75 @@ set_plot_params <- function(base_map, plastics, stations){
   
 }
 
+overlay_coordinate_grid <- function(plt, latlim = c(-90, 50), lat_increments = seq(-90, -50, 10), lonvals = 0, singleLatAxis = TRUE, textSize = 4){
+  #~~~~~~~~~
+  # Latitude
+  #~~~~~~~~~
+  # axis lines
+  latlim <- c(-90, -50)
+  if(singleLatAxis) lons <- 0 else lons <- c(0, 90, 180, 270)
+  nlon <- length(lons)
+  lat_lines <- lapply(1:nlon, function(z) data.frame(lon = rep(lons[z], 2), lat = latlim))
+  lat_lines <- lapply(1:nlon, function(z){
+    lat_line <- lat_lines[[z]]
+    lat_line <- st_linestring(x = as.matrix(lat_line), dim = 'XY')
+    lat_line <- st_sfc(lat_line, crs = crs_world)
+    lat_line <- st_transform(lat_line, crs_use)
+  })
+  for(j in 1:nlon) plt <- plt + geom_sf(data = lat_lines[[j]]) # axis line
+  # axis ticks
+  lat_increments <- seq(-90, -50, 10)
+  nlat <- length(lat_increments)
+  lr <- 1 / {{lat_increments - min(lat_increments)} / diff(range(lat_increments))}
+  lr[1] <- 0
+  lon_width <- 1
+  lon_width <- lr * lon_width
+  gridPos <- lapply(1:nlon, function(w){
+    lon <- lons[w]
+    lapply(1:nlat,
+           function(z){
+             y <- data.frame(lon = lon + c(-1,1) * lon_width[z],
+                             lat = rep(lat_increments[z], 2))
+             y <- st_linestring(x = as.matrix(y), dim = 'XY')
+             y <- st_sfc(y, crs = crs_world)
+             y <- st_transform(y, crs = crs_use)
+             y})
+  })
+  for(i in 1:nlon)
+    for(j in 1:nlat)
+      plt <- plt + geom_sf(data = gridPos[[i]][[j]]) # axis ticks
+  
+  tick_labs <- lapply(1:nlat, function(z) paste(abs(lat_increments[z]), '* degree ~ S'))
+  xnudge <- 0.025 * diff(BBox[c('xmin','xmax')])
+  # if(singleLatAxis) i <- 1:nlat else i <- 2:nlat
+  for(j in 2:nlat) plt <- plt + geom_sf_text(data = gridPos[[which(lons == 0)]][[j]], label = tick_labs[[j]], parse = TRUE, hjust = 0, nudge_x = xnudge, size = textSize)
+  
+  #~~~~~~~~~~
+  # Longitude
+  #~~~~~~~~~~
+  # there's no functionality to rotate text using geom_sf_text so just indicate 0
+  lon_vals <- 0
+  # lon_vals <- c(0, 90, -90)
+  nlon <- length(lon_vals)
+  lon_points <- data.frame(lon = lon_vals, lat = rep(max(latlim), nlon))
+  # lon_rot <- c(0, 90, 270) # rotations not possible
+  gridPos <- lapply(1:nlon,
+                    function(z){
+                      y <- lon_points[z,]
+                      y <- st_point(as.matrix(y), dim = 'XY')
+                      y <- st_sfc(y, crs = crs_world)
+                      y <- st_transform(y, crs = crs_use)
+                      y})
+  lon_labs <- lapply(1:nlon, function(z) paste(lon_vals[z] %% 360, '* degree ~ E')) 
+  ynudge <- 0.0175 * diff(BBox[c('ymin','ymax')])
+  for(j in 1:nlon) plt <- plt + geom_sf_text(data = gridPos[[j]], label = lon_labs[[j]], parse = TRUE, vjust = 0, nudge_y = ynudge, size = textSize)
+  
+  plt <- plt + theme(axis.title = element_blank())
+  return(plt)
+}
 
 # The main plotting function
-make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE, stationsOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4, ptStroke = 2, alpha = 0.6, polyLineWidth = 0.75, contourLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio, plotSignificanceContours = FALSE, significanceContours = NULL, sst_sigContours = significanceContours, pH_sigContours = significanceContours, stationPopSize = FALSE){
+make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE, stationsOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4, legPtSize_fill = 6, ptStroke = 2, alpha = 0.85, polyLineWidth = 0.75, contourLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio, plotSignificanceContours = FALSE, significanceContours = NULL, sst_sigContours = significanceContours, pH_sigContours = significanceContours, stationPopSize = FALSE, expandBorder = FALSE, showCoordGrid = TRUE, singleLatAxis = TRUE, axisTextSize = 4){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
@@ -1344,6 +1521,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
   #~~~~~~~~~~~~~~~~~
   # Background layer
   #~~~~~~~~~~~~~~~~~
+  background.legend.id <- 'background.legend.title'
   switch(background,
          
          none = {
@@ -1376,7 +1554,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                guides(colour = 'none') +
                scale_fill_viridis_c_interactive(option = 'plasma', trans = 'log10', na.value = zero_col, labels = comma,
                                                 name = label_interactive(legTitle,
-                                                                         data_id = 'legend.title',
+                                                                         data_id = background.legend.id,
                                                                          hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                          onclick = paste0("window.open(`", as.character(weblink_krill), "`);"),
                                                                          tooltip = weblink_krill))
@@ -1415,7 +1593,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                guides(colour = 'none') +
                scale_fill_viridis_c_interactive(option = 'viridis', trans = 'log10',
                                                 name = label_interactive(legTitle,
-                                                                         data_id = 'legend.title',
+                                                                         data_id = background.legend.id,
                                                                          hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                          onclick = paste0("window.open(`", as.character(weblink_chlorophyll), "`);"),
                                                                          tooltip = weblink_chlorophyll))
@@ -1459,7 +1637,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                  guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols, values = cval,
                                                   name = label_interactive(legLabel,
-                                                                           data_id = 'legend.title',
+                                                                           data_id = background.legend.id,
                                                                            hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                            onclick = paste0("window.open(`", as.character(weblink_sst), "`);"),
                                                                            tooltip = weblink_sst))
@@ -1483,7 +1661,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                  guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols[1:{ncol_sst_+1}], values = cval,
                                                   name = label_interactive(legLabel,
-                                                                           data_id = 'legend.title',
+                                                                           data_id = background.legend.id,
                                                                            hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                            onclick = paste0("window.open(`", as.character(weblink_sst), "`);"),
                                                                            tooltip = weblink_sst))
@@ -1507,7 +1685,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                  guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols[{ncol_sst_+1}:ncol_sst], values = cval,
                                                   name = label_interactive(legLabel,
-                                                                           data_id = 'legend.title',
+                                                                           data_id = background.legend.id,
                                                                            hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                            onclick = paste0("window.open(`", as.character(weblink_sst), "`);"),
                                                                            tooltip = weblink_sst))
@@ -1553,7 +1731,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                  guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols, values = cval,
                                                   name = label_interactive(legLabel,
-                                                                           data_id = 'legend.title',
+                                                                           data_id = background.legend.id,
                                                                            hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                            onclick = paste0("window.open(`", as.character(weblink_pH), "`);"),
                                                                            tooltip = weblink_pH))
@@ -1577,7 +1755,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                  guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols[1:{ncol_pH_+1}], values = cval,
                                                   name = label_interactive(legLabel,
-                                                                           data_id = 'legend.title',
+                                                                           data_id = background.legend.id,
                                                                            hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                            onclick = paste0("window.open(`", as.character(weblink_pH), "`);"),
                                                                            tooltip = weblink_pH))
@@ -1602,7 +1780,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                  guides(colour = 'none') +
                  scale_fill_gradientn_interactive(colours = Cols[{ncol_pH_+1}:ncol_pH], values = cval,
                                                   name = label_interactive(legLabel,
-                                                                           data_id = 'legend.title',
+                                                                           data_id = background.legend.id,
                                                                            hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                            onclick = paste0("window.open(`", as.character(weblink_pH), "`);"),
                                                                            tooltip = weblink_pH))
@@ -1637,7 +1815,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                                            geom_sf(data = dat_background[vesselsPresent,], aes(fill = total_time), colour = 'black', linewidth = polyLineWidth) +
                                            scale_fill_viridis_c_interactive(option = 'mako', trans = 'log10', direction = -1,
                                                                             name = label_interactive(leg_lab,
-                                                                                                     data_id = 'legend.title',
+                                                                                                     data_id = background.legend.id,
                                                                                                      hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                                                      onclick = paste0("window.open(`", weblink_shipping, "`);"),
                                                                                                      tooltip = weblink_shipping)) +
@@ -1666,7 +1844,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
                                            guides(colour = 'none') +
                                            scale_fill_viridis_c_interactive(option = 'mako', trans = 'log10', direction = -1,
                                                                             name = label_interactive(leg_lab,
-                                                                                                     data_id = 'legend.title',
+                                                                                                     data_id = background.legend.id,
                                                                                                      hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                                                      onclick = paste0("window.open(`", weblink_shipping, "`);"),
                                                                                                      tooltip = weblink_shipping))
@@ -1772,8 +1950,10 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
   
   plt_map <- plt_map + guides(fill_new = 'none')
   
-  
+  plt_map <- plt_map + coord_sf(expand = expandBorder)
+
   if(backgroundOnly){
+    if(showCoordGrid) plt_map <- overlay_coordinate_grid(plt_map, singleLatAxis = singleLatAxis, textSize = axisTextSize)
     return(
       list(plot = ggdraw(plt_map),
            legend = ggdraw(leg_background),
@@ -1831,6 +2011,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
     plt_map <- plt_map + theme(legend.key = element_blank())
     leg_stations <- get_legend(plt_map)
     plt_map <- plt_map + theme(legend.position = 'none')
+    if(showCoordGrid) plt_map <- overlay_coordinate_grid(plt_map, singleLatAxis = singleLatAxis, textSize = axisTextSize)
     return(
       list(plot = ggdraw(plt_map),
            legend = ggdraw(leg_stations),
@@ -1840,9 +2021,19 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
 
   # Plastic samples
   if(anyPlastic){
+    
+    # To maximise visibility of samples, order the plot layers so that sources with
+    # the most samples in distinct locations are plotted first and those with fewer
+    # samples are layered on top.
+    sources <- levels(dat_plastic$Source)
+    ndistinct <- setNames(sapply(1:length(sources), function(z) nrow(unique(st_coordinates(dat_plastic[dat_plastic$Source == sources[z],])))) , sources)
+    dat_plastic$ndistinct <- unname(ndistinct[as.character(dat_plastic$Source)])
+    dat_plastic_ <- dat_plastic[order(dat_plastic$ndistinct, decreasing = TRUE),]
+    dat_plastic_$Source <- factor(dat_plastic_$Source, levels = unique(dat_plastic_$Source))
+    
     plt_map <- plt_map +
       new_scale_fill() +
-      geom_sf_interactive(data = dat_plastic,
+      geom_sf_interactive(data = dat_plastic_,
                           aes(fill = Source, shape = SampleType_grouped, data_id = data_id, tooltip = tooltip),
                           alpha = alpha, size = ptSize, show.legend = FALSE) +
       scale_fill_manual(values = setNames(pltColours$colour, pltColours$Source))
@@ -1853,6 +2044,8 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
   plt_map <- plt_map +
     coord_sf(xlim = c(BBox['xmin'], BBox['xmax']), ylim = c(BBox['ymin'], BBox['ymax']))# +
   
+  if(showCoordGrid) plt_map <- overlay_coordinate_grid(plt_map, singleLatAxis = singleLatAxis, textSize = axisTextSize)
+
   #~~~~~~~
   # Legend
   #~~~~~~~
@@ -1872,7 +2065,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
       plt_stations <- plt_stations +
         scale_shape_manual_interactive(values = setNames(symbols_$symbol, symbols_$Type),
                                        name = label_interactive(label = 'Facility',
-                                                                data_id = 'legend.title',
+                                                                data_id = 'stations.legend.title',
                                                                 hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                                                                 onclick = paste0("window.open(`", weblink_facilities, "`);"),
                                                                 tooltip = weblink_facilities)) +
@@ -1918,7 +2111,7 @@ make_plot <- function(dat, background = 'none', displayEcoregions = FALSE, backg
           order = 2,
           override.aes = list(
             shape = 21,
-            size = legPtSize))
+            size = legPtSize_fill))
       ) +
       scale_fill_manual_interactive(
         values = setNames(pltColours$colour, pltColours$Source),
