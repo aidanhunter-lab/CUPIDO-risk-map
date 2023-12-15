@@ -89,20 +89,23 @@ geomean <- function(x, na.rm = FALSE){
 
 plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
                      legend_title = 'risk', Title = NULL, show_legend = TRUE,
-                     showAxis = TRUE, axisTextSize = 4){
+                     showAxis = TRUE, axisTextSize = 4,
+                     cellBorderColour = 'grey', cellBorderWidth = 0.1){
   # function to plot risk levels
   data$rank <- factor(data$rank, levels = n:1, labels = n:1)
   # get the legend
   plt <-
     ggplot() +
-    geom_sf(data = data, aes(fill = rank), show.legend = TRUE) +
+    geom_sf(data = data, aes(fill = rank), colour = cellBorderColour,
+            linewidth = cellBorderWidth, show.legend = TRUE) +
     scale_fill_viridis_d(option = v_option, direction = v_direction,
                          drop = FALSE, na.translate = FALSE, name = legend_title)
   leg <- ggdraw(get_legend(plt))
   # make full plot
   plt <-
     ggplot() +
-    geom_sf(data = data, aes(fill = rank), show.legend = show_legend) +
+    geom_sf(data = data, aes(fill = rank), colour = cellBorderColour,
+            linewidth = cellBorderWidth, show.legend = show_legend) +
     scale_fill_viridis_d(option = v_option, direction = v_direction,
                          drop = FALSE, na.translate = FALSE, name = legend_title) +
     theme(
@@ -1548,6 +1551,7 @@ sc_h <- 1.2
 pw <- sc_w * A4_w
 ph <- sc_h * A4_h
 ggsave('main_results_ranking2.png', plt_results, 'png', width = pw, height = ph, units = 'in')
+
 
 
 

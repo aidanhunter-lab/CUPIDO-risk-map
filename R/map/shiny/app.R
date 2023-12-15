@@ -64,7 +64,7 @@ wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
 
 source('functions.R', local = TRUE)
 
-significantTrendsOnly <- FALSE
+significantTrendsOnly <- TRUE
 loadTooltipFromFile <- TRUE # set to FALSE when new plastic data is included or any modifications are made to the data
 displayAllLitterTypes <- TRUE # If FALSE then only plastics are displayed. Set to TRUE to show samples of non-plastics -- this is important when trawls bring up items that appear to be plastic (e.g., Kuklinski data)
 
@@ -539,7 +539,7 @@ server <- function(input, output, session) {
     d <- datatable(d,
                    extensions = 'Buttons',
                    options = list(
-                     paging = TRUE, searching = TRUE, autoWidth = TRUE, scrollX = TRUE,
+                     paging = FALSE, searching = TRUE, autoWidth = TRUE, scrollX = TRUE,
                      # fillContainer = TRUE,
                      # bPaginate = FALSE,
                      # autoWidth = TRUE,
