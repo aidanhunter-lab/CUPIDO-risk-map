@@ -29,9 +29,11 @@ thisFile = which('downloadSST.m');
 project = 'CUPIDO-risk-map';
 baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
 % baseDirectory = strrep(baseDirectory, ' ', '\ '); % account for spaces, Linux format
+dataDirectory = fullfile(baseDirectory, 'data', 'sst', 'ESA');
+addpath(genpath(dataDirectory))
 
 % Directory to store SST data -- outside of Git Repo
-dataDirectory = '/home/aihunt/Documents/work/CUPIDO/data/sst/ESA';
+% dataDirectory = '/home/aihunt/Documents/work/CUPIDO/data/sst/ESA';
 
 out_dir = fullfile(dataDirectory);
 % If directory does not exist then create it
@@ -203,6 +205,16 @@ ncwrite(filepath_high, 'time', 0:(ngroups-1))
 ncwrite(filepath_high, 'lat', lat_high)
 ncwrite(filepath_high, 'lon', lon_high)
 
+% Clear the large high-res data files from the Git Repo now that they're
+% averaged
+for i = 1:ngroups
+    f = fullfile(dataDirectory, alldates.filename(i));
+    if isfile(f)
+        delete(f)
+    end
+end
+
+
 
 %% Download more recent data
 
@@ -334,8 +346,19 @@ ncwrite(filepath_high, 'lat', lat_high)
 ncwrite(filepath_high, 'lon', lon_high)
 
 
+% Clear the large high-res data files from the Git Repo now that they're
+% averaged
+for i = 1:ngroups
+    f = fullfile(dataDirectory, alldates.filename(i));
+    if isfile(f)
+        delete(f)
+    end
+end
+
+
+
 %% Combine data from the two time spans: 1982-2016 & 2017-2021
-addpath(genpath(dataDirectory))
+% addpath(genpath(dataDirectory))
 
 filename1_3x1 = 'sst_monthly_means_1982_2016_res_3x1.nc';
 filename2_3x1 = 'sst_monthly_means_2017_2021_res_3x1.nc';
