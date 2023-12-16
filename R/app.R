@@ -7,7 +7,7 @@
 library(shiny)
 library(sp)
 library(sf)
-library(mapdata) # for Antarctic coastline data used to estimate distance of facilities from the coast (I would prefer a higher-res shape file...)
+library(mapdata) # for Antarctic coastline data used to estimate distance of facilities from the coast
 library(maptools) # for the ContourLines2SLDF() function used to map contour lines
 library(ggplot2)
 library(gtable)
@@ -16,14 +16,11 @@ library(gridExtra)
 library(cowplot)
 library(RColorBrewer)
 library(scales)
-# library(plotly) # doesn't work with layering grobs...
 library(ggiraph) # this is good for interactivity, but cannot be converted to grobs for layout...
-# library(ggpubr) # maybe this package's 'ggarrange' function can help.
 library(reshape2)
 library(flextable) # for displaying tables when mouse hovers over mapped data points
-# library(tidyverse)
 library(DT)
-# library(shinybrowser) # get browser dimension & other info
+# library(this.path) # this package has issues when R is run from a shell
 
 # library(ggnewscale)
 # Use devtools to install ggnewscale version 0.4.3 as there seems to be bug in the
@@ -47,18 +44,17 @@ if(!ggnewscale_available){
    }
 }
 
-# library(this.path)
 
 # Directory info ----------------------------------------------------------
 
-# wd_orig <- this.dir()
-wd_orig <- getwd()
+# wd_orig <- getwd()
+# wd_base <- dirname(wd_orig)
+# wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
 
-# I will need to move all required files into sub-directories stored in the same
-# directory (wd_orig) as app.R
+dir_base <- dirname(getwd())
+dir_data <- paste(dir_base, 'data', sep = '/')
+dir_map <- paste(dir_data, 'map', sep = '/')
 
-wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
-# setwd('~/Documents/Git Repos/CUPIDO-risk-map')
 
 # Load data ---------------------------------------------------------------
 
@@ -69,27 +65,21 @@ loadTooltipFromFile <- TRUE # set to FALSE when new plastic data is included or 
 displayAllLitterTypes <- TRUE # If FALSE then only plastics are displayed. Set to TRUE to show samples of non-plastics -- this is important when trawls bring up items that appear to be plastic (e.g., Kuklinski data)
 
 # source('import_data.R') # function (get_data) to load/organise data
-get_data(res = '3x1', baseDirectory = wd_base, shinyDirectory = wd_orig,
-         allLitterTypes = displayAllLitterTypes,
-         sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
-         sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
-         roundShipTime = TRUE, indexGridCells = FALSE, loadTooltipFromFile = loadTooltipFromFile)
+get_data(
+  baseDirectory = dir_base, dataDirectory = dir_data, mapDirectory = dir_map,
+  res = '3x1', 
+  allLitterTypes = displayAllLitterTypes,
+  sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
+  sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
+  roundShipTime = TRUE, indexGridCells = FALSE, loadTooltipFromFile = loadTooltipFromFile)
 
-# DATA_sf <- DATA_sf[grep('Alu', DATA_sf$Source),]
+nc <- nc_plastic
 
 # It will be nice to able to select between trend data and anomalies from within
 # the Shiny app. This will involve returning both data sets from the get_data
 # function, then including a selection option in the Shiny dashboard that chooses
 # between them. This is not critical to include, but would be a nice extension
 # to what I've already produced
-
-# if(significantTrendsOnly){
-#   # If all insignificant trends are omitted (plotted in white) then we don't need
-#   # to keep the p-values
-#   sst_poly <- sst_poly[sst_poly$metric != 'p-value',]
-#   pH_poly <- pH_poly[pH_poly$metric != 'p-value',]
-# }
-
 
 # Flextable options ------------------------------------------------------
 
@@ -474,7 +464,7 @@ server <- function(input, output, session) {
   plot_main <- reactive({
     return(
       make_plot(dat = listData(), background = which_background(), displayEcoregions = display_ecoregions(),
-                     plotSignificanceContours = display_trend_pvals())
+                     plotSignificanceContours = display_trend_pvals(), latlim = lat_lim_plastic)
     )
   })
 
