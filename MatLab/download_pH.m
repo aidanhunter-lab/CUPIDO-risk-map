@@ -30,8 +30,11 @@ project = 'CUPIDO-risk-map';
 baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
 % baseDirectory = strrep(baseDirectory, ' ', '\ '); % account for spaces, Linux format
 
-% Directory to store SST data -- outside of Git Repo
-dataDirectory = '/home/aihunt/Documents/work/CUPIDO/data/pH/SOCAT';
+dataDirectory = fullfile(baseDirectory, 'data', 'pH', 'SOCAT');
+addpath(genpath(dataDirectory))
+
+% % Directory to store pH data -- outside of Git Repo
+% dataDirectory = '/home/aihunt/Documents/work/CUPIDO/data/pH/SOCAT';
 
 out_dir = fullfile(dataDirectory);
 % If directory does not exist then create it
