@@ -6,9 +6,10 @@ saveOutput = true;
 
 %% Directories
 thisFile = which('filter_ship_data.m');
-project = 'CUPIDO-risk-map';
-baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
-dataDirectory = fullfile(baseDirectory, 'data/shipping/McCarthy_2022');
+baseDirectory = fileparts(fileparts(thisFile));
+dataDirectory = fullfile(baseDirectory, 'data', 'shipping', 'McCarthy_2022');
+matlabDirectory = fullfile(baseDirectory, 'MatLab');
+addpath(genpath(matlabDirectory))
 
 %% Load data
 filename = 'so_obs_aidan.csv';
@@ -96,12 +97,21 @@ end
 
 
 % Calculate time each ship is within each cell of selected lat-lon grid.
-lonres = 9;
-latres = 3;
-longrid = -180:lonres:180; % grid cell edge positions
-latgrid = -90:latres:-60;
-nlon = length(longrid) - 1;
-nlat = length(latgrid) - 1;
+domain = map_domain;
+lat_bound = -60; % ship data only within (-90, -60) degrees N
+% lonres = domain.dlon;
+% latres = domain.dlat;
+longrid = domain.longrid'; % grid cell edge positions
+latgrid = domain.latgrid';
+if any(latgrid == lat_bound)
+    latgrid = latgrid(latgrid <= lat_bound);
+else
+    i = find(latgrid > lat_bound);
+    latgrid = latgrid(1:i(1));
+end
+lat_bound_ = max(latgrid);
+nlon = length(longrid)-1;
+nlat = length(latgrid)-1;
 ncells = nlon * nlat;
 cell_index = reshape(1:ncells, nlon, nlat);
 
@@ -185,6 +195,12 @@ for i = 1:nvessels
                 shipTime_gridded(i,j,where_) = shipTime_gridded(i,j,where_) + visitTime;
             end
         end
+        k = (i-1)*nyrs+j;
+        percent_prog = floor(100 * k / nvessels / nyrs);
+        percent_prog_ = floor(100 * (k-1) / nvessels / nyrs);
+        if percent_prog ~= percent_prog_
+            disp(['grid 9x3 ship data ' num2str(percent_prog) '%'])
+        end
     end
 end
 
@@ -218,10 +234,11 @@ output_9x3 = table(vessel_id, vessel_name, year, lonmin, lonmax, latmin, latmax,
 
 
 % Repeat on a higher resolution grid
-lonres = 3;
-latres = 1;
+scale_res = 3;
+lonres = domain.dlon / scale_res;
+latres = domain.dlat / scale_res;
 longrid = -180:lonres:180; % grid cell edge positions
-latgrid = -90:latres:-60;
+latgrid = -90:latres:lat_bound_;
 nlon = length(longrid) - 1;
 nlat = length(latgrid) - 1;
 longrid2d = repmat(reshape(longrid, nlon + 1, 1), 1, nlat + 1);
@@ -309,6 +326,12 @@ for i = 1:nvessels
                 shipTime_gridded(i,j,where_) = shipTime_gridded(i,j,where_) + visitTime;
             end
         end
+        k = (i-1)*nyrs+j;
+        percent_prog = floor(100 * k / nvessels / nyrs);
+        percent_prog_ = floor(100 * (k-1) / nvessels / nyrs);
+        if percent_prog ~= percent_prog_
+            disp(['grid 3x1 ship data ' num2str(percent_prog) '%'])
+        end
     end
 end
 
@@ -362,11 +385,10 @@ md.gross(md.gross == -inf) = nan(1,1);
 output_9x3_ex = innerjoin(output_9x3, md, 'Keys', 'vessel_id');
 output_3x1_ex = innerjoin(output_3x1, md, 'Keys', 'vessel_id');
 
-
 switch saveOutput, case true
-    path = fullfile(baseDirectory, 'MatLab', 'temp');
+    path = fullfile(dataDirectory, 'compiled');
     if ~exist(path, 'dir')
-        mkdir(fileparts(path), 'temp')
+        mkdir(path)
         addpath(genpath(path))
     end
 
@@ -380,16 +402,18 @@ switch saveOutput, case true
 
     filename = 'ship_time_res_9x3_withMetaData.csv';
     filepath = fullfile(path, filename);
-    writetable(output_9x3, filepath)
+    writetable(output_9x3_ex, filepath)
 
-
-    filename = 'ship_time_res_3x1.csv';
-    filepath = fullfile(path, filename);
-    writetable(output_3x1, filepath)
-
-    filename = 'ship_time_res_3x1_withMetaData.csv.csv';
-    filepath = fullfile(path, filename);
-    writetable(output_3x1, filepath)
+    % Do't bother saving these higher res outputs. The file sizes are large
+    % (albeit far smaller if zeros are omitted) and we don't use them
+    % anyway.
+%    filename = 'ship_time_res_3x1.csv';
+%    filepath = fullfile(path, filename);
+%    writetable(output_3x1, filepath)
+%
+%    filename = 'ship_time_res_3x1_withMetaData.csv.csv';
+%    filepath = fullfile(path, filename);
+%    writetable(output_3x1_ex, filepath)
 
 end
 
