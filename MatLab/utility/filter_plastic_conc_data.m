@@ -1,4 +1,4 @@
-function [out, sources, nsources] = filter_plastic_conc_data2(dat, DAT, varargin)
+function [out, sources, nsources] = filter_plastic_conc_data(dat, DAT, varargin)
 % Filters plastic abundance data sets and combines into a single table.
 % Inputs 'dat' and DAT are a struct and table of data sets produced from
 % load_plastic_conc_data.m
@@ -18,6 +18,12 @@ else
     filename = outputFilename;
 end
 
+if ~exist('outputDirectory', 'var')
+    thisFile = which('load_plastic_conc_data.m');
+    baseDirectory = fileparts(fileparts(fileparts(thisFile)));
+    outputDirectory = fullfile(baseDirectory, 'data', 'plastic samples', 'collated');
+end
+
 if ~exist('FilterByLitterCategory', 'var')
     FilterByLitterCategory = false;
 end
@@ -33,11 +39,6 @@ end
 % if ~exist('returnOnlyMicroplasticMeasures', 'var')
 %     returnOnlyMicroplasticMeasures = false;
 % end
-
-%% Directories
-project = 'CUPIDO-risk-map';
-thisFile = which('filter_plastic_conc_data.m');
-baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
 
 %% Data sources
 sources = fieldnames(dat);
@@ -68,28 +69,33 @@ end
 % Volumetric concentration 'pieces/m^3' is most common unit for seawater 
 % samples; some data use area density 'pieces/km^2', some use mass density
 % 'g/km^2'.
-varOpts_water = {'concentration', 'massConcentration', 'density', 'massDensity', 'presence/absence'}; %, 'all'}; % filtering options
+varOpts_water = {'concentration', 'massConcentration', 'density', 'massDensity', 'presence/absence', 'flux'}; %, 'all'}; % filtering options
 varOpts_sediment = {'concentration', 'density', 'presence/absence'};
 varOpts_air = {'presence/absence'};
-varOpts_ice = {'presence/absence'};
+varOpts_ice = {'concentration', 'density', 'presence/absence'};
 
 Units.water.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
 Units.water.massConcentration = {'g/m3'};
 Units.water.density = {'pieces/km2', 'items/km2', 'number/km2'};
 Units.water.massDensity = {'g/km2'};
 Units.water.presence = {'none'};
+Units.water.flux = {'pieces/m2/day', 'items/m2/day', 'particles/m2/day', 'number/m2/day'};
 
-Units.sediment.concentration = {'pieces/g'};
+Units.sediment.concentration = {'pieces/g', 'pieces/10ml'};
 Units.sediment.density = {'pieces/m2'};
 Units.sediment.presence = {'none'};
 
 Units.air.presence = {'none'};
+
+Units.ice.concentration = {'pieces/m3', 'items/m3', 'particles/m3', 'number/m3'};
+Units.ice.density = {'pieces/m2', 'items/m2', 'particles/m2', 'number/m2'};
 Units.ice.presence = {'none'};
 
 Units_water = struct2cell(Units.water);
 useUnit_water = cellfun(@(z) z(1), Units_water);
-Units_sediment = struct2cell(Units.sediment);
-useUnit_sediment = cellfun(@(z) z(1), Units_sediment);
+Units_sediment = struct2cell(Units.sediment); % sediment needs treated differently as units vary
+% useUnit_sediment = cellfun(@(z) z(1), Units_sediment);
+useUnit_sediment = Units_sediment;
 Units_air = struct2cell(Units.air);
 useUnit_air = cellfun(@(z) z(1), Units_air);
 Units_ice = struct2cell(Units.ice);
@@ -111,7 +117,11 @@ for i = 1:nsources
         end
         if contains(sampleType, 'sediment')
             Units_ = Units_sediment;
+            uu = cellfun(@(z) contains(z, d.Unit), Units_, 'UniformOutput', false);
+            uu_ = cellfun(@(z) any(z), uu);
+            Units_{uu_} = Units_{uu_}(uu{uu_});
             useUnit = useUnit_sediment;
+            useUnit{uu_} = useUnit{uu_}(uu{uu_});
             varOpts = varOpts_sediment;
         end
         if contains(sampleType, 'ice')
@@ -172,7 +182,7 @@ for i = 1:nsources
     d.PlasticSize = strrep(d.PlasticSize, 'mum', [char(hex2dec('03BC')) 'm']);
     
     % SiteCategory
-    d.SampleGear = strrep(d.SampleGear, 'Open ocean', 'open ocean');
+    d.SiteCategory = strrep(d.SiteCategory, 'Open ocean', 'open ocean');
     
     % SampleID -- set as numeric counter starting 1
     st = unique(d.SampleType);
@@ -379,6 +389,9 @@ out = DAT;
 % Save full table (and separate tables for different measurements
 % variables)
 switch saveData, case true
-    writetable(out, fullfile(baseDirectory, 'data/plastic_quantity', filename))
+    if ~exist(outputDirectory, 'dir')
+        mkdir(outputDirectory)
+    end
+    writetable(out, fullfile(outputDirectory, filename))
 end
 

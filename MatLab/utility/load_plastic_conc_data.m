@@ -70,17 +70,11 @@ allColumns = fieldnames(columnDescriptions);
 
 
 %% Set directories
-if ~exist('project', 'var')
-    project = 'CUPIDO-risk-map';
+if ~exist('dataDirectory', 'var')
+    thisFile = which('load_plastic_conc_data');
+    baseDirectory = fileparts(fileparts(fileparts(thisFile)));
+    dataDirectory = fullfile(baseDirectory, 'data', 'plastic samples', 'sources');
 end
-thisFile = which('load_plastic_conc_data');
-baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
-if ~exist('relDataDir', 'var')
-    relDataDir = 'data/plastic_quantity';
-end
-dataDirectory = fullfile(baseDirectory, relDataDir);
-addpath(genpath(dataDirectory));
-addpath(genpath(fullfile(baseDirectory, 'MatLab')))
 
 %% Cincinelli 2017
 source = 'Cincinelli_2017';
@@ -221,6 +215,7 @@ Isobe_2017.categories = categories;
 
 Data.Isobe_2017 = Isobe_2017;
 
+
 %% Lacerda 2019
 
 source = 'Lacerda_2019';
@@ -314,6 +309,70 @@ Lacerda_2019.categories = abn_type;
 Lacerda_2019.colour = abn_col;
 
 Data.Lacerda_2019 = Lacerda_2019;
+
+
+
+
+
+%% Kuklinski 2019
+
+source = 'Kuklinski_2019';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'sample locations table 1.csv';
+stations = readtable(fullfile(filepath, filename));
+
+filename = 'fibre counts table 2.csv';
+conc = readtable(fullfile(filepath, filename));
+
+% j = cell2mat(cellfun(@(z) strcmp(z, 'NA'), conc.Value, 'UniformOutput', false));
+% conc.Value(j) = {'nan'};
+% conc.Value = cell2mat(cellfun(@(z) str2double(z), conc.Value, 'UniformOutput', false));
+
+dat = join(conc, stations);
+dat.isPlastic = ~cell2mat(cellfun(@(z) strcmp(z, 'FALSE'), dat.isPlastic, 'UniformOutput', false));
+
+dat.Properties.VariableNames{'Size'} = 'PlasticSize';
+dat.Properties.VariableNames{'Form'} = 'PlasticForm';
+% dat.LitterCategory = 'Natural';
+
+hd = height(dat);
+dat.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
+dat.SampleType = cell(hd, 1); dat.SampleType(:) = {'seawater'};
+dat.SampleGear = cell(hd, 1); dat.SampleGear(:) = {'300 μm mesh HydroBios microplastics net'};
+dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {'FTIR'};
+dat.LitterCategory = lower(dat.Type);
+dat.LitterScale = cell(hd, 1);
+dat.LitterScale(strcmp(dat.PlasticSize, '0.5 cm')) = {'micro'};
+dat.LitterScale(ismember(dat.PlasticSize, {'0.5-1.0 cm', '1.0 cm'})) = {'meso'};
+dat.LitterScale(cellfun(@(z) isempty(z), dat.LitterScale)) = {''};
+% dat.PlasticSize = cell(hd, 1); dat.PlasticSize(:) = {''};
+dat.SampleAtStation = false(hd, 1);
+dat.Site = cell(hd, 1); dat.Site(:) = {''};
+dat.SiteCategory = cell(hd, 1); dat.SiteCategory(:) = {''};
+dat.SampleID = cellstr(num2str(dat.Station));
+dat.Date = [dat.Date, NaT(hd, 1)];
+dat.Longitude = mean([dat.Longitude_start dat.Longitude_end], 2);
+dat.Latitude = mean([dat.Latitude_start dat.Latitude_end], 2);
+% dat.Longitude_start = nan(hd, 1);
+% dat.Latitude_start = nan(hd, 1);
+% dat.Longitude_end = nan(hd, 1);
+% dat.Latitude_end = nan(hd, 1);
+dat.Depth = cell(hd, 1); dat.Depth(:) = {'surface'};
+% dat.Variable = cell(hd, 1); dat.Variable(:) = {'concentration'};
+dat.Statistic = repmat({'raw'}, hd, 1);
+dat.Replicate = ones(hd, 1);
+dat.Observation = cell(hd, 1); dat.Observation(:) = {''};
+dat.URL = cell(hd, 1); dat.URL(:) = {'https://doi.org/10.1016/j.marpolbul.2019.110573'};
+
+dat = dat(:,allColumns);
+
+% Store all output in a struct
+Kuklinski_2019.abundance = dat;
+Data.Kuklinski_2019 = Kuklinski_2019;
+
+
+
 
 %% Jones-Williams 2020
 
@@ -603,15 +662,277 @@ Buckingham_2022.categories = categories;
 
 Data.Buckingham_2022 = Buckingham_2022;
 
+%% Absher 2019
 
-%% adventurescience.org
+source = 'Absher_2019';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'station locations.csv';
+stations = readtable(fullfile(filepath, filename));
+
+filename = 'fibre abundance.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+dat = join(stations, abundance);
+
+hd = height(dat);
+dat.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
+dat.SampleType = cell(hd,1); dat.SampleType(:) = {'seawater'};
+dat.SampleGear = cell(hd,1); dat.SampleGear(:) = {'conical net 150 μm'};
+dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {'Raman spectra Witec Alpha 300R'};
+dat.LitterCategory = cell(hd, 1); dat.LitterCategory(:) = {'plastic'};
+dat.LitterScale = cell(hd, 1); dat.LitterScale(:) = {'micro'};
+dat.PlasticForm = cell(hd, 1); dat.PlasticForm(:) = {'fibre'};
+dat.PlasticSize = cell(hd, 1); dat.PlasticSize(:) = {'2-5mm length, 10-22μm diameter'} ;
+dat.SampleAtStation = true(hd, 1);
+dat.Site = dat.Name;
+dat.SiteCategory = cell(hd, 1); dat.SiteCategory(:) = {''};
+dat.SampleID = cellstr(num2str(dat.Station));
+dat.Date = repmat([datetime([2010,12,14]), datetime([2011,1,10])], hd, 1);
+% dat.Longitude
+% dat.Latitude
+dat.Longitude_start = nan(hd, 1);
+dat.Latitude_start = nan(hd, 1);
+dat.Longitude_end = nan(hd, 1);
+dat.Latitude_end = nan(hd, 1);
+dat.Depth = cell(hd, 1); dat.Depth(:) = {'sea bottom (30m) to surface'};
+dat.Variable = cell(hd, 1); dat.Variable(:) = {'concentration'};
+dat.Statistic = cell(hd, 1); dat.Statistic(:) = {'mean'};
+dat.Replicate = ones(hd, 1);
+dat.Value = dat.Abundance;
+% dat.Unit
+dat.Observation = cell(hd, 1); dat.Observation(:) = {''};
+dat.URL = cell(hd, 1); dat.URL(:) = {'https://doi.org/10.1007/s11356-018-3509-6'};
+
+dat = dat(:,allColumns);
+
+Absher_2019.abundance = dat;
+
+Data.Absher_2019 = Absher_2019;
+
+
+
+%% Kelly 2020
+
+source = 'Kelly_2020';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'polymer quantity figure 3.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+filename = 'polymer composition figure 2.csv';
+composition = readtable(fullfile(filepath, filename));
+
+dat = abundance;
+dat = dat(contains(dat.Sample_method, 'average'),:);
+
+
+hd = height(dat);
+dat.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
+dat.SampleType = cell(hd,1); dat.SampleType(:) = {'ice'};
+dat.SampleGear = cell(hd,1); dat.SampleGear(:) = {'electro-polished stainless steel corer'};
+dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {'FTIR'};
+dat.LitterCategory = cell(hd, 1); dat.LitterCategory(:) = {'plastic'};
+dat.LitterScale = cell(hd, 1); dat.LitterScale(:) = {'micro'};
+dat.PlasticForm = cell(hd, 1); dat.PlasticForm(:) = {'particle'};
+dat.PlasticSize = cell(hd, 1); dat.PlasticSize(:) = {'20-325 μm diameter'} ;
+dat.SampleAtStation = true(hd, 1);
+dat.Site = cell(hd, 1); dat.Site(:) = {'Casey station'};
+dat.SiteCategory = cell(hd, 1); dat.SiteCategory(:) = {'coastal fast ice'};
+dat.SampleID = cell(hd, 1); dat.SampleID(:) = {'1'};
+dat.Date = repmat([datetime([2009,11,15]), NaT], hd, 1);
+dat.Longitude = 110 .* ones(hd,1);
+dat.Latitude = -66 .* ones(hd, 1);
+dat.Longitude_start = nan(hd, 1);
+dat.Latitude_start = nan(hd, 1);
+dat.Longitude_end = nan(hd, 1);
+dat.Latitude_end = nan(hd, 1);
+% dat.Depth = cell(hd, 1); dat.Depth(:) = {'sea bottom (30m) to surface'};
+dat.Variable = cell(hd, 1); dat.Variable(:) = {'concentration'};
+dat.Statistic = cell(hd, 1); dat.Statistic(:) = {'raw'};
+dat.Replicate = ones(hd, 1);
+dat.Value = dat.Abundance;
+% dat.Unit
+dat.Observation = cell(hd, 1); dat.Observation(:) = {''};
+dat.URL = cell(hd, 1); dat.URL(:) = {'https://doi.org/10.1016/j.marpolbul.2020.111130'};
+
+dat = dat(:,allColumns);
+
+Kelly_2020.abundance = dat;
+
+Data.Kelly_2020 = Kelly_2020;
+
+
+%% Gonzalez-Pleiter 2020
+
+source = 'Gonzalez-Pleiter_2020';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'plastic abundance.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+filename = 'study area.csv';
+stations = readtable(fullfile(filepath, filename));
+
+% There was only a single location sampled in this study
+hd = height(abundance);
+stations = repmat(stations, hd, 1);
+dat = [stations, abundance];
+
+dat.Source = cell(hd, 1); dat.Source(:) = {[strrep(source, '_', ' ('), ')']};
+dat.SampleType = dat.Characteristic;
+dat.SampleGear = cell(hd,1); dat.SampleGear(:) = {'nylon drifting nets 333 μm and 100 μm mesh)'};
+dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {'FTIR'};
+dat.LitterCategory = cell(hd, 1); dat.LitterCategory(:) = {'plastic'};
+dat.LitterScale = cell(hd, 1); dat.LitterScale(:) = {'micro'};
+dat.PlasticForm = dat.Form;
+dat.PlasticSize = dat.Size;
+dat.SampleAtStation = true(hd, 1);
+dat.Site = dat.Location;
+dat.SiteCategory = dat.Characteristic;
+dat.SampleID = cell(hd, 1); dat.SampleID(:) = {'1'};
+dat.Date = repmat([datetime([2018,2,25]), datetime([2018,3,4])], hd, 1);
+% dat.Longitude
+% dat.Latitude
+dat.Longitude_start = nan(hd, 1);
+dat.Latitude_start = nan(hd, 1);
+dat.Longitude_end = nan(hd, 1);
+dat.Latitude_end = nan(hd, 1);
+dat.Depth = cell(hd, 1); dat.Depth(:) = {'surface'};
+dat.Variable = dat.variable;
+dat.Statistic = cell(hd, 1); dat.Statistic(:) = {'raw'};
+dat.Replicate = ones(hd, 1);
+dat.Value = dat.value;
+% dat.Unit
+dat.Observation = cell(hd, 1); dat.Observation(:) = {''};
+dat.URL = cell(hd, 1); dat.URL(:) = {'https://doi.org/10.1016/j.marpolbul.2020.111811'};
+
+dat = dat(:,allColumns);
+
+Gonzalez_Pleiter_2020.abundance = dat;
+
+Data.Gonzalez_Pleiter_2020 = Gonzalez_Pleiter_2020;
+
+
+%% Gonzalez-Pleiter 2021
+
+source = 'Gonzalez-Pleiter_2021';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'plastic characteristics table S1.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+filename = 'sample locations.csv';
+stations = readtable(fullfile(filepath, filename));
+
+
+abundance.Properties.VariableNames{1} = 'Location';
+stations.Location = strrep(stations.Location, ' Lake', '');
+
+dat = join(abundance, stations);
+
+hd = height(dat);
+
+dat.Source = cell(hd, 1); dat.Source(:) = {[strrep(source, '_', ' ('), ')']};
+dat.SampleType = cell(hd,1); dat.SampleType(:) = {'ice'};
+dat.SampleGear = cell(hd,1); dat.SampleGear(:) = {'stainless steel tweezers'};
+dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {'ATR-FTIR'};
+dat.LitterCategory = cell(hd, 1); dat.LitterCategory(:) = {'plastic'};
+dat.LitterScale = cell(hd, 1); dat.LitterScale(:) = {'micro'};
+dat.PlasticForm = cell(hd, 1); dat.PlasticForm(:) = {'fragment'};
+dat.PlasticSize = dat.Size;
+dat.SampleAtStation = true(hd, 1);
+dat.Site = dat.Location;
+dat.SiteCategory = cell(hd, 1); dat.SiteCategory(:) = {'glacier'};
+dat.SampleID = cellstr(num2str(cellfun(@(z) find(strcmp(z, unique(dat.Location, 'stable'))), dat.Location)));
+dat.Date = repmat([datetime([2020,2,18]), datetime([2020,2,20])], hd, 1);
+% dat.Longitude
+% dat.Latitude
+dat.Longitude_start = nan(hd, 1);
+dat.Latitude_start = nan(hd, 1);
+dat.Longitude_end = nan(hd, 1);
+dat.Latitude_end = nan(hd, 1);
+dat.Depth = cell(hd, 1); dat.Depth(:) = {'surface'};
+dat.Variable = cell(hd, 1); dat.Variable(:) = {'density'};   
+dat.Statistic = cell(hd, 1); dat.Statistic(:) = {'raw'};
+dat.Replicate = ones(hd, 1);
+dat.Value = dat.Abundance;
+% dat.Unit
+dat.Observation = cell(hd, 1); dat.Observation(:) = {''};
+dat.URL = cell(hd, 1); dat.URL(:) = {'https://doi.org/10.5194/tc-15-2531-2021'};
+
+dat = dat(:,allColumns);
+
+Gonzalez_Pleiter_2021.abundance = dat;
+
+Data.Gonzalez_Pleiter_2021 = Gonzalez_Pleiter_2021;
+
+
+%% Alurralde 2022
+
+source = 'Alurralde_2022';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'microfibre abundance and flux table 1.csv';
+abundance = readtable(fullfile(filepath, filename));
+
+filename = 'sample location.csv';
+stations = readtable(fullfile(filepath, filename));
+
+% Only one sample site in this study
+hd = height(abundance);
+stations = repmat(stations, hd, 1);
+dat = [stations, abundance];
+
+% Dates
+noDate = isnat(dat.Date);
+numDate = datenum(dat.Date) + dat.Days;
+Date2 = NaT(hd, 1);
+Date2(~noDate) = datetime(datestr(numDate(~noDate)), 'Format', 'yyyy-MM-dd');
+
+dat.Source = cell(hd, 1); dat.Source(:) = {[strrep(source, '_', ' ('), ')']};
+dat.SampleType = cell(hd,1); dat.SampleType(:) = {'seawater'};
+dat.SampleGear = cell(hd,1); dat.SampleGear(:) = {'cylindrical-conical sediment trap'};
+dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {'FTIR'};
+dat.LitterCategory = cell(hd, 1); dat.LitterCategory(:) = {'plastic'};
+dat.LitterScale = cell(hd, 1); dat.LitterScale(:) = {'micro'};
+dat.PlasticForm = cell(hd, 1); dat.PlasticForm(:) = {'fibre'};
+dat.PlasticSize = cell(hd, 1); dat.PlasticSize(:) = {'85 mum average'};
+dat.SampleAtStation = true(hd, 1);
+dat.Site = dat.Location;
+dat.SiteCategory = cell(hd, 1); dat.SiteCategory(:) = {'seabed'};
+dat.SampleID = cellstr(num2str(dat.Sample));
+dat.Date = [dat.Date, Date2];
+% dat.Longitude
+% dat.Latitude
+dat.Longitude_start = nan(hd, 1);
+dat.Latitude_start = nan(hd, 1);
+dat.Longitude_end = nan(hd, 1);
+dat.Latitude_end = nan(hd, 1);
+dat.Depth = cell(hd, 1); dat.Depth(:) = {'25 m seabed'};
+% dat.Variable = cell(hd, 1); dat.Variable(:) = {'density'};   
+dat.Statistic = cell(hd, 1); dat.Statistic(:) = {'raw'};
+dat.Replicate = ones(hd, 1);
+% dat.Value = dat.Abundance;
+% dat.Unit
+dat.Observation = cell(hd, 1); dat.Observation(:) = {''};
+dat.URL = cell(hd, 1); dat.URL(:) = {'https://doi.org/10.1016/j.marpolbul.2022.113388'};
+
+dat = dat(:,allColumns);
+
+Alurralde_2022.abundance = dat;
+
+Data.Alurralde_2022 = Alurralde_2022;
+
+
+%% AdventureScientists
 
 % I can extract adventurescience.org measures from data table provided by
 % Waller, or I can load the values I extracted myself. Let's use my more
 % recent extraction, although this lacks some of information provided in
 % Waller's table.
 
-source = 'AdventureScience';
+source = 'Adventure Scientists_2022';
 filepath = fullfile(dataDirectory, source);
 
 filename = 'plastic samples.csv';
@@ -631,7 +952,8 @@ Unit = {'percent'};
 categories = table(Type, Value, Unit);
 
 hd = height(abundance);
-abundance.Source = repmat({source}, hd, 1);
+abundance.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
+% abundance.Source = repmat({source}, hd, 1);
 abundance.SampleGear = abundance.Sampling_Method;
 abundance.LitterIDMethod = cell(hd, 1); abundance.LitterIDMethod(:) = {''};
 abundance.LitterCategory = repmat({'plastic'}, hd, 1);
@@ -655,10 +977,10 @@ abundance.URL = cell(hd, 1); abundance.URL(:) = {'https://www.adventurescientist
 
 abundance = abundance(:,allColumns);
 
-AdventureScience.abundance = abundance;
-AdventureScience.categories = categories;
+Adventure_Scientists_2022.abundance = abundance;
+Adventure_Scientists_2022.categories = categories;
 
-Data.AdventureScience = AdventureScience;
+Data.Adventure_Scientists_2022 = Adventure_Scientists_2022;
 
 
 % See commented code below for extracting adventurescience data from Waller's table
@@ -1013,6 +1335,48 @@ Munari_2017.size = abundance_size;
 Munari_2017.categories = abundance_type;
 
 Data.Munari_2017 = Munari_2017;
+
+
+%% Reed 2018 (sediment)
+
+source = 'Reed_2018';
+filepath = fullfile(dataDirectory, source);
+
+filename = 'plastic sediment samples_table 1.csv';
+dat = readtable(fullfile(filepath, filename));
+
+hd = height(dat);
+dat.Source = repmat({[strrep(source, '_', ' ('), ')']}, hd, 1);
+dat.SampleType = cell(hd,1); dat.SampleType(:) = {'sediment'};
+dat.SampleGear = dat.Method;
+dat.LitterIDMethod = cell(hd, 1); dat.LitterIDMethod(:) = {'FTIR'};
+dat.LitterCategory = cell(hd, 1); dat.LitterCategory(:) = {'plastic'};
+dat.LitterScale = cell(hd, 1); dat.LitterScale(:) = {'micro'};
+dat.PlasticForm = cell(hd, 1); dat.PlasticForm(:) = {'fibre'};
+dat.PlasticSize = cell(hd, 1); dat.PlasticSize(:) = {'2-5 mm'};
+dat.SampleAtStation = true(hd, 1);
+dat.Site = dat.Region;
+dat.SiteCategory = cell(hd, 1); dat.SiteCategory(:) = {''};
+% dat.SampleID = dat.Station;
+dat.Date = [dat.Date_1, dat.Date_2];
+dat.Longitude_start = nan(hd, 1);
+dat.Latitude_start = nan(hd, 1);
+dat.Longitude_end = nan(hd, 1);
+dat.Latitude_end = nan(hd, 1);
+% dat.Depth = dat.Depth_m;
+dat.Variable = cell(hd, 1); dat.Variable(:) = {'concentration'};
+dat.Statistic = cell(hd, 1); dat.Statistic(:) = {'raw'};
+% dat.Replicate = ones(hd, 1);
+dat.Observation = cell(hd, 1); dat.Observation(:) = {''};
+dat.URL = cell(hd, 1); dat.URL(:) = {'https://doi.org/10.1016/j.marpolbul.2018.05.068'};
+
+dat = dat(:,allColumns);
+
+
+Reed_2018.abundance = dat;
+
+Data.Reed_2018 = Reed_2018;
+
 
 
 %% Suaria 2020
