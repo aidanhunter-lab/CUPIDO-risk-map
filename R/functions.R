@@ -325,7 +325,7 @@ get_data <- function(
     baseDirectory, dataDirectory, mapDirectory, res,
     # range_plastic_or_cells = 'cells',
     allLitterTypes = FALSE,
-    sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'summary',
+    sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
     sstTrend_significantOnly = TRUE, pHTrend_significantOnly = TRUE,
     significanceLevel = 0.05, significanceContours = c(0.05, 0.25, 0.5),
     SST_overallTrend = TRUE, pH_overallTrend = TRUE, roundShipTime = FALSE,
@@ -472,11 +472,11 @@ get_data <- function(
          
          raw = {
            # It doesn't matter what value is set for 'res', just use 9x3 data
-           f <- 'McCarthy_2022/ship_time_res_9x3.csv'
+           f <- 'McCarthy_2022/compiled/ship_time_res_9x3.csv'
            f <- paste(dataDirectory, 'shipping', f, sep = '/')
            ship <- read.table(f, sep = ',', header = TRUE)
            
-           fm <- 'McCarthy_2022/vessel_metadata.csv'
+           fm <- 'McCarthy_2022/compiled/vessel_metadata.csv'
            fm <- paste(dataDirectory, 'shipping', fm, sep = '/')
            ship_metadata <- read.table(fm , sep = ',', header = TRUE)
            
