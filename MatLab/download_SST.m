@@ -8,10 +8,15 @@ pythonVersion = '3';
 
 %% Copernicus Marine Credentials
 
+% Store your Copernicus username & password in a hidden text file called
+% '.Copernicus Marine Credentials.txt', formatted as a table with column
+% names 'user' & 'pwd'.
+cmc = readtable('.Copernicus Marine Credentials.txt');
+
 % Insert your username
-user = 'ahunter';
+user = cmc.user {1};
 % and your password
-pwd = 'CMEMS_Aidan_22';
+pwd = cmc.pwd{1};
 
 %% Download parameters for ESA SST CCI and C3S reprocessed sea surface temperature analyses
 
