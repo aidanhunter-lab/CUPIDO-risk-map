@@ -550,7 +550,7 @@ get_data <- function(
   # f <- paste(wd_base, filepath, filename, sep = '/')
   # DATA = read.csv(f, stringsAsFactors = TRUE)
   
-  filename <- 'plastic_quantity_new4.csv'
+  filename <- 'plastic_quantity.csv'
   f <- paste(dataDirectory, 'plastic samples', 'collated', filename, sep = '/')
   # f <- paste(shinyDirectory, filename, sep = '/')
   DATA <- read.csv(f, stringsAsFactors = TRUE)
