@@ -875,7 +875,7 @@ plt_stress_combined <- plot_grid(plt_left, plt_right, plt_leg,
                                  ncol = 3, rel_widths = c(1,1,0.2)) + 
   theme(plot.background = element_rect(fill = 'white', colour = 'white'))
 
-ggsave('physical_stress_ranking2.png', plt_stress_combined, 'png', dir_plots,
+ggsave('physical_stress_ranking.png', plt_stress_combined, 'png', dir_plots,
        width = pw, height = ph, units = 'in')
 
 # shipping and facilities
@@ -1248,7 +1248,7 @@ sc_w <- 1.5 # scaling factors
 sc_h <- 1.2
 pw <- sc_w * A4_w
 ph <- sc_h * A4_h
-ggsave('main_results_ranking2.png', plt_results, 'png', dir_plots, width = pw,
+ggsave('main_results_ranking.png', plt_results, 'png', dir_plots, width = pw,
        height = ph, units = 'in')
 
 
