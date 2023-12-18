@@ -71,6 +71,7 @@ dir_base <- dirname(this.dir())
 dir_data <- paste(dir_base, 'data', sep = '/')
 dir_map <- paste(dir_data, 'map', sep = '/')
 dir_plots <- paste(dir_base, 'plots', sep = '/')
+if(!dir.exists(dir_plots)) dir.create(dir_plots)
 
 # Load functions ----------------------------------------------------------
 
