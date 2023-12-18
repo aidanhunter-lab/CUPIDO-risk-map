@@ -1,7 +1,7 @@
 %% Prepare data for display on maps
 
 %% Directories
-thisFile = which('prepare_data.m');
+thisFile = which('prepare_env_data.m');
 dirBase = fileparts(fileparts(thisFile));
 dirData = fullfile(dirBase, 'data');
 dirMatLab = fullfile(dirBase, 'MatLab');

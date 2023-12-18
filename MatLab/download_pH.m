@@ -24,22 +24,15 @@ productID = 'dataset-carbon-rep-monthly';
 
 
 %% Directories
-
 thisFile = which('download_pH.m');
-project = 'CUPIDO-risk-map';
-baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
-% baseDirectory = strrep(baseDirectory, ' ', '\ '); % account for spaces, Linux format
+dirBase = fileparts(fileparts(thisFile));
+dirData = fullfile(dirBase, 'data', 'pH', 'SOCAT');
+addpath(genpath(dirData))
 
-dataDirectory = fullfile(baseDirectory, 'data', 'pH', 'SOCAT');
-addpath(genpath(dataDirectory))
-
-% % Directory to store pH data -- outside of Git Repo
-% dataDirectory = '/home/aihunt/Documents/work/CUPIDO/data/pH/SOCAT';
-
-out_dir = fullfile(dataDirectory);
+out_dir = fullfile(dirData);
 % If directory does not exist then create it
 dir_exists = exist(out_dir, 'dir') == 7;
-if ~dir_exists, mkdir(dataDirectory); end
+if ~dir_exists, mkdir(dirData); end
 
 % Code spaces with a backslash (Linux style)
 out_dir = strrep(out_dir, ' ', '\ ');

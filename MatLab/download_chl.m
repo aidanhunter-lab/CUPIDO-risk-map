@@ -13,10 +13,13 @@
 % and saved as .mat, then the .nc files can be deleted -- this takes longer
 % and requires an internet connection, but there's no need to store large
 % data files locally.
-addpath(genpath(fileparts(which('extractData_SeaWiFS_phytoplankton_1997_2007'))))
-dirBase = fileparts(fileparts(which('extractData_SeaWiFS_phytoplankton_1997_2007')));
+thisFile = which('download_chl.m');
+dirBase = fileparts(fileparts(thisFile));
+dirMatLab = fullfile(dirBase, 'MatLab');
 dirData = fullfile(dirBase, 'data', 'chlorophyll', 'SeaWiFS');
+addpth(dirMatLab)
 addpath(dirData)
+
 % Unique segment of data download links
 datalink_ = 'https://dap.ceda.ac.uk/neodc/nceo-carbon/data/ST6-ocean_biogeochemistry/Global-PSC-Climatologies/monthly-10yr-climatology//SeaWiFS_GLOBAL_19970901_Phytoplankton-Size-Class-10yr-Climatology-';
 % Unique segment of default file names
@@ -105,74 +108,5 @@ switch ext
         Dat = structfun(@(z) z(:), Dat, 'UniformOutput', false); % table variables change in order: longitude, latitude, month
         Dat = struct2table(Dat);
         writetable(Dat, outputPath)
-end
-
-
-%% Subset regions from Southern Ocean & save separately as NetCDF or csv
-% (This code, below, is not necessary, it just allows saving relatively
-% small NetCDF files for some specific regions listed in 
-% 'regional bounding coordinates.csv'.
-
-coordsTable = readtable('regional bounding coordinates.csv');
-
-Dat_ = Dat;
-nlocations = size(coordsTable, 1);
-locations = cell(nlocations, 1);
-for i = 1:size(coordsTable, 1)
-    location = coordsTable.Location{i};
-    location = strrep(location, ',', '');
-    location = strrep(location, ' ', '_');
-    locations{i} = location;
-    lon = [coordsTable.Longitude_min(i), coordsTable.Longitude_max(i)];
-    lat = [coordsTable.Latitude_min(i), coordsTable.Latitude_max(i)];    
-    ind = lat(1) <= Dat.latitude & Dat.latitude <= lat(2) & ...
-        lon(1) <= Dat.longitude & Dat.longitude <= lon(2);    
-    nlon = max(max(sum(ind)));
-    nlat = max(max(sum(ind,2)));
-    Dat.(location) = structfun(@(z) reshape(z(ind), [nlon, nlat, 12]), Dat_, 'UniformOutput', false);
-end
-clearvars Dat_
-
-% Save regional data as NetCDF files
-outputFile_ = 'SeaWiFS_Phytoplankton-Size-Class-1997-2007-';
-ext = '.nc';
-
-for i = 1:size(coordsTable, 1)
-    location = locations{i};
-    outputFile = [outputFile_, location, ext];
-    outputPath = fullfile(dirData, outputFile);
-    dat = Dat.(location);
-    
-    lon = squeeze(dat.longitude(:,1,1));
-    lat = squeeze(dat.latitude(1,:,1));
-    mon = squeeze(dat.month(1,1,:));
-    
-    nccreate(outputPath, 'longitude', 'Dimensions', {'longitude', length(lon), 'latitude', length(lat), 'month', length(mon)}, 'Datatype', 'single')
-    nccreate(outputPath, 'latitude', 'Dimensions', {'longitude', 'latitude', 'month'}, 'Datatype', 'single')
-    nccreate(outputPath, 'month', 'Dimensions', {'longitude', 'latitude', 'month'}, 'Datatype', 'single')
-    nccreate(outputPath, 'Tchl', 'Dimensions', {'longitude', 'latitude', 'month'}, 'Datatype', 'single')
-    nccreate(outputPath, 'Pico_percent_Tchl', 'Dimensions', {'longitude', 'latitude', 'month'}, 'Datatype', 'single')
-    nccreate(outputPath, 'Nano_percent_Tchl', 'Dimensions', {'longitude', 'latitude', 'month'}, 'Datatype', 'single')
-    nccreate(outputPath, 'Micro_percent_Tchl', 'Dimensions', {'longitude', 'latitude', 'month'}, 'Datatype', 'single')
-    
-    schema.all.Name = '/';
-    attributeNames = {'Title', 'Institution', 'Source', 'History', 'References', 'Data subset'};
-    attributeValues = {'Global data on Phytoplankton Size Structure as observed from the SeaWiFS satellite',...
-        'Plymouth Marine Laboratory', ...
-        'NASA Ocean Color website http://oceancolor.gsfc.nasa.gov/', ...
-        'April 2012: Level 3 mapped global 9km Chlorophyll-a data downloaded from NASA Ocean Color website and the model of Brewin et al. (2010) applied on a pixel-by-pixel basis to retrieve size structure', ...
-        'Brewin, R.J.W., Sathyendranath, S., Hirata, T., Lavender, S., Barciela, R.M. & Hardman- Mountford, N.J. (2010). A three-component model of phytoplankton size class for the Atlantic Ocean. Ecological Modelling, 221, 1472−1483.', ...
-        location};
-    schema.all.Attributes = struct('Name', attributeNames, 'Value', attributeValues);
-
-    ncwriteschema(outputPath, schema.all)
-    
-    ncwrite(outputPath, 'longitude', dat.longitude)
-    ncwrite(outputPath, 'latitude', dat.latitude)
-    ncwrite(outputPath, 'month', dat.month)
-    ncwrite(outputPath, 'Tchl', dat.Tchl)
-    ncwrite(outputPath, 'Pico_percent_Tchl', dat.Pico_percent_Tchl)
-    ncwrite(outputPath, 'Nano_percent_Tchl', dat.Nano_percent_Tchl)
-    ncwrite(outputPath, 'Micro_percent_Tchl', dat.Micro_percent_Tchl)
 end
 

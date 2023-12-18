@@ -24,21 +24,15 @@ productID = 'ESACCI-GLO-SST-L4-REP-OBS-SST';
 
 
 %% Directories
+thisFile = which('download_SST.m');
+dirBase = fileparts(fileparts(thisFile));
+dirData = fullfile(dirBase, 'data', 'sst', 'ESA');
+addpath(genpath(dirData))
 
-thisFile = which('downloadSST.m');
-project = 'CUPIDO-risk-map';
-baseDirectory = thisFile(1:strfind(thisFile, project)+length(project)-1);
-% baseDirectory = strrep(baseDirectory, ' ', '\ '); % account for spaces, Linux format
-dataDirectory = fullfile(baseDirectory, 'data', 'sst', 'ESA');
-addpath(genpath(dataDirectory))
-
-% Directory to store SST data -- outside of Git Repo
-% dataDirectory = '/home/aihunt/Documents/work/CUPIDO/data/sst/ESA';
-
-out_dir = fullfile(dataDirectory);
+out_dir = fullfile(dirData);
 % If directory does not exist then create it
 dir_exists = exist(out_dir, 'dir') == 7;
-if ~dir_exists, mkdir(dataDirectory); end
+if ~dir_exists, mkdir(dirData); end
 
 % Code spaces with a backslash (Linux style)
 out_dir = strrep(out_dir, ' ', '\ ');
@@ -208,7 +202,7 @@ ncwrite(filepath_high, 'lon', lon_high)
 % Clear the large high-res data files from the Git Repo now that they're
 % averaged
 for i = 1:ngroups
-    f = fullfile(dataDirectory, alldates.filename(i));
+    f = fullfile(dirData, alldates.filename(i));
     if isfile(f)
         delete(f)
     end
@@ -349,7 +343,7 @@ ncwrite(filepath_high, 'lon', lon_high)
 % Clear the large high-res data files from the Git Repo now that they're
 % averaged
 for i = 1:ngroups
-    f = fullfile(dataDirectory, alldates.filename(i));
+    f = fullfile(dirData, alldates.filename(i));
     if isfile(f)
         delete(f)
     end
@@ -358,16 +352,15 @@ end
 
 
 %% Combine data from the two time spans: 1982-2016 & 2017-2021
-% addpath(genpath(dataDirectory))
 
 filename1_3x1 = 'sst_monthly_means_1982_2016_res_3x1.nc';
 filename2_3x1 = 'sst_monthly_means_2017_2021_res_3x1.nc';
 filename1_9x3 = 'sst_monthly_means_1982_2016_res_9x3.nc';
 filename2_9x3 = 'sst_monthly_means_2017_2021_res_9x3.nc';
-filepath1_3x1 = fullfile(dataDirectory, filename1_3x1);
-filepath2_3x1 = fullfile(dataDirectory, filename2_3x1);
-filepath1_9x3 = fullfile(dataDirectory, filename1_9x3);
-filepath2_9x3 = fullfile(dataDirectory, filename2_9x3);
+filepath1_3x1 = fullfile(dirData, filename1_3x1);
+filepath2_3x1 = fullfile(dirData, filename2_3x1);
+filepath1_9x3 = fullfile(dirData, filename1_9x3);
+filepath2_9x3 = fullfile(dirData, filename2_9x3);
 
 % Handle the coarsely resolved data first
 % lon1 = ncread(filepath1_9x3, 'lon');

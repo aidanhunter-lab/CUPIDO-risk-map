@@ -19,7 +19,7 @@ else
 end
 
 if ~exist('outputDirectory', 'var')
-    thisFile = which('load_plastic_conc_data.m');
+    thisFile = which('filter_plastic_conc_data.m');
     baseDirectory = fileparts(fileparts(fileparts(thisFile)));
     outputDirectory = fullfile(baseDirectory, 'data', 'plastic samples', 'collated');
 end

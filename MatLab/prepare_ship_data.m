@@ -5,7 +5,7 @@
 saveOutput = true;
 
 %% Directories
-thisFile = which('filter_ship_data.m');
+thisFile = which('prepare_ship_data.m');
 baseDirectory = fileparts(fileparts(thisFile));
 dataDirectory = fullfile(baseDirectory, 'data', 'shipping', 'McCarthy_2022');
 matlabDirectory = fullfile(baseDirectory, 'MatLab');
