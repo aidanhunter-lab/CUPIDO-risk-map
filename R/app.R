@@ -26,9 +26,9 @@ for(i in 1:length(pkg.list)){
   if(!j){
     if(install.listed.pkg.version){
       pkg_ <- paste0('https://cran.r-project.org/package=', pkg, '&version=', pkg.version[pkg])
-      install.packages(pkgs = pkg_, repos = NULL)      
+      install.packages(pkgs = pkg_) #, repos = NULL)      
     }else{
-      install.packages(pkg)  
+      install.packages(pkg)
     }
     library(pkg, character.only = TRUE)
   }
