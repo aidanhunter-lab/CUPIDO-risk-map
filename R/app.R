@@ -3,32 +3,43 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Packages ----------------------------------------------------------------
+# Required packages
+pkg.list <- c('shiny','sp','sf','mapdata','maptools','ggplot2','gtable','grid',
+              'gridExtra','cowplot','RColorBrewer','scales','ggiraph','reshape2',
+              'flextable','DT','devtools')
 
-library(shiny)
-library(sp)
-library(sf)
-library(mapdata) # for Antarctic coastline data used to estimate distance of facilities from the coast
-library(maptools) # for the ContourLines2SLDF() function used to map contour lines
-library(ggplot2)
-library(gtable)
-library(grid)
-library(gridExtra)
-library(cowplot)
-library(RColorBrewer)
-library(scales)
-library(ggiraph) # this is good for interactivity, but cannot be converted to grobs for layout...
-library(reshape2)
-library(flextable) # for displaying tables when mouse hovers over mapped data points
-library(DT)
-# library(this.path) # this package has issues when R is run from a shell
+# Package versions used for interactive map version 1.0:
+pkg.version <- c(shiny = '1.7.4', sp = '2.0.0', sf = '1.0.14', mapdata = '2.3.1',
+                 maptools = '1.1.6', ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.3.3',
+                 gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1.3', scales = '1.2.1',
+                 ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27',
+                 devtools = '2.4.5')
+# Any problems arising after a fresh install may be due incompatibilities between
+# newer package versions, so if there are problems then try running with the package
+# versions listed here.
+install.listed.pkg.version <- TRUE # if any package is missing, install listed version or latest version?
 
-# library(ggnewscale)
-# Use devtools to install ggnewscale version 0.4.3 as there seems to be bug in the
-# latest version -- this is annoying, but ggnewscale is vital for this map.
-# See this solution from the package developer: https://github.com/eliocamp/ggnewscale/issues/45
-# (I'm not convinced this helped! The issue seemed to solved by including '_new'
-# as a suffix in arguments to the 'guides' function)
-library(devtools)
+# Load packages, installing if necessary
+for(i in 1:length(pkg.list)){
+  pkg <- pkg.list[i]
+  j <- library(pkg, character.only = TRUE, logical.return = TRUE)
+  if(!j){
+    if(install.listed.pkg.version){
+      pkg_ <- paste0('https://cran.r-project.org/package=', pkg, '&version=', pkg.version[pkg])
+      install.packages(pkgs = pkg_, repos = NULL)      
+    }else{
+      install.packages(pkg)  
+    }
+    library(pkg, character.only = TRUE)
+  }
+}
+
+# We need another package, ggnewscale, that, at the time of writing, needs to be
+# installed from GitHub. It also needs to be an old version as there appeared to
+# be a bug in the latest version.
+# The package developer proposed a solution to the bug here: https://github.com/eliocamp/ggnewscale/issues/45
+# but I'm not convinced this helped! The issue seemed to solved by including '_new'
+# as a suffix in arguments to the 'guides' function.
 ggnewscale_version <- '0.4.3'
 ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
 ggnewscale_available <- require(ggnewscale, quietly = TRUE)
@@ -36,20 +47,15 @@ if(!ggnewscale_available){
   install_github(ggnewscale_download_path)
   library(ggnewscale)
 }else{
-   if(packageVersion('ggnewscale') != ggnewscale_version){
-     detach("package:ggnewscale", unload = TRUE)
-     remove.packages('ggnewscale')
-     install_github(ggnewscale_download_path)
-     library(ggnewscale)
-   }
+  if(packageVersion('ggnewscale') != ggnewscale_version){
+    detach("package:ggnewscale", unload = TRUE)
+    remove.packages('ggnewscale')
+    install_github(ggnewscale_download_path)
+    library(ggnewscale)
+  }
 }
 
-
 # Directory info ----------------------------------------------------------
-
-# wd_orig <- getwd()
-# wd_base <- dirname(wd_orig)
-# wd_base <- '~/Documents/Git Repos/CUPIDO-risk-map'
 
 dir_base <- dirname(getwd())
 dir_data <- paste(dir_base, 'data', sep = '/')
