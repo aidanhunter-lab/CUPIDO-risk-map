@@ -17,7 +17,7 @@ pkg.version <- c(shiny = '1.7.4', sp = '2.0.0', sf = '1.0.14', mapdata = '2.3.1'
 # Any problems arising after a fresh install may be due incompatibilities between
 # newer package versions, so if there are problems then try running with the package
 # versions listed here.
-install.listed.pkg.version <- TRUE # if any package is missing, install listed version or latest version?
+install.listed.pkg.version <- FALSE # if any package is missing, install listed version (TRUE) or latest version (FALSE)?
 
 # Load packages, installing if necessary
 for(i in 1:length(pkg.list)){
@@ -25,8 +25,11 @@ for(i in 1:length(pkg.list)){
   j <- library(pkg, character.only = TRUE, logical.return = TRUE)
   if(!j){
     if(install.listed.pkg.version){
+      # Problems may emerge with this method if package dependencies are not
+      # installed. There may be an automatic way to install dependencies while
+      # repos = NULL, otherwise dependencies may need installed individually...
       pkg_ <- paste0('https://cran.r-project.org/package=', pkg, '&version=', pkg.version[pkg])
-      install.packages(pkgs = pkg_) #, repos = NULL)      
+      install.packages(pkgs = pkg_, repos = NULL)
     }else{
       install.packages(pkg)
     }
