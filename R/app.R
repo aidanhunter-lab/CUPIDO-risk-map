@@ -6,31 +6,31 @@
 
 # Packages ----------------------------------------------------------------
 # Required packages
-pkg.list <- c('shiny','sp','sf','mapdata',
+pkg.list <- c('remotes','shiny','sp','sf','mapdata',
               # 'maptools', # deprecated package
               'ggplot2','gtable','grid',
               'gridExtra','cowplot','RColorBrewer','scales','ggiraph','reshape2',
-              'flextable','DT','remotes','devtools')
+              'flextable','DT','devtools')
 
 # It seems that the code for generating multi-layered plots with multiple colour/fill
 # scales is not robust to updated package versions, so using specific package is
 # required. This is an issue to address in future...
 
 # Package versions used for interactive map version 1.0:
-pkg.version <- c(shiny = '1.7.4', sp = '2.1.4', sf = '1.0.16', mapdata = '2.3.1',
+pkg.version <- c(remotes = '2.5.0', shiny = '1.7.4', sp = '2.1.4', sf = '1.0.16', mapdata = '2.3.1',
                  # maptools = '1.1.6',
                  ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4.0',
                  gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1.3', scales = '1.2.1',
                  ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27',
-                 remotes = '2.5.0', devtools = '2.4.5')
+                 devtools = '2.4.5')
 
 # Notation for archived versions on CRAN varies slightly -- using either a period or dash for minor versions
-pkg.version.archive <- c(shiny = '1.7.4', sp = '2.1-4', sf = '1.0-16', mapdata = '2.3-1',
+pkg.version.archive <- c(remotes = '2.5.0', shiny = '1.7.4', sp = '2.1-4', sf = '1.0-16', mapdata = '2.3-1',
                          # maptools = '1.1.6',
                          ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4-0',
                          gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1-3', scales = '1.2.1',
                          ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27',
-                         remotes = '2.5.0', devtools = '2.4.5')
+                         devtools = '2.4.5')
 
 # Any problems arising after a fresh install may be due incompatibilities between
 # newer package versions, so if there are problems then try running with the package
@@ -42,7 +42,7 @@ for(i in 1:length(pkg.list)){
   pkg <- pkg.list[i]
   j <- library(pkg, character.only = TRUE, logical.return = TRUE)
   if(!j){
-    if(install.listed.pkg.version){
+    if(install.listed.pkg.version & pkg != 'remotes'){
       # Problems may emerge with this method if package dependencies are not
       # installed. There may be an automatic way to install dependencies while
       # repos = NULL, otherwise dependencies may need installed individually...
@@ -53,10 +53,11 @@ for(i in 1:length(pkg.list)){
       # pkg_ <- paste0('http://cran.r-project.org/src/contrib/Archive/', pkg, '/', pkg, '_', pkg.version.archive[pkg], '.tar.gz')
       # install.packages(pkg_, repos = NULL, type = 'source')
       # method 3
-      tryCatch(remotes::install_version(pkg, version = pkg.version[i], build = TRUE),
-               error = function(e) NA, warning = function(w) NA)
+      tryCatch(remotes::install_version(
+        pkg, version = pkg.version[i], build = TRUE, upgrade = FALSE),
+        error = function(e) NA, warning = function(w) NA)
     }else{
-      install.packages(pkg)
+      install.packages(pkg, repos = 'https://cloud.r-project.org')
     }
     library(pkg, character.only = TRUE)
   }else{
@@ -70,7 +71,8 @@ for(i in 1:length(pkg.list)){
         # pkg_ <- paste0('http://cran.r-project.org/src/contrib/Archive/', pkg, '/', pkg, '_', pkg.version.archive[pkg], '.tar.gz')
         # install.packages(pkg_, repos = NULL, type = 'source')
         # method 3
-        tryCatch(remotes::install_version(pkg, version = pkg.version[i], build = TRUE),
+        tryCatch(remotes::install_version(
+          pkg, version = pkg.version[i], build = TRUE, upgrade = FALSE),
                  error = function(e) NA, warning = function(w) NA)
       }
     }
