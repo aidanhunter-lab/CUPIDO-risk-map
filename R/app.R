@@ -341,7 +341,8 @@ ui <- fluidPage(
                             '),
            # h3("Data plot"),
            plotOutput('blank', width = '100%', height = '10px'),
-           ggiraphOutput('plt')
+           # ggiraphOutput('plt')
+           girafeOutput('plt')
     ),
     
   ),
