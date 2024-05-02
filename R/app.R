@@ -2,24 +2,42 @@
 # Shiny app for interactive map of Southern Ocean displaying plastic & environmental data
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+# This interactive map, version 1.0, was created using R version 4.4
+
 # Packages ----------------------------------------------------------------
 # Required packages
-pkg.list <- c('shiny','sp','sf','mapdata','maptools','ggplot2','gtable','grid',
+pkg.list <- c('shiny','sp','sf','mapdata',
+              # 'maptools', # deprecated package
+              'ggplot2','gtable','grid',
               'gridExtra','cowplot','RColorBrewer','scales','ggiraph','reshape2',
-              'flextable','DT','devtools')
+              'flextable','DT','remotes','devtools')
+
+# It seems that the code for generating multi-layered plots with multiple colour/fill
+# scales is not robust to updated package versions, so using specific package is
+# required. This is an issue to address in future...
 
 # Package versions used for interactive map version 1.0:
-pkg.version <- c(shiny = '1.7.4', sp = '2.0.0', sf = '1.0.14', mapdata = '2.3.1',
-                 maptools = '1.1.6', ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.3.3',
+pkg.version <- c(shiny = '1.7.4', sp = '2.1.4', sf = '1.0.16', mapdata = '2.3.1',
+                 # maptools = '1.1.6',
+                 ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4.0',
                  gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1.3', scales = '1.2.1',
                  ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27',
-                 devtools = '2.4.5')
+                 remotes = '2.5.0', devtools = '2.4.5')
+
+# Notation for archived versions on CRAN varies slightly -- using either a period or dash for minor versions
+pkg.version.archive <- c(shiny = '1.7.4', sp = '2.1-4', sf = '1.0-16', mapdata = '2.3-1',
+                         # maptools = '1.1.6',
+                         ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4-0',
+                         gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1-3', scales = '1.2.1',
+                         ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27',
+                         remotes = '2.5.0', devtools = '2.4.5')
+
 # Any problems arising after a fresh install may be due incompatibilities between
 # newer package versions, so if there are problems then try running with the package
 # versions listed here.
-install.listed.pkg.version <- FALSE # if any package is missing, install listed version (TRUE) or latest version (FALSE)?
+install.listed.pkg.version <- TRUE # if any package is missing, install listed version (TRUE) or latest version (FALSE)?
 
-# Load packages, installing if necessary
+# Load packages, installing if necessary.
 for(i in 1:length(pkg.list)){
   pkg <- pkg.list[i]
   j <- library(pkg, character.only = TRUE, logical.return = TRUE)
@@ -28,12 +46,34 @@ for(i in 1:length(pkg.list)){
       # Problems may emerge with this method if package dependencies are not
       # installed. There may be an automatic way to install dependencies while
       # repos = NULL, otherwise dependencies may need installed individually...
-      pkg_ <- paste0('https://cran.r-project.org/package=', pkg, '&version=', pkg.version[pkg])
-      install.packages(pkgs = pkg_, repos = NULL)
+      # method 1
+      # pkg_ <- paste0('https://cran.r-project.org/package=', pkg, '&version=', pkg.version[pkg])
+      # install.packages(pkgs = pkg_, repos = NULL)
+      # method 2
+      # pkg_ <- paste0('http://cran.r-project.org/src/contrib/Archive/', pkg, '/', pkg, '_', pkg.version.archive[pkg], '.tar.gz')
+      # install.packages(pkg_, repos = NULL, type = 'source')
+      # method 3
+      tryCatch(remotes::install_version(pkg, version = pkg.version[i], build = TRUE),
+               error = function(e) NA, warning = function(w) NA)
     }else{
       install.packages(pkg)
     }
     library(pkg, character.only = TRUE)
+  }else{
+    if(install.listed.pkg.version){
+      desired.version <- pkg.version[i] == packageVersion(pkg)
+      if(!desired.version){
+        # method 1
+        # pkg_ <- paste0('https://cran.r-project.org/package=', pkg, '&version=', pkg.version[pkg])
+        # install.packages(pkgs = pkg_, repos = NULL)
+        # method 2
+        # pkg_ <- paste0('http://cran.r-project.org/src/contrib/Archive/', pkg, '/', pkg, '_', pkg.version.archive[pkg], '.tar.gz')
+        # install.packages(pkg_, repos = NULL, type = 'source')
+        # method 3
+        tryCatch(remotes::install_version(pkg, version = pkg.version[i], build = TRUE),
+                 error = function(e) NA, warning = function(w) NA)
+      }
+    }
   }
 }
 
