@@ -2737,6 +2737,8 @@ make_plot <- function(
       plot.background = element_rect(fill = 'white', colour = 'white')
     )
   
+  
+  # leg_background <- get_plot_component(plt_background, 'guide-box', return_all = TRUE)[[1]] # this is equivalent to commented line below, but doesn't throw a warning
   leg_background <- get_legend(plt_background)
   
   #~~~~~~~~~~~~~~~~~~~~~~
