@@ -4,7 +4,7 @@
 
 library(sp)
 library(sf)
-library(maptools) # for the ContourLines2SLDF() function used to map contour lines
+# library(maptools) # for the ContourLines2SLDF() function used to map contour lines DEPRECATED PACKAGE
 library(ggplot2)
 library(grid)
 library(gridExtra)
@@ -79,7 +79,8 @@ make_background_map <- function(
     stationPopSize = FALSE, eco = FALSE, trendType = 'unspecified',
     ship_data = 'unspecified', pval_contours = FALSE, contourLineWidth = 0.25,
     ptStroke = 1, axisTextSize = 4, discreteColourScheme = FALSE,
-    overlay_labels = NULL, latlim = NULL){
+    overlay_labels = NULL, latlim = NULL, nColours = NULL,
+    background.na.remove = FALSE){
   if(backgroundOnly & stationsOnly){
     warning('Cannot select both backgroundOnly and stationsOnly')
     return(NULL)}
@@ -113,14 +114,82 @@ make_background_map <- function(
     contourLineWidth = contourLineWidth, ptStroke = ptStroke,
     axisTextSize = axisTextSize, singleLatAxis = FALSE,
     discreteColourScheme = discreteColourScheme,
-    overlay_labels = overlay_labels, latlim = latlim)
+    overlay_labels = overlay_labels, latlim = latlim, nColours = nColours,
+    background.na.remove = background.na.remove)
   mp
 }
+
+# Include NA values for empty grid cells in all background data sets. Use the
+# sea surface temperature data to define the grid cells because this data set
+# has values for every cell.
+all_cells <- unique(sst_poly[,'geometry'])
+# Chlorophyll
+for(l in unique(chl_poly$month)){
+  d <- chl_poly[chl_poly$month == l,]
+  i <- !all_cells$geometry %in% d$geometry
+  if(sum(i) == 0) next
+  j <- all_cells[i,]
+  j$month <- l
+  j$value <- NA
+  chl_poly <- rbind(chl_poly, j)
+  chl_poly <- chl_poly[order(chl_poly$month),]
+}
+# Krill
+for(l in unique(krill_poly$month)){
+  d <- krill_poly[krill_poly$month == l,]
+  i <- !all_cells$geometry %in% d$geometry
+  if(sum(i) == 0) next
+  j <- all_cells[i,]
+  j$month <- l
+  j$value <- NA
+  j$colourgroup <- NA
+  krill_poly <- rbind(krill_poly, j)
+  krill_poly <- krill_poly[order(krill_poly$month),]
+}
+# Sea surface temperature
+for(l in unique(sst_poly$metric)){
+  d <- sst_poly[sst_poly$metric == l,]
+  i <- !all_cells$geometry %in% d$geometry
+  if(sum(i) == 0) next
+  j <- all_cells[i,]
+  j$metric <- l
+  j$value <- NA
+  j$pval <- NA
+  j$plevel <- NA
+  sst_poly <- rbind(sst_poly, j)
+  sst_poly <- sst_poly[order(sst_poly$metric),]
+}
+# pH
+for(l in unique(pH_poly$metric)){
+  d <- pH_poly[pH_poly$metric == l,]
+  i <- !all_cells$geometry %in% d$geometry
+  if(sum(i) == 0) next
+  j <- all_cells[i,]
+  j$metric <- l
+  j$value <- NA
+  j$pval <- NA
+  j$plevel <- NA
+  pH_poly <- rbind(pH_poly, j)
+  pH_poly <- pH_poly[order(pH_poly$metric),]
+}
+# Shipping
+for(l in unique(ship_poly$activity)){
+  d <- ship_poly[ship_poly$activity == l,]
+  i <- !all_cells$geometry %in% d$geometry
+  if(sum(i) == 0) next
+  j <- all_cells[i,]
+  j$activity <- l
+  j$value <- NA
+  j$year <- 'all'
+  ship_poly <- rbind(ship_poly, j)
+  ship_poly <- ship_poly[order(ship_poly$activity),]
+}
+
 
 # Chlorophyll
 background <- 'chl'
 month <- 'all'
-p_chl <- make_background_map(background, month, discreteColourScheme = TRUE, latlim = latlim)
+p_chl <- make_background_map(background, month, discreteColourScheme = TRUE, latlim = latlim, background.na.remove = TRUE)
 p_chl$plot_complete
 
 # Krill
