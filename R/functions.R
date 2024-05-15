@@ -329,7 +329,8 @@ get_data <- function(
     sstTrend_significantOnly = TRUE, pHTrend_significantOnly = TRUE,
     significanceLevel = 0.05, significanceContours = c(0.05, 0.25, 0.5),
     SST_overallTrend = TRUE, pH_overallTrend = TRUE, roundShipTime = FALSE,
-    indexGridCells = TRUE, loadTooltipFromFile = TRUE, verbose = FALSE){
+    shipOrPersonTime = NULL, indexGridCells = TRUE, loadTooltipFromFile = TRUE,
+    verbose = FALSE){
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Load data with spatial resolution given by res = '3x1' or '9x3'.
   # Required outputs are assigned to the function calling environment.
@@ -427,6 +428,7 @@ get_data <- function(
   
   switch(shipSummaryDataOrRaw,
          summary = {
+           # Summary section is redundant
            
            f <- 'McCarthy_2022/so_ecoregion_combined.csv' # data table with all ship types
            f <- paste(dataDirectory, 'shipping', f, sep = '/')
@@ -482,17 +484,20 @@ get_data <- function(
            
            ship <- merge(ship, ship_metadata, by = 'vessel_id')
            
+           ship$person_capacity[is.na(ship$person_capacity)] <- NA
+           ship$person_time[is.na(ship$person_capacity)] <- 0
+
            # For each year and vessel activity, sum ship time over all vessels
-           ship <- aggregate(ship_time ~ lonmin + lonmax + latmin + latmax + year + activity_type, data = ship, FUN = sum)
+           ship <- aggregate(cbind(ship_time, person_time) ~ lonmin + lonmax + latmin + latmax + year + activity_type, data = ship, FUN = sum)
            
            # Sum ship time over vessel activity
-           ship_ <- aggregate(ship_time ~ lonmin + lonmax + latmin + latmax + year, data = ship, FUN = sum)
+           ship_ <- aggregate(cbind(ship_time, person_time) ~ lonmin + lonmax + latmin + latmax + year, data = ship, FUN = sum)
            ship_$activity_type <- 'all'
            ship_ <- ship_[names(ship)]
            ship <- rbind(ship, ship_)
            
            # Average ship_time over years
-           ship_ <- aggregate(ship_time ~ lonmin + lonmax + latmin + latmax + activity_type, data = ship, FUN = mean)
+           ship_ <- aggregate(cbind(ship_time, person_time) ~ lonmin + lonmax + latmin + latmax + activity_type, data = ship, FUN = mean)
            ship_$year <- 'all'
            ship_ <- ship_[names(ship)]
            ship <- rbind(ship, ship_)
@@ -509,9 +514,22 @@ get_data <- function(
              # less than one.
              lowTraffic <- ship$ship_time < 1
              ship$ship_time[lowTraffic] <- round(ship$ship_time[lowTraffic])
+             lowTraffic <- ship$person_time < 1
+             ship$person_time[lowTraffic] <- round(ship$person_time[lowTraffic])
            }
            
-           ship <- subset(ship, ship_time != 0) # remove zero measures
+           if(is.null(shipOrPersonTime)){
+             ship <- melt(ship, measure.vars = c('ship_time', 'person_time'))
+           }else{
+             if(!shipOrPersonTime %in% c('ship', 'person')) error("'shipOrPersonTime' must be either 'ship' or 'person'")
+             ship <- switch(shipOrPersonTime,
+                            ship = ship[,names(ship) != 'person_time'],
+                            person = ship[,names(ship) != 'ship_time'])
+             ship <- melt(ship, measure.vars = paste0(shipOrPersonTime, '_time'))
+           }
+           ship$variable <- gsub('_', ' ', ship$variable)
+           
+           ship <- subset(ship, value != 0) # remove zero measures
            
            ship$activity_type <- factor(ship$activity_type, 
                                         levels = c('all','fishing','tourism','supply','research','other'),
@@ -533,7 +551,8 @@ get_data <- function(
            ship_poly <- st_transform(ship_poly, crs = crs_use) # convert coordinates
            ship_poly$year <- ship$year
            ship_poly$activity <- ship$activity_type
-           ship_poly$value <- ship$ship_time
+           ship_poly$variable <- ship$variable
+           ship_poly$value <- ship$value
            
          }
   )
@@ -1835,26 +1854,62 @@ make_plot <- function(
   if(discreteColourScheme & is.null(nColours))
     nColours <- 7 # default number of discrete colours
   
-  e2sci <- function(x){
+  e2sci <- function(x, sig.dig = 2, lim = 4){
     # Convert scientific notation using e to standard x10 format.
     # This only seems to work for small numbers -- don't know why...
+    oscipen <- options()$scipen
+    options(scipen = 1e6)
+    isNeg <- x < 0
+    x <- abs(x)
+    large <- x >= 10 ^ lim
+    small <- x <= 10 ^ -{lim-sig.dig+1}
     y <- as.character(x)
-    isExp <- grepl('e', y)
-    if(all(!isExp)) return(y)
     uniSuperDigit <- c('\u2070','\u00B9','\u00B2','\u00B3','\u2074','\u2075',
                        '\u2076','\u2077','\u2078','\u2079') # superscripts 0-9
     uniSuperNeg <- '\u207B'
-    z <- y[isExp]
-    z <- do.call('rbind', strsplit(z, 'e'))
-    b <- as.numeric(z[,2])
-    isNeg <- b < 0
-    b <- as.character(abs(b))
-    b <- sapply(1:length(b), function(p){
-      a <- as.numeric(strsplit(b[p], '')[[1]])
-      paste(uniSuperDigit[a+1], collapse = '')})
-    b[isNeg] <- paste0(uniSuperNeg, b[isNeg])
-    y[isExp] <- paste0(z[,1], 'x10', b)
-    return(y)}
+    if(any(large)){
+      y_ <- substr(y[large], 1, 1)
+      if(sig.dig > 1) y_ <- paste(y_, substr(y[large], 2, sig.dig), sep = '.')
+      y_ <- paste0(y_, 'x10', uniSuperDigit[nchar(y[large])])
+      y[large] <- y_
+    }
+    if(any(small)){
+      y_ <- sapply(strsplit(y[small], '\\.'), function(z) z[2])
+      countZeros <- gregexpr('0', y_)
+      nZeros <- sapply(countZeros, function(z){
+        w <- rbind(1:length(z), z)
+        sum(w[1,] == w[2,]) + 1})
+      y_ <- substr(y_, nZeros, nchar(y_))
+      if(sig.dig == 1) y_ <- substr(y_, 1, 1)
+      if(sig.dig > 1) y_ <- paste(substr(y_, 1, 1), substr(y_, 2, sig.dig), sep = '.')
+      y_ <- paste0(y_, 'x10', uniSuperNeg, uniSuperDigit[nZeros+1])
+      y[small] <- y_
+    }
+    y[isNeg] <- paste0('-', y[isNeg])
+    options(scipen = oscipen)
+    return(y)
+  }
+  
+  # e2sci <- function(x){
+  #   # Convert scientific notation using e to standard x10 format.
+  #   # This only seems to work for small numbers -- don't know why...
+  #   y <- as.character(x)
+  #   isExp <- grepl('e', y)
+  #   if(all(!isExp)) return(y)
+  #   uniSuperDigit <- c('\u2070','\u00B9','\u00B2','\u00B3','\u2074','\u2075',
+  #                      '\u2076','\u2077','\u2078','\u2079') # superscripts 0-9
+  #   uniSuperNeg <- '\u207B'
+  #   z <- y[isExp]
+  #   z <- do.call('rbind', strsplit(z, 'e'))
+  #   b <- as.numeric(z[,2])
+  #   isNeg <- b < 0
+  #   b <- as.character(abs(b))
+  #   b <- sapply(1:length(b), function(p){
+  #     a <- as.numeric(strsplit(b[p], '')[[1]])
+  #     paste(uniSuperDigit[a+1], collapse = '')})
+  #   b[isNeg] <- paste0(uniSuperNeg, b[isNeg])
+  #   y[isExp] <- paste0(z[,1], 'x10', b)
+  #   return(y)}
   
   #~~~~~~~~~~~~~~~~~
   # Background layer
@@ -2646,8 +2701,15 @@ make_plot <- function(
                
                raw = {
                  shipActivity <- unique(dat_background$activity)
-                 leg_lab <- paste0('Ship time:', '\n', shipActivity,
-                                   ' vessels', '\n', '(days year\u207B\u00B9)')
+                 
+                 v <- unique(dat_background$variable)
+                 if(length(v) != 1) error("Ship traffic metric must be specified")
+                 leg_lab <- switch(v,
+                                   `ship time` = paste0('Ship time:', '\n', shipActivity,
+                                                        ' vessels', '\n', '(days year\u207B\u00B9)'),
+                                   `person time` = paste0('Person time:', '\n', shipActivity,
+                                                          ' vessels', '\n', '(days year\u207B\u00B9)'))
+                 
                  if(!discreteColourScheme){
                    # Continuous colour scheme
                    plt <- 
@@ -2689,8 +2751,9 @@ make_plot <- function(
                    brks[i] <- round(brks[i] / mag[i]) * mag[i]
                    brks[nbrks] <- ceiling(brks[nbrks] / mag_[nbrks]) * mag_[nbrks]
                    brks[1] <- round(brks[1])
+                   brks_ <- e2sci(brks)
                    legLabs <- sapply(
-                     1:nColours, function(z) paste0('[', brks[z], ', ', brks[z+1], ')'))
+                     1:nColours, function(z) paste0('[', brks_[z], ', ', brks_[z+1], ')'))
                    legLabs[nbrks-1] <- gsub('\\)', ']', legLabs[nbrks-1])
                    brks <- log10(brks)
                    dat_background$breaks <- cut(dat_background$value_log10, brks,
@@ -2709,7 +2772,7 @@ make_plot <- function(
                    if(weblink_exists){
                      plt <- plt + 
                        scale_fill_viridis_d_interactive(
-                         option = 'mako', direction = -1,
+                         option = 'mako', direction = -1, drop = FALSE,
                          name = label_interactive(
                            leg_lab, data_id = background.legend.id,
                            hover_css = 'fill:blue;font-size:13px;font-weight:bold',
@@ -2719,7 +2782,7 @@ make_plot <- function(
                          na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
                    }else{
                      plt <- plt +
-                       scale_fill_viridis_d(option = 'mako', direction = -1,
+                       scale_fill_viridis_d(option = 'mako', direction = -1, drop = FALSE,
                                             name = leg_lab,
                                             na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
                    }
