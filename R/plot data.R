@@ -81,7 +81,7 @@ make_background_map <- function(
     pval_contours = FALSE, contourLineWidth = 0.25,
     ptStroke = 1, axisTextSize = 4, discreteColourScheme = FALSE,
     overlay_labels = NULL, latlim = NULL, nColours = NULL,
-    background.na.remove = FALSE){
+    background.na.remove = FALSE, na.in.legend = TRUE){
   if(backgroundOnly & stationsOnly){
     warning('Cannot select both backgroundOnly and stationsOnly')
     return(NULL)}
@@ -116,7 +116,8 @@ make_background_map <- function(
     axisTextSize = axisTextSize, singleLatAxis = FALSE,
     discreteColourScheme = discreteColourScheme,
     overlay_labels = overlay_labels, latlim = latlim, nColours = nColours,
-    background.na.remove = background.na.remove)
+    background.na.remove = background.na.remove, na.in.legend = na.in.legend)
+
   mp
 }
 
@@ -249,7 +250,8 @@ for(i in 1:length(ship_classes)){
     plt_name <- paste0(plt_name0, '_', substr(j,1,1))
     p <- make_background_map(
       background, ship_class, ship_data = ship_data, axisTextSize = axisTextSize,
-      discreteColourScheme = TRUE, latlim = latlim, shipOrPersonTime = j, nColours = 5)
+      discreteColourScheme = TRUE, latlim = latlim, shipOrPersonTime = j, nColours = 5,
+      na.in.legend = FALSE)
     assign(plt_name, p)
   }
 }
