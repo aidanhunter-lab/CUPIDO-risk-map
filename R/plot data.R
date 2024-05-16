@@ -77,7 +77,8 @@ set_plot_params(nc, DATA_sf, STATIONS_sf)
 make_background_map <- function(
     background, group, backgroundOnly = TRUE, stationsOnly = FALSE,
     stationPopSize = FALSE, eco = FALSE, trendType = 'unspecified',
-    ship_data = 'unspecified', pval_contours = FALSE, contourLineWidth = 0.25,
+    ship_data = 'unspecified', shipOrPersonTime = 'ship time',
+    pval_contours = FALSE, contourLineWidth = 0.25,
     ptStroke = 1, axisTextSize = 4, discreteColourScheme = FALSE,
     overlay_labels = NULL, latlim = NULL, nColours = NULL,
     background.na.remove = FALSE){
@@ -95,8 +96,8 @@ make_background_map <- function(
                 sst = subset(d, month == group),
                 pH = subset(d, month == group),
                 ship = switch(ship_data,
-                              summary = subset(d, ship_class == group),
-                              raw = subset(d, activity == group))
+                              summary = subset(d, ship_class == group & variable == shipOrPersonTime),
+                              raw = subset(d, activity == group & variable == shipOrPersonTime))
     )
     dat <- list(nc = nc, background = d, plastic = DATA_sf[0,],
                 stations = STATIONS_sf[0,], symbols = pltSymbols)
@@ -174,17 +175,19 @@ for(l in unique(pH_poly$metric)){
 }
 # Shipping
 for(l in unique(ship_poly$activity)){
-  d <- ship_poly[ship_poly$activity == l,]
-  i <- !all_cells$geometry %in% d$geometry
-  if(sum(i) == 0) next
-  j <- all_cells[i,]
-  j$activity <- l
-  j$value <- NA
-  j$year <- 'all'
-  ship_poly <- rbind(ship_poly, j)
-  ship_poly <- ship_poly[order(ship_poly$activity),]
+  for(m in unique(ship_poly$variable)){
+    d <- ship_poly[ship_poly$activity == l & ship_poly$variable == m,]
+    i <- !all_cells$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells[i,]
+    j$year <- 'all'
+    j$activity <- l
+    j$variable <- m
+    j$value <- NA
+    ship_poly <- rbind(ship_poly, j)
+    ship_poly <- ship_poly[order(ship_poly$activity, ship_poly$variable),]
+  }
 }
-
 
 # Chlorophyll
 background <- 'chl'
@@ -224,61 +227,100 @@ p_pH$plot_complete
 
 # Shipping
 background <- 'ship'
-ship_data = 'raw'
+ship_data <- 'raw'
 ship_class <- 'all'
-p_ship <- make_background_map(background, ship_class, ship_data = ship_data,
-                              discreteColourScheme = TRUE, latlim = latlim)
-p_ship$plot_complete
+metrics <- c('ship time', 'person time')
+p_ship_s <- make_background_map(background, ship_class, ship_data = ship_data,
+                              discreteColourScheme = TRUE, latlim = latlim,
+                              shipOrPersonTime = metrics[1])
+p_ship_p <- make_background_map(background, ship_class, ship_data = ship_data,
+                                discreteColourScheme = TRUE, latlim = latlim,
+                                shipOrPersonTime = metrics[2])
+p_ship_s$plot_complete
+p_ship_p$plot_complete
 
 # Shipping by vessel type
 axisTextSize <- 3
 ship_classes <- levels(ship_poly$activity)
 for(i in 1:length(ship_classes)){
   ship_class <- ship_classes[i]
-  plt_name <- paste0('p_ship_', ship_class)
-  p <- make_background_map(
-    background, ship_class, ship_data = ship_data, axisTextSize = axisTextSize,
-    discreteColourScheme = TRUE, latlim = latlim)
-  assign(plt_name, p)
+  plt_name0 <- paste0('p_ship_', ship_class)
+  for(j in metrics){
+    plt_name <- paste0(plt_name0, '_', substr(j,1,1))
+    p <- make_background_map(
+      background, ship_class, ship_data = ship_data, axisTextSize = axisTextSize,
+      discreteColourScheme = TRUE, latlim = latlim, shipOrPersonTime = j, nColours = 5)
+    assign(plt_name, p)
+  }
 }
 
-npanels <- 6
-rw <- c(0.9, 0.1)
-ra <- 2
-p_ship1 <- plot_grid(
-  p_ship_fishing$plot,
-  p_ship_fishing$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
-  rel_widths = rw)
-p_ship2 <- plot_grid(
-  p_ship_tourism$plot,
-  p_ship_tourism$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
-  rel_widths = rw)
-p_ship3 <- plot_grid(
-  p_ship_supply$plot,
-  p_ship_supply$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
-  rel_widths = rw)
-p_ship4 <- plot_grid(
-  p_ship_research$plot,
-  p_ship_research$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
-  rel_widths = rw)
-p_ship5 <- plot_grid(
-  p_ship_other$plot,
-  p_ship_other$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
-  rel_widths = rw)
-p_ship6 <- plot_grid(
-  p_ship_all$plot,
-  p_ship_all$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
-  rel_widths = rw)
+plotAllShipTypes <- function(metric){
+  shipPlots <- switch(metric,
+                      `ship time` = list(p_ship_fishing = p_ship_fishing_s,
+                                         p_ship_tourism = p_ship_tourism_s,
+                                         p_ship_supply = p_ship_supply_s,
+                                         p_ship_research = p_ship_research_s,
+                                         p_ship_other = p_ship_other_s,
+                                         p_ship_all = p_ship_all_s),
+                      `person time` = list(p_ship_fishing = p_ship_fishing_p,
+                                           p_ship_tourism = p_ship_tourism_p,
+                                           p_ship_supply = p_ship_supply_p,
+                                           p_ship_research = p_ship_research_p,
+                                           p_ship_other = p_ship_other_p,
+                                           p_ship_all = p_ship_all_p))
+  rw <- c(0.9, 0.1)
+  ra <- 2
+  return(list(
+    fishing = plot_grid(
+      shipPlots$p_ship_fishing$plot,
+      shipPlots$p_ship_fishing$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
+      rel_widths = rw),
+    tourism = plot_grid(
+      shipPlots$p_ship_tourism$plot,
+      shipPlots$p_ship_tourism$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
+      rel_widths = rw),
+   supply = plot_grid(
+      shipPlots$p_ship_supply$plot,
+      shipPlots$p_ship_supply$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
+      rel_widths = rw),
+    research = plot_grid(
+      shipPlots$p_ship_research$plot,
+      shipPlots$p_ship_research$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
+      rel_widths = rw),
+    other = plot_grid(
+      shipPlots$p_ship_other$plot,
+      shipPlots$p_ship_other$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
+      rel_widths = rw),
+    all = plot_grid(
+      shipPlots$p_ship_all$plot,
+      shipPlots$p_ship_all$legend + theme(plot.margin = unit(c(0,0,0,-ra), 'cm')),
+      rel_widths = rw)
+  ))
+}
 
+allShipPlots_s <- plotAllShipTypes(metrics[1])
+allShipPlots_p <- plotAllShipTypes(metrics[2])
+
+npanels <- 6
 nrw <- ceiling(npanels ^ 0.5)
 ncl <- ceiling(npanels / nrw)
 
-p_ship_combine <- plot_grid(
-  p_ship1, p_ship2, p_ship3, p_ship4, p_ship5, p_ship6,
+p_ship_combine_s <- plot_grid(
+  allShipPlots_s$fishing, allShipPlots_s$tourism, allShipPlots_s$supply,
+  allShipPlots_s$research, allShipPlots_s$other, allShipPlots_s$all,
   nrow = nrw, ncol = ncl, align = 'hv', axis = 'tblr',
   labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9,
   label_fontface = 2, label_fontfamily = 'serif')  + 
-  theme(plot.margin = unit(c(0,0,0,0), 'cm'),
+  theme(plot.margin = unit(c(0,0.5,0,0), 'cm'),
+        plot.background = element_rect(fill = 'white', colour = 'white'))
+
+p_ship_combine_p <- plot_grid(
+  allShipPlots_p$fishing, allShipPlots_p$tourism, allShipPlots_p$supply,
+  allShipPlots_p$research, allShipPlots_p$other, allShipPlots_p$all,
+  nrow = nrw, ncol = ncl, align = 'hv', axis = 'tblr',
+  labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9,
+  label_fontface = 2, label_fontfamily = 'serif')  + 
+  theme(plot.margin = unit(c(0,0.5,0,0), 'cm'),
         plot.background = element_rect(fill = 'white', colour = 'white'))
 
 A4_w <- 8.3 # A4 dimensions
@@ -288,8 +330,19 @@ sc_h <- 0.9
 pw <- sc_w * A4_w
 ph <- sc_h * A4_h
 
-fileName <- paste0('ship traffic data_', res, '.png')
-ggsave(fileName, plot = p_ship_combine, device = 'png', path = dir_plots, width = pw, height = ph, units = 'in')
+fileName <- paste0('ship traffic data_ship days_', res, '.png')
+ggsave(fileName, plot = p_ship_combine_s, device = 'png', path = dir_plots, width = pw, height = ph, units = 'in')
+
+A4_w <- 8.3 # A4 dimensions
+A4_h <- 11.7
+sc_w <- 1.45 # scaling factors
+sc_h <- 0.9
+pw <- sc_w * A4_w
+ph <- sc_h * A4_h
+
+fileName <- paste0('ship traffic data_person days_', res, '.png')
+ggsave(fileName, plot = p_ship_combine_p, device = 'png', path = dir_plots, width = pw, height = ph, units = 'in')
+
 
 
 # stations
@@ -339,13 +392,23 @@ p_sst_ <- plot_grid(p_sst$plot, p_sst$legend, rel_widths = rw) +
   theme(plot.margin = unit(c(0,0,0,0), 'cm'))
 p_pH_ <- plot_grid(p_pH$plot, p_pH$legend, rel_widths = rw) + 
   theme(plot.margin = unit(c(0,0,0,0), 'cm'))
-p_ship_ <- plot_grid(p_ship$plot, p_ship$legend, rel_widths = rw) + 
+p_ship_s_ <- plot_grid(p_ship_s$plot, p_ship_s$legend, rel_widths = rw) + 
+  theme(plot.margin = unit(c(0,0,0,0), 'cm'))
+p_ship_p_ <- plot_grid(p_ship_p$plot, p_ship_p$legend, rel_widths = rw) + 
   theme(plot.margin = unit(c(0,0,0,0), 'cm'))
 p_stations_ <- plot_grid(p_stations$plot, p_stations$legend, rel_widths = rw) + 
   theme(plot.margin = unit(c(0,0,0,0), 'cm'))
 
-p_all <- plot_grid(
-  p_chl_, p_krill_, p_sst_, p_pH_, p_ship_, p_stations_,
+p_all_s <- plot_grid(
+  p_chl_, p_krill_, p_sst_, p_pH_, p_ship_s_, p_stations_,
+  nrow = nrw, ncol = ncl, align = 'hv', axis = 'tblr',
+  labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9,
+  label_fontface = 2, label_fontfamily = 'serif') + 
+  theme(plot.margin = unit(c(0,0,0,0), 'cm'),
+        plot.background = element_rect(fill = 'white', colour = 'white'))
+
+p_all_p <- plot_grid(
+  p_chl_, p_krill_, p_sst_, p_pH_, p_ship_p_, p_stations_,
   nrow = nrw, ncol = ncl, align = 'hv', axis = 'tblr',
   labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9,
   label_fontface = 2, label_fontfamily = 'serif') + 
@@ -359,8 +422,12 @@ sc_h <- 1.2
 pw <- sc_w * A4_w
 ph <- sc_h * A4_h
 
-fileName <- paste0('environ background data_', res, '.png')
-ggsave(fileName, plot = p_all, device = 'png', path = dir_plots, width = pw,
+fileName <- paste0('environ background data_ship days_', res, '.png')
+ggsave(fileName, plot = p_all_s, device = 'png', path = dir_plots, width = pw,
+       height = ph, units = 'in')
+
+fileName <- paste0('environ background data_person days_', res, '.png')
+ggsave(fileName, plot = p_all_p, device = 'png', path = dir_plots, width = pw,
        height = ph, units = 'in')
 
 

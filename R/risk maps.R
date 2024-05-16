@@ -56,11 +56,11 @@ if(!ggnewscale_available){
 }
 
 # mmtable2 may be useful for displaying ranking values...
-mmtable2_available <- require(mmtable2, quietly = TRUE)
-if(!mmtable2_available){
-  install_github("ianmoran11/mmtable2")
-  library(mmtable2)
-}
+# mmtable2_available <- require(mmtable2, quietly = TRUE)
+# if(!mmtable2_available){
+#   install_github("ianmoran11/mmtable2")
+#   library(mmtable2)
+# }
 
 library(this.path)
 
@@ -78,6 +78,10 @@ if(!dir.exists(dir_plots)) dir.create(dir_plots)
 source('functions.R') 
 
 # Load and filter data ----------------------------------------------------
+
+nranks <- 5 # number of risk categories
+showNA <- TRUE
+na.colour <- 'grey40'
 
 significantTrendsOnly <- TRUE
 loadTooltipFromFile <- TRUE
@@ -108,11 +112,83 @@ if(!is.null(sst_poly$month))
 if(!is.null(pH_poly$month))
   pH <- subset(pH_poly, month == mon) else
     pH <- pH_poly
-      
+
 ship_type <- 'all'
 ship <- subset(ship_poly, activity == ship_type)
 
-nranks <- 5 # number of risk categories
+chl_na <- chl
+krill_na <- krill
+sst_na <- sst
+pH_na <- pH
+ship_na <- ship
+
+if(showNA){
+  all_cells <- unique(sst[,c('geometry','cell_index')])
+  # Chlorophyll
+  for(l in unique(chl$month)){
+    d <- chl_na[chl_na$month == l,]
+    i <- !all_cells$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells[i,]
+    j$month <- l
+    j$value <- NA
+    chl_na <- rbind(chl_na, j)
+    chl_na <- chl_na[order(chl_na$month),]
+  }
+  # Krill
+  for(l in unique(krill$month)){
+    d <- krill_na[krill_na$month == l,]
+    i <- !all_cells$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells[i,]
+    j$month <- l
+    j$value <- NA
+    j$colourgroup <- NA
+    krill_na <- rbind(krill_na, j)
+    krill_na <- krill_na[order(krill_na$month),]
+  }
+  # Sea surface temperature
+  for(l in unique(sst$metric)){
+    d <- sst_na[sst_na$metric == l,]
+    i <- !all_cells$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells[i,]
+    j$metric <- l
+    j$value <- NA
+    j$pval <- NA
+    j$plevel <- NA
+    sst_na <- rbind(sst_na, j)
+    sst_na <- sst_na[order(sst_na$metric),]
+  }
+  # pH
+  for(l in unique(pH$metric)){
+    d <- pH_na[pH_na$metric == l,]
+    i <- !all_cells$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells[i,]
+    j$metric <- l
+    j$value <- NA
+    j$pval <- NA
+    j$plevel <- NA
+    pH_na <- rbind(pH_na, j)
+    pH_na <- pH_na[order(pH_na$metric),]
+  }
+  # Shipping
+  for(l in unique(ship$activity)){
+    for(m in unique(ship$variable)){
+      d <- ship_na[ship_na$activity == l & ship_na$variable == m,]
+      i <- !all_cells$geometry %in% d$geometry
+      if(sum(i) == 0) next
+      j <- all_cells[i,]
+      j$year <- 'all'
+      j$activity <- l
+      j$variable <- m
+      j$value <- NA
+      ship_na <- rbind(ship_na, j)
+      ship_na <- ship_na[order(ship_na$activity, ship_na$variable),]
+    }
+  }
+}
 
 
 # Chlorophyll -------------------------------------------------------------
@@ -147,7 +223,16 @@ for(i in 1:nranks){
 
 chl$rank <- score2rank(chl$score)
 
-plt_chl <- plot_fun(chl, Title = 'Chlorophyll', legend_title = 'prevalence')
+# Get values in the NA data frame
+x <- rep(NA, max(chl_na$cell_index))
+y <- x
+y[chl$cell_index] <- chl$score
+chl_na$score <- y[chl_na$cell_index]
+y <- x
+y[chl$cell_index] <- chl$rank
+chl_na$rank <- y[chl_na$cell_index]
+
+plt_chl <- plot_fun(chl_na, Title = 'Chlorophyll', legend_title = 'prevalence')
 plt_chl$plot
 
 # Nice plot of raw data
@@ -165,8 +250,11 @@ plt_chl_raw <-
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
   annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
   xlab(expression(grid ~ cell ~ index)) +
-  ylab(expression(chlorophyll ~ abundance ~ (mg / m^3))) +
-  scale_y_continuous(trans = 'log10', labels = function(x) format(x, scientific = FALSE)) +
+  ylab(expression(chlorophyll ~ abundance ~ (mg ~ m^{'-3'}))) +
+  scale_y_continuous(trans = 'log10', labels = function(x){
+    f <- format(x, scientific = FALSE)
+    while(any(grepl(' ', f))) f <- gsub(' ', '', f)
+    f}) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
@@ -181,19 +269,20 @@ plt_chl_raw <-
 
 # Specify values for data rankings by observation of data distribution.
 
-x <- {1:nrow(krill)} / nrow(krill)
 y <- sort(krill$value)
+x <- {1:length(y)} / length(y)
+
 par(mfrow = c(1,1))
 plot(x, y)
 plot(x, y, log = 'y')
 
 zero_krill <- krill$value == 0
-observed_krill <- !zero_krill
+observed_krill <- krill$value > 0
 
 krill_p <- krill[observed_krill,] # positive values
 
-x_p <- {1:nrow(krill_p)} / nrow(krill_p)
 y_p <- sort(krill_p$value)
+x_p <- {1:length(y_p)} / length(y_p)
 plot(x_p, y_p)
 plot(x_p, y_p, log = 'y')
 
@@ -222,7 +311,16 @@ for(i in 1:nranks){
 
 krill$rank <- score2rank(krill$score)
 
-plt_krill <- plot_fun(krill, Title = 'Krill', legend_title = 'prevalence')
+# Get values in the NA data frame
+x <- rep(NA, max(krill_na$cell_index))
+y <- x
+y[krill$cell_index] <- krill$score
+krill_na$score <- y[krill_na$cell_index]
+y <- x
+y[krill$cell_index] <- krill$rank
+krill_na$rank <- y[krill_na$cell_index]
+
+plt_krill <- plot_fun(krill_na, Title = 'Krill', legend_title = 'prevalence')
 plt_krill$plot
 
 
@@ -241,9 +339,11 @@ plt_krill_raw <-
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
   annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
   xlab(expression(grid ~ cell ~ index)) +
-  ylab(expression(krill ~ abundance ~ (individuals / m^2))) +
-  # scale_y_continuous(trans = scales::pseudo_log_trans(base = 10)) + 
-  scale_y_continuous(trans = 'log10', labels = function(x) format(x, scientific = FALSE)) +
+  ylab(expression(krill ~ abundance ~ (individuals ~ m^{'-2'}))) +
+  scale_y_continuous(trans = 'log10', labels = function(x){
+    f <- format(x, scientific = FALSE)
+    while(any(grepl(' ', f))) f <- gsub(' ', '', f)
+    f}) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
@@ -297,7 +397,16 @@ for(i in 1:nranks){
 
 sst$rank <- score2rank(sst$score)
 
-plt_sst <- plot_fun(sst, Title = 'SST rising trends', legend_title = 'stress')
+# Get values in the NA data frame
+x <- rep(NA, max(sst_na$cell_index))
+y <- x
+y[sst$cell_index] <- sst$score
+sst_na$score <- y[sst_na$cell_index]
+y <- x
+y[sst$cell_index] <- sst$rank
+sst_na$rank <- y[sst_na$cell_index]
+
+plt_sst <- plot_fun(sst_na, Title = 'SST rising trends', legend_title = 'stress')
 plt_sst$plot
 
 # Nice plot of raw data
@@ -316,7 +425,7 @@ plt_sst_raw <-
   annotate('text', x = 1, y = r[3:nranks], label = as.character(r[3:nranks]), vjust = 0, hjust = 0) +
   annotate('text', x = 1, y = r[2], label = as.character(r[2]), vjust = 1, hjust = 0) +
   xlab(expression(grid ~ cell ~ index)) +
-  ylab(expression(SST ~ trend ~ (degree * C / year))) +
+  ylab(expression(SST ~ trend ~ (degree * C ~ year^{'-1'}))) +
   # scale_y_continuous(trans = 'sqrt', labels = function(x) format(x, scientific = FALSE)) +
   # scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
   theme_bw() +
@@ -364,7 +473,16 @@ for(i in 1:nranks){
 pH <- pH[pH_selected_cells,]
 pH$rank <- score2rank(pH$score)
 
-plt_pH <- plot_fun(pH, Title = 'pH declining trends', legend_title = 'stress')
+# Get values in the NA data frame
+x <- rep(NA, max(pH_na$cell_index))
+y <- x
+y[pH$cell_index] <- pH$score
+pH_na$score <- y[pH_na$cell_index]
+y <- x
+y[pH$cell_index] <- pH$rank
+pH_na$rank <- y[pH_na$cell_index]
+
+plt_pH <- plot_fun(pH_na, Title = 'pH declining trends', legend_title = 'stress')
 plt_pH$plot
 
 # Nice plot of raw data
@@ -382,75 +500,10 @@ plt_pH_raw <-
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
   annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
   xlab(expression(grid ~ cell ~ index)) +
-  ylab(expression(pH ~ trend ~ (1 / year))) +
-  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+  ylab(expression(pH ~ trend ~ (year^{'-1'}))) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
-
-
-# Shipping ----------------------------------------------------------------
-
-x <- {1:nrow(ship)} / nrow(ship)
-y <- sort(ship$value)
-par(mfrow = c(1,1))
-plot(x, y)
-plot(x, y, log = 'y')
-
-y_ <- y[y >= 1] # data less than 1 is lowest rank
-x_ <- 1:length(y_)
-plot(x_, y_, log = 'y')
-y_r <- y_[-c({length(y_)-3}:length(y_))] # omit outliers
-x_r <- 1:length(y_r)
-plot(x_r, y_r, log = 'y')
-
-yl <- log10(y_r)
-r <- 10 ^ seq(min(yl), max(yl), length = nranks)
-r[1] <- 1
-r <- c(0, r)
-r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10} # round to nice values
-r[nranks + 1] <- max(y) # include outliers
-plot(x, y, log = 'y')
-abline(h = r)
-
-rank_limits_ship <- r
-
-for(i in 1:nranks){
-  if(i < nranks){
-    j <- r[i] <= ship$value & ship$value < r[i+1]} else{
-      j <- r[i] <= ship$value & ship$value <= r[i+1]
-    }
-  v <- ship$value[j]
-  p <- r[i:{i+1}]
-  ship$score[j] <- {i-1} + {v - r[i]} / diff(p)
-}
-
-ship$rank <- score2rank(ship$score)
-
-plt_ship <- plot_fun(ship, Title = 'Ship traffic', legend_title = 'activity')
-plt_ship$plot
-
-# Nice plot of raw data
-ship$order <- 1:nrow(ship)
-ship <- ship[order(ship$value),]
-ship$index <- 1:nrow(ship)
-ship <- ship[order(ship$order),]
-
-plt_ship_raw <- 
-  ggplot(ship) + 
-  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
-  scale_colour_viridis_c(name = 'activity', guide = 'legend') +
-  scale_fill_viridis_c(name = 'activity', guide = 'legend') +
-  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
-  geom_hline(yintercept = r[2:nranks], linetype = 3) +
-  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
-  xlab(expression(grid ~ cell ~ index)) +
-  ylab(expression(ship ~ traffic ~ (ship ~ days / year))) +
-  scale_y_continuous(trans = 'log10', labels = function(x) format(x, scientific = FALSE)) +
-  theme_bw() +
-  theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
-        panel.grid = element_blank())
-
 
 
 # Facilities --------------------------------------------------------------
@@ -650,15 +703,15 @@ for(i in 1:length(cellsWithFacilities)){
   }
 }
 
-# Sum over facilities to get population density per grid cell
+# Sum over facilities to get population density (people / km2) per grid cell
 popDensity_cell <- apply(popDensity_cell, 1, sum)
 grid_cells$popDensity <- popDensity_cell
-# Scale units to get people / 10,000 km^2
-grid_cells$popDensity <- 1e4 * grid_cells$popDensity
+# Scale units to get person days / year / 10,000 km2
+grid_cells$popDensity <- 365 * 1e4 * grid_cells$popDensity
 
 # As with previous data, specify some ranking for disturbance in grid cells associated
 # with population density.
-y <- sort(grid_cells$popDensity) # people / 10000 km^2
+y <- sort(grid_cells$popDensity) # person days / year / 10000 km^2
 x <- 1:length(y)
 
 # Cells with zero population density are not assigned a rank and will not appear
@@ -667,7 +720,7 @@ y_ <- y[y>0]
 x_ <- 1:length(y_)
 plot(x_, y_, log = 'y')
 
-y_r <- y_[1:{length(y_)-3}] # omit three large outliers
+y_r <- y_[1:{length(y_)-2}] # omit three large outliers
 x_r <- 1:length(y_r)
 
 rlo <- floor(y_r[1] / orderOfMagnitude(y_r[1])) * orderOfMagnitude(y_r[1])
@@ -680,12 +733,11 @@ rank_limits_stations[c(1,nranks+1)] <- range(y) # account for outliers
 abline(h = rank_limits_stations)
 
 # Manually specify ranking limits
-if(is.null(distanceLimit))
-  rank_limits_stations <- c(0.001, 0.01, 0.1, 1, 10, 200)
-
-if(!is.null(distanceLimit))
-  if(distanceLimit == 1000)
-    rank_limits_stations <- c(0.0001, 0.01, 0.1, 1, 10, 200)
+# if(is.null(distanceLimit))
+#   rank_limits_stations <- c(0.001, 0.01, 0.1, 1, 10, 200)
+# if(!is.null(distanceLimit))
+#   if(distanceLimit == 1000)
+#     rank_limits_stations <- c(0.0001, 0.01, 0.1, 1, 10, 200)
 
 r <- rank_limits_stations
 
@@ -712,8 +764,8 @@ grid_cells_reduced <- grid_cells[grid_cells$rank %in% 1:nranks,]
 pltStations <- plot_fun_stations(data_stations = stations, data_grid_cells = grid_cells_reduced, rank_limits_PopSize = rank_limits_stationPopSize, Title = 'Facilities')
 pltStations$plot
 
-grid.arrange(plt_ship$plot + theme(legend.position = 'none'), pltStations$plot + theme(legend.position = 'none'), pltStations$legend,
-             ncol = 3, widths = c(0.425,0.425,0.15))
+# grid.arrange(plt_ship$plot + theme(legend.position = 'none'), pltStations$plot + theme(legend.position = 'none'), pltStations$legend,
+#              ncol = 3, widths = c(0.425,0.425,0.15))
 
 
 # Nice plot of raw data
@@ -731,11 +783,456 @@ plt_stations_raw <-
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
   annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
   xlab(expression(grid ~ cell ~ index)) +
-  ylab(expression(pop. ~ density ~ (people / 10000 ~ km^2))) +
-  scale_y_continuous(trans = 'log10', labels = function(x) format(x, scientific = FALSE)) +
+  ylab(expression(pop. ~ density ~ (PD ~ y ^ {'-1'} ~ (10^4 ~ km^2) ^ {'-1'}))) +
+  scale_y_continuous(trans = 'log10', labels = function(x){
+    f <- format(x, scientific = FALSE)
+    while(any(grepl(' ', f))) f <- gsub(' ', '', f)
+    f}) +
   theme_bw() +
   theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
         panel.grid = element_blank())
+
+grid_cells_reduced_stations <- grid_cells_reduced
+
+# Shipping ----------------------------------------------------------------
+
+# Ship traffic may be analysed in terms of ship days or person days per year per
+# area. Choosing person days allows more direct comparison with the facility data,
+# however, comparing the person days will also involve some infilling.
+
+# Choose metric: ship time or person time
+metric <- 'ship time'
+ship_ <- ship
+ship <- ship_[ship_$variable == metric,]
+
+x <- {1:nrow(ship)} / nrow(ship)
+y <- sort(ship$value)
+par(mfrow = c(1,1))
+plot(x, y)
+plot(x, y, log = 'y')
+
+y_ <- y[y >= 1] # data less than 1 is lowest rank
+x_ <- 1:length(y_)
+plot(x_, y_, log = 'y')
+y_r <- y_[-c({length(y_)-3}:length(y_))] # omit outliers
+x_r <- 1:length(y_r)
+plot(x_r, y_r, log = 'y')
+
+yl <- log10(y_r)
+r <- 10 ^ seq(min(yl), max(yl), length = nranks)
+r[1] <- 1
+r <- c(0, r)
+r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10} # round to nice values
+r[nranks + 1] <- max(y) # include outliers
+plot(x, y, log = 'y')
+abline(h = r)
+
+rank_limits_ship <- r
+
+for(i in 1:nranks){
+  if(i < nranks){
+    j <- r[i] <= ship$value & ship$value < r[i+1]} else{
+      j <- r[i] <= ship$value & ship$value <= r[i+1]
+    }
+  v <- ship$value[j]
+  p <- r[i:{i+1}]
+  ship$score[j] <- {i-1} + {v - r[i]} / diff(p)
+}
+
+ship$rank <- score2rank(ship$score)
+
+# Get values in the NA data frame
+x <- rep(NA, max(ship_na$cell_index))
+y <- x
+y[ship$cell_index] <- ship$score
+ship_na$score <- y[ship_na$cell_index]
+y <- x
+y[ship$cell_index] <- ship$rank
+ship_na$rank <- y[ship_na$cell_index]
+
+plt_ship <- plot_fun(ship_na, Title = 'Ship traffic', legend_title = 'activity')
+plt_ship$plot
+
+# Nice plot of raw data
+ship$order <- 1:nrow(ship)
+ship <- ship[order(ship$value),]
+ship$index <- 1:nrow(ship)
+ship <- ship[order(ship$order),]
+
+plt_ship_raw <- 
+  ggplot(ship) + 
+  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'activity', guide = 'legend') +
+  scale_fill_viridis_c(name = 'activity', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
+  geom_hline(yintercept = r[2:nranks], linetype = 3) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
+  ylab(expression(ship ~ traffic ~ (ship ~ days ~ year ^ {-1}))) +
+  scale_y_continuous(trans = 'log10', labels = function(x){
+    f <- format(x, scientific = FALSE)
+    while(any(grepl(' ', f))) f <- gsub(' ', '', f)
+    f}) +
+  theme_bw() +
+  theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
+        panel.grid = element_blank())
+
+ship_s <- ship
+plt_ship_s <- plt_ship
+plt_ship_raw_s <- plt_ship_raw
+
+# Now the person time metric -- first as above, then following the facility method
+metric <- 'person time'
+ship <- ship_[ship_$variable == metric,]
+
+x <- {1:nrow(ship)} / nrow(ship)
+y <- sort(ship$value)
+par(mfrow = c(1,1))
+plot(x, y)
+plot(x, y, log = 'y')
+
+y_r <- y[-c(1, {length(y)-2}:length(y))] # omit outliers
+x_r <- 1:length(y_r)
+plot(x_r, y_r, log = 'y')
+
+yl <- log10(y_r)
+r <- 10 ^ seq(min(yl), max(yl), length = nranks + 1)
+# r[1] <- 1
+# r <- c(0, r)
+r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10} # round to nice values
+r[1] <- min(y) # include outliers
+r[nranks + 1] <- max(y) # include outliers
+plot(x, y, log = 'y')
+abline(h = r)
+
+rank_limits_ship <- r
+
+for(i in 1:nranks){
+  if(i < nranks){
+    j <- r[i] <= ship$value & ship$value < r[i+1]} else{
+      j <- r[i] <= ship$value & ship$value <= r[i+1]
+    }
+  v <- ship$value[j]
+  p <- r[i:{i+1}]
+  ship$score[j] <- {i-1} + {v - r[i]} / diff(p)
+}
+
+ship$rank <- score2rank(ship$score)
+
+# Get values in the NA data frame
+x <- rep(NA, max(ship_na$cell_index))
+y <- x
+y[ship$cell_index] <- ship$score
+ship_na$score <- y[ship_na$cell_index]
+y <- x
+y[ship$cell_index] <- ship$rank
+ship_na$rank <- y[ship_na$cell_index]
+
+plt_ship <- plot_fun(ship_na, Title = 'Ship traffic', legend_title = 'activity')
+plt_ship$plot
+
+# Nice plot of raw data
+ship$order <- 1:nrow(ship)
+ship <- ship[order(ship$value),]
+ship$index <- 1:nrow(ship)
+ship <- ship[order(ship$order),]
+
+plt_ship_raw <- 
+  ggplot(ship) + 
+  geom_point(aes(x = index, y = value, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'activity', guide = 'legend') +
+  scale_fill_viridis_c(name = 'activity', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
+  geom_hline(yintercept = r[2:nranks], linetype = 3) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
+  ylab(expression(ship ~ traffic ~ (person ~ days ~ year ^ {-1}))) +
+  scale_y_continuous(trans = 'log10', labels = function(x){
+    f <- format(x, scientific = FALSE)
+    while(any(grepl(' ', f))) f <- gsub(' ', '', f)
+    f}) +
+  theme_bw() +
+  theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
+        panel.grid = element_blank())
+
+ship_p <- ship
+plt_ship_p <- plt_ship
+plt_ship_raw_p <- plt_ship_raw
+
+# Now estimate ship-based person days for all grid cells using the area calculations
+# from the Facilities section
+grid_cells <- st_transform(grid_cells_all, crs = crs_world)
+grid_centroids <- st_centroid(grid_cells)
+
+# Get lat-lon coords of grid cells with ship traffic
+ship <- st_transform(ship, crs = crs_world)
+xy <- ship$geometry
+xy <- st_centroid(xy) # get the lon-lats of each ship grid cell
+ship$lon <- xy$X
+ship$lat <- xy$Y
+
+# Data dimensions
+ngrid_cells <- nrow(grid_cells)
+nshipcells <- nrow(ship)
+
+# Find distances between ship cells and all grid cell centroids
+dist2cells <- st_distance(grid_centroids, ship)
+if(attr(dist2cells, 'units')$numerator == 'm') dist2cells <- dist2cells * 1e-3 # convert m to km
+dist2cells <- matrix(as.numeric(dist2cells), nrow = ngrid_cells, ncol = nshipcells) # convert class to standard matrix
+minDist2cell <- apply(dist2cells, 2, min) # distance (km) of facility to nearest grid cell
+nearest_cell <- apply(dist2cells, 2, which.min)
+shipInCells <- st_intersection(ship, grid_cells) # all ship cells within a mapped grid cell
+ind <- ship$order %in% shipInCells$order
+# Indicate the grid cell containing each facility - NA indicates inland facilities not contained in a grid cell
+ship$cell_index[ind] <- grid_centroids$cell_index[nearest_cell[ind]]
+
+# List the ships contained within each grid cell
+cellsWithShips <- sort(unique(ship$cell_index))
+shipsInCell <- vector('list', length = ngrid_cells)
+for(i in 1:length(cellsWithShips)){
+  cell <- cellsWithShips[i]
+  ships <- which(ship$cell_index == cell)
+  shipsInCell[[cell]] <- ships
+}
+grid_cells$ships <- shipsInCell # NULL values indicate grid cells not containing facilities
+
+# Get grid cell areas
+grid_cell_area <- st_area(grid_cells)
+if(all(attr(grid_cell_area, 'units')$numerator == 'm')) grid_cell_area <-
+  grid_cell_area * 1e-6 # convert m^2 to km^2
+grid_cells$area <- as.numeric(grid_cell_area)
+
+# Area of the circles centred on ship cells and intersecting all grid cell centroids
+ship2cellCircleArea <- circleAreaOnGlobe(dist2cells, distanceLimit = distanceLimit) # km^2
+# Population density (person days / year / km^2) within circle centered at facility and intersecting grid cells
+popDensity_circle <- sweep(1 / ship2cellCircleArea, 2, ship$value, '*')
+# Scaling factor -- ratio of grid cell area to circle area
+cell2circleAreaRatio <- sweep(1 / ship2cellCircleArea, 1, grid_cells$area, '*')
+# Given that circles intersect centroids of grid cells, we need another scaling
+# factor representing the approximate(?) fraction of grid cell contained in circle
+modAreaRatio <- 0.393
+# Each ship cell's contribution to grid cell population density (person day / year / km^2)
+popDensity_cell <- modAreaRatio * cell2circleAreaRatio * popDensity_circle
+
+# The above method is appropriate only for grid cells that are distant from ship cells.
+# The method breaks down for the grid cells containing ships, but for these
+# cells we can directly calculate population density.
+# For each cell containing ships, recalculate the population density
+for(i in 1:length(cellsWithShips)){
+  cell <- cellsWithShips[i]
+  ind <- grid_cells$cell_index == cell
+  a <- grid_cells$area[ind]
+  ships <- grid_cells$ships[[cell]]
+  for(j in 1:length(ships)){
+    s <- ships[j]
+    pop <- ship$value[s]
+    popDensity <- pop / a
+    popDensity_cell[ind,s] <- popDensity
+  }
+}
+
+# Sum over ship cells to get population density per grid cell
+popDensity_cell <- apply(popDensity_cell, 1, sum)
+grid_cells$popDensity <- popDensity_cell
+# Scale units to get person days / year / 10,000 km^2
+grid_cells$popDensity <- 1e4 * grid_cells$popDensity
+
+# As with previous data, specify some ranking for disturbance in grid cells associated
+# with population density.
+y <- sort(grid_cells$popDensity) # person days / year / 10000 km^2
+x <- 1:length(y)
+
+# Cells with zero population density are not assigned a rank and will not appear
+# on the map. This only applies when distanceLimit is set.
+y_ <- y[y>0]
+x_ <- 1:length(y_)
+plot(x_, y_, log = 'y')
+
+y_r <- y_[1:{length(y_)-8}] # omit 9 large outliers
+x_r <- 1:length(y_r)
+
+rlo <- floor(y_r[1] / orderOfMagnitude(y_r[1])) * orderOfMagnitude(y_r[1])
+rhi <- floor(y_r[length(y_r)] / orderOfMagnitude(y_r[length(y_r)])) * orderOfMagnitude(y_r[length(y_r)])
+
+rank_limits_ship <- 10 ^ seq(log10(rlo), log10(rhi), length = nranks + 1)
+rank_limits_ship <- round(rank_limits_ship / {orderOfMagnitude(rank_limits_ship) / 10}) * {orderOfMagnitude(rank_limits_ship) / 10}
+rank_limits_ship[c(1,nranks+1)] <- range(y) # account for outliers
+
+abline(h = rank_limits_ship)
+
+# Manually specify ranking limits
+# if(is.null(distanceLimit))
+#   rank_limits_stations <- c(0.001, 0.01, 0.1, 1, 10, 200)
+# if(!is.null(distanceLimit))
+#   if(distanceLimit == 1000)
+#     rank_limits_stations <- c(0.0001, 0.01, 0.1, 1, 10, 200)
+
+r <- rank_limits_ship
+
+# Assign disturbance ranks to each grid cell
+for(i in 1:nranks){
+  if(i < nranks){
+    j <- r[i] <= grid_cells$popDensity & grid_cells$popDensity < r[i+1]} else{
+      j <- r[i] <= grid_cells$popDensity & grid_cells$popDensity <= r[i+1]
+    }
+  v <- grid_cells$popDensity[j]
+  p <- r[i:{i+1}]
+  grid_cells$score[j] <- {i-1} + {v - r[i]} / diff(p)
+}
+grid_cells$rank <- score2rank(grid_cells$score)
+
+# Convert to coordinate reference system used in plots
+ship <- st_transform(ship, crs = crs_use)
+grid_cells <- st_transform(grid_cells, crs = crs_use)
+
+# Omit cells with unspecified rank -- only applies when distanceLimit is set.
+grid_cells_reduced <- grid_cells[grid_cells$rank %in% 1:nranks,]
+
+# Make plots
+plt_ship <- plot_fun(grid_cells, Title = 'Ship traffic', legend_title = 'activity')
+plt_ship$plot
+
+# grid.arrange(plt_ship$plot + theme(legend.position = 'none'), pltStations$plot + theme(legend.position = 'none'), pltStations$legend,
+#              ncol = 3, widths = c(0.425,0.425,0.15))
+
+
+# Nice plot of raw data
+grid_cells_reduced$order <- 1:nrow(grid_cells_reduced)
+grid_cells_reduced <- grid_cells_reduced[order(grid_cells_reduced$popDensity),]
+grid_cells_reduced$index <- 1:nrow(grid_cells_reduced)
+grid_cells_reduced <- grid_cells_reduced[order(grid_cells_reduced$order),]
+
+plt_ship_raw <- 
+  ggplot(grid_cells_reduced) + 
+  geom_point(aes(x = index, y = popDensity, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'activity', guide = 'legend') +
+  scale_fill_viridis_c(name = 'activity', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
+  geom_hline(yintercept = r[2:nranks], linetype = 3) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
+  ylab(expression(ship ~ traffic ~ (PD ~ y^{'-1'} * (10^4 ~ km^2)^{'-1'}))) +
+  scale_y_continuous(trans = 'log10', labels = function(x){
+    f <- format(x, scientific = FALSE)
+    while(any(grepl(' ', f))) f <- gsub(' ', '', f)
+    f}) +
+  theme_bw() +
+  theme(axis.text.y = element_text(angle = 90, hjust = 0.5),
+        panel.grid = element_blank())
+
+grid_cells_reduced_ship <- grid_cells_reduced
+plt_ship_p_smooth <- plt_ship
+plt_ship_raw_p_smooth <- plt_ship_raw
+
+
+# Facilities & shipping -- harmonise units --------------------------------
+
+stations_c <- grid_cells_reduced_stations
+ship_c <- grid_cells_reduced_ship
+
+# merge values from both data sets (both have unit person days / year / 10,000 km2)
+y <- sort(setNames(c(stations_c$popDensity, ship_c$popDensity),
+              c(rep('station', nrow(stations_c)), rep('ship', nrow(ship_c)))))
+x <- 1:length(y)
+plot(x, y, col = as.factor(names(y)))
+plot(x, y, log = 'y', col = as.factor(names(y)))
+
+# Cells with zero population density are not assigned a rank and will not appear
+# on the map. This only applies when distanceLimit is set.
+y_ <- y[y>0]
+x_ <- 1:length(y_)
+
+y_r <- y_[4:{length(y_)-1}] # omit outliers
+x_r <- 1:length(y_r)
+
+rlo <- floor(y_r[1] / orderOfMagnitude(y_r[1])) * orderOfMagnitude(y_r[1])
+rhi <- floor(y_r[length(y_r)] / orderOfMagnitude(y_r[length(y_r)])) * orderOfMagnitude(y_r[length(y_r)])
+
+rank_limits_stations_ships <- 10 ^ seq(log10(rlo), log10(rhi), length = nranks+1)
+rank_limits_stations_ships <- round(rank_limits_stations_ships / {orderOfMagnitude(rank_limits_stations_ships) / 10}) * {orderOfMagnitude(rank_limits_stations_ships) / 10}
+rank_limits_stations_ships[c(1,nranks+1)] <- range(y) # account for outliers
+
+abline(h = rank_limits_stations_ships)
+
+# Choose rounded values based on rank_limits_stations_ships
+r <- rank_limits_stations_ships
+r[2:nranks] <- c(5, 25, 150, 1500)
+
+# Assign disturbance ranks to each grid cell
+for(i in 1:nranks){
+  if(i < nranks){
+    jf <- r[i] <= stations_c$popDensity & stations_c$popDensity < r[i+1]
+    js <- r[i] <= ship_c$popDensity & ship_c$popDensity < r[i+1]
+  }else{
+      jf <- r[i] <= stations_c$popDensity & stations_c$popDensity <= r[i+1]
+      js <- r[i] <= ship_c$popDensity & ship_c$popDensity <= r[i+1]
+  }
+  vf <- stations_c$popDensity[jf]
+  vs <- ship_c$popDensity[js]
+  p <- r[i:{i+1}]
+  stations_c$score[jf] <- {i-1} + {vf - r[i]} / diff(p)
+  ship_c$score[js] <- {i-1} + {vs - r[i]} / diff(p)
+}
+stations_c$rank <- score2rank(stations_c$score)
+ship_c$rank <- score2rank(ship_c$score)
+
+# Convert to coordinate reference system used in plots
+stations_c <- st_transform(stations_c, crs = crs_use)
+ship_c <- st_transform(ship_c, crs = crs_use)
+
+# Omit cells with unspecified rank -- only applies when distanceLimit is set.
+stations_c_reduced <- stations_c[stations_c$rank %in% 1:nranks,]
+ship_c_reduced <- ship_c[ship_c$rank %in% 1:nranks,]
+
+# Make plots
+pltStations_c <- plot_fun_stations(data_stations = stations, data_grid_cells = stations_c_reduced, rank_limits_PopSize = rank_limits_stationPopSize, Title = 'Facilities')
+pltStations_c$plot
+
+plt_ship_c <- plot_fun(ship_c_reduced, Title = 'Ship traffic', legend_title = 'activity')
+plt_ship_c$plot
+
+# Nice plot of raw data
+stations_c_reduced$order <- 1:nrow(stations_c_reduced)
+stations_c_reduced <- stations_c_reduced[order(stations_c_reduced$popDensity),]
+stations_c_reduced$index <- 1:nrow(stations_c_reduced)
+stations_c_reduced <- stations_c_reduced[order(stations_c_reduced$order),]
+ship_c_reduced$order <- 1:nrow(ship_c_reduced)
+ship_c_reduced <- ship_c_reduced[order(ship_c_reduced$popDensity),]
+ship_c_reduced$index <- 1:nrow(ship_c_reduced)
+ship_c_reduced <- ship_c_reduced[order(ship_c_reduced$order),]
+
+yl <- range(y)
+
+plt_stations_c_raw <- 
+  ggplot(stations_c_reduced) + 
+  geom_point(aes(x = index, y = popDensity, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'activity', guide = 'legend') +
+  scale_fill_viridis_c(name = 'activity', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
+  geom_hline(yintercept = r[2:nranks], linetype = 3) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
+  ylab(expression(pop. ~ density ~ (PD ~ y ^ {'-1'} ~ (10^4 ~ km^2) ^ {'-1'}))) +
+  scale_y_continuous(trans = 'log10', limits = yl) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text.y = element_text(angle = 90, hjust = 0.5))
+
+plt_ship_c_raw <- 
+  ggplot(ship_c_reduced) + 
+  geom_point(aes(x = index, y = popDensity, fill = rank, colour = rank), shape = 21, size = 3, alpha = 0.8) +
+  scale_colour_viridis_c(name = 'activity', guide = 'legend') +
+  scale_fill_viridis_c(name = 'activity', guide = 'legend') +
+  guides(fill = guide_legend(reverse = TRUE), colour = guide_legend(reverse = TRUE)) +
+  geom_hline(yintercept = r[2:nranks], linetype = 3) +
+  annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
+  xlab(expression(grid ~ cell ~ index)) +
+  ylab(expression(ship ~ traffic ~ (PD ~ y ^ {'-1'} ~ (10^4 ~ km^2) ^ {'-1'}))) +
+  scale_y_continuous(trans = 'log10', limits = yl) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), axis.text.y = element_text(angle = 90, hjust = 0.5))
+
+plt_stations_c_raw
+plt_ship_c_raw
 
 
 # Combine -----------------------------------------------------------------
@@ -743,6 +1240,34 @@ plt_stations_raw <-
 #~~~~~~~~~~~~~~~~~~
 # Combine all plots
 #~~~~~~~~~~~~~~~~~~
+
+# Select which ship traffic metric, whether to estimate ship traffic for every cell,
+# and whether to use make units identical to facilities
+metric <- 'person time'
+smoothShip <- TRUE
+sameUnits <- TRUE # only if metric == 'person time & smoothShip
+ship <- switch(metric,
+               `ship time` = ship_s,
+               `person time` = {
+                 if(!smoothShip) ship_p else{
+                   if(!sameUnits) grid_cells_reduced_ship else ship_c_reduced}
+               })
+if(!sameUnits) stations <- grid_cells_reduced_stations else stations <- stations_c_reduced
+
+plt_ship <- switch(metric,
+                   `ship time` = plt_ship_s,
+                   `person time` = {
+                     if(!smoothShip) plt_ship_p else{
+                       if(!sameUnits) plt_ship_p_smooth else plt_ship_c}
+                   })
+plt_ship_raw <- switch(metric,
+                   `ship time` = plt_ship_raw_s,
+                   `person time` = {
+                     if(!smoothShip) plt_ship_raw_p else{
+                       if(!sameUnits) plt_ship_raw_p_smooth else plt_ship_c_raw}
+                   })
+if(!sameUnits) plt_stations <- pltStations else plt_stations <- pltStations_c
+if(!sameUnits) plt_stations_raw <- plt_stations_raw else plt_stations_raw <- plt_stations_c_raw
 
 plt_chl_combined <- ggdraw(arrangeGrob(
   plt_chl_raw,
@@ -766,8 +1291,8 @@ plt_ship_combined <- ggdraw(arrangeGrob(
   nrow = 2, heights = c(0.35, 0.65), top = plt_ship$plot$labels$title))
 plt_stations_combined <- ggdraw(arrangeGrob(
   plt_stations_raw,
-  pltStations$plot + labs(title = element_blank()),
-  nrow = 2, heights = c(0.35, 0.65), top = pltStations$plot$labels$title))
+  plt_stations$plot + labs(title = element_blank()),
+  nrow = 2, heights = c(0.35, 0.65), top = plt_stations$plot$labels$title))
 
 
 plt_biota <- ggdraw(arrangeGrob(
@@ -782,8 +1307,8 @@ plt_stress <- ggdraw(arrangeGrob(
   nrow = 1, widths = c(0.425, 0.425, 0.15), top = 'Stressors'))
 plt_activity <- ggdraw(arrangeGrob(
   plt_ship$plot + theme(legend.position = 'none'),
-  pltStations$plot + theme(legend.position = 'none'),
-  pltStations$legend,
+  plt_stations$plot + theme(legend.position = 'none'),
+  plt_stations$legend,
   nrow = 1, widths = c(0.425, 0.425, 0.15), top = 'Activity'))
 
 # Save these plots for supplementary material
@@ -885,9 +1410,9 @@ plt_raw2 <- plt_stations_raw + theme(legend.position = 'none')
 leg_raw <- ggdraw(get_legend(plt_ship_raw))
 plt_map1 <- plt_ship$plot +
   theme(legend.position = 'none') + labs(title = element_blank())
-plt_map2 <- pltStations$plot +
+plt_map2 <- plt_stations$plot +
   theme(legend.position = 'none') + labs(title = element_blank())
-leg_map <- pltStations$legend
+leg_map <- plt_stations$legend
 
 title_left <- ggdraw() +
   draw_label('Ship traffic', fontface = label_fontface,
@@ -1008,10 +1533,10 @@ plt_stress
 # plt_activity
 
 ship$type <- 'ship'
-grid_cells_reduced$type <- 'station'
+stations$type <- 'station'
 
 # Merge the data frames
-dat <- rbind(ship[columns], grid_cells_reduced[columns])
+dat <- rbind(ship[columns], stations[columns])
 all_polygons <- sort(unique(dat$cell_index)) # find all mapped polygons
 npolys <- length(all_polygons)
 score_poly <- switch(
@@ -1022,22 +1547,25 @@ score_poly <- switch(
              sapply(all_polygons,
                     function(z) sum(dat$score[dat$cell_index == z], na.rm = TRUE)))
 ) # calculate score for each polygon
-score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly))
+if(!sameUnits) score_poly <- nranks * {score_poly - min(score_poly)} / diff(range(score_poly))
 dat <- grid_cells_all[grid_cells_all$cell_index %in% all_polygons,] # create new data frame
 dat$score <- score_poly
 dat$rank <- score2rank(dat$score)
-dat_activity <- dat
 
 plt_ship_station <- plot_fun(dat, Title = combineTitle, legend_title = 'presence')
-# plt_ship_station$plot
+plt_ship_station$plot
 
 plt_activity <- ggdraw(arrangeGrob(
   plt_ship$plot + theme(legend.position = 'none'),
-  pltStations$plot + theme(legend.position = 'none'),
+  plt_stations$plot + theme(legend.position = 'none'),
   plt_ship_station$plot + theme(legend.position = 'none'),
-  pltStations$legend,
+  plt_stations$legend,
   nrow = 1, widths = c(0.3, 0.3, 0.3, 0.1), top = 'Activity'))
 plt_activity
+
+dat$score <- nranks * {dat$score - min(dat$score)} / diff(range(dat$score))
+dat$rank <- score2rank(dat$score)
+dat_activity <- dat
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -122,7 +122,8 @@ get_data(
   allLitterTypes = displayAllLitterTypes,
   sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
   sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
-  roundShipTime = TRUE, indexGridCells = FALSE, loadTooltipFromFile = loadTooltipFromFile)
+  roundShipTime = TRUE, shipOrPersonTime = NULL, indexGridCells = FALSE,
+  loadTooltipFromFile = loadTooltipFromFile)
 
 nc <- nc_plastic
 
@@ -310,6 +311,11 @@ ui <- fluidPage(
              checkboxInput('DisplaySignificanceContours','Display linear trend p-values',
                            value = FALSE),
              
+             # Input: shipping metric (ship or person time)
+             radioButtons('ShipMetric', 'Ship traffic metric:',
+                          choiceNames = c('ship time', 'person time'),
+                          choiceValues = c('ship time', 'person time')),
+
              # Input: background layers
              radioButtons('background', 'Background data:',
                           choiceNames = backgroundData_choiceNames,
@@ -386,7 +392,8 @@ server <- function(input, output, session) {
         PlasticForm = input$PlasticForm_grouped,
         LitterScale = input$LitterScale,
         SampleType = input$SampleType_grouped,
-        StationType = input$StationType
+        StationType = input$StationType,
+        ShipMetric = input$ShipMetric
       )
     })
   }, 2000)
@@ -448,8 +455,8 @@ server <- function(input, output, session) {
           background_dat <- subset(background_dat, month == m) # filter by month
         }# else warning('Background data cannot be filtered by month: check that R Shiny ui input options match the data.')
       }else{
-        
         if(background == 'ship'){
+          y <- listInputs()
           background_dat <- switch(shipSummaryDataOrRaw,
                                    summary = {
                                      x <- strsplit(input$background, '_')[[1]]
@@ -458,9 +465,10 @@ server <- function(input, output, session) {
                                      } else{warning('Background data cannot be filtered by ship type: check that R Shiny input options match the data.')}
                                    },
                                    raw = {
+                                     z <- subset(background_dat, variable == y$ShipMetric)
                                      x <- strsplit(input$background, '_')[[1]]
                                      if(x[2] %in% background_dat$activity){
-                                       background_dat <- subset(background_dat, activity == x[2])
+                                       background_dat <- subset(z, activity == x[2])
                                      } else{warning('Background ship data cannot be filtered by activity: check that R Shiny input options match the data.')}
                                    })
         }

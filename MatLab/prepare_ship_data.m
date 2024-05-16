@@ -51,12 +51,27 @@ clearvars x y i
 [~, I] = sort(data.move_id);
 data = data(I,:);
 
+% Set person time to annual average
+j = unique(metadata.vessel_id);
+for i = 1:length(j)
+    k = metadata.vessel_id == j(i);
+    if sum(k) < 2
+        continue
+    end
+    metadata.person_capacity(k) = mean(metadata.person_capacity(k), 'omitnan');
+end
+
 %% Estimate ship-time
 
+% Calculate time each ship is within each cell of selected lat-lon grid,
+% and the person-time if population size is known.
+
 shipTime_total = zeros(nvessels, nyrs);
+personTime_total = zeros(nvessels, nyrs);
 for i = 1:nvessels
     vessel = all_vessel_id(i);
     ind_i = data.vessel_id == vessel;
+    pc = mean(metadata.person_capacity(metadata.vessel_id == vessel));
     for j = 1:nyrs
         yr = yrs(j);
         wasObserved = vessel_observed(i,j);
@@ -92,11 +107,14 @@ for i = 1:nvessels
             visitTime = alltimes_v(end) - alltimes_v(1);
             shipTime_total(i,j) = shipTime_total(i,j) + visitTime;
         end
+        if(~isnan(pc))
+            personTime_total(i,j) = pc .* shipTime_total(i,j);
+        else
+            personTime_total(i,j) = nan;
+        end
     end
 end
 
-
-% Calculate time each ship is within each cell of selected lat-lon grid.
 domain = map_domain;
 lat_bound = -60; % ship data only within (-90, -60) degrees N
 % lonres = domain.dlon;
@@ -120,10 +138,12 @@ lonmax = longrid(2:end);
 latmin = latgrid(1:end-1);
 latmax = latgrid(2:end);
 shipTime_gridded = zeros(nvessels, nyrs, ncells);
+personTime_gridded = zeros(nvessels, nyrs, ncells);
 
 for i = 1:nvessels
     vessel = all_vessel_id(i);
     ind_i = data.vessel_id == vessel;
+    pc = mean(metadata.person_capacity(metadata.vessel_id == vessel));
     for j = 1:nyrs
         yr = yrs(j);
         wasObserved = vessel_observed(i,j);
@@ -194,6 +214,11 @@ for i = 1:nvessels
                 if length(where_) > 1, error('Error: location indexing problem. We need to index a single grid cell but multiple are selected.'); end
                 shipTime_gridded(i,j,where_) = shipTime_gridded(i,j,where_) + visitTime;
             end
+        end
+        if(~isnan(pc))
+            personTime_gridded(i,j,:) = pc .* shipTime_gridded(i,j,:);
+        else
+            personTime_gridded(i,j,:) = nan;
         end
         k = (i-1)*nyrs+j;
         percent_prog = floor(100 * k / nvessels / nyrs);
@@ -228,8 +253,9 @@ latmax_ = repmat(reshape(latmax, 1, 1, 1, nlat), nvessels, nyrs, nlon, 1);
 latmax = latmax_(:);
 
 ship_time = shipTime_gridded(:);
+person_time = personTime_gridded(:);
 
-output_9x3 = table(vessel_id, vessel_name, year, lonmin, lonmax, latmin, latmax, ship_time);
+output_9x3 = table(vessel_id, vessel_name, year, lonmin, lonmax, latmin, latmax, ship_time, person_time);
 
 
 
@@ -251,10 +277,12 @@ lonmax = longrid(2:end);
 latmin = latgrid(1:end-1);
 latmax = latgrid(2:end);
 shipTime_gridded = zeros(nvessels, nyrs, ncells);
+personTime_gridded = zeros(nvessels, nyrs, ncells);
 
 for i = 1:nvessels
     vessel = all_vessel_id(i);
     ind_i = data.vessel_id == vessel;
+    pc = mean(metadata.person_capacity(metadata.vessel_id == vessel));
     for j = 1:nyrs
         yr = yrs(j);
         wasObserved = vessel_observed(i,j);
@@ -326,6 +354,11 @@ for i = 1:nvessels
                 shipTime_gridded(i,j,where_) = shipTime_gridded(i,j,where_) + visitTime;
             end
         end
+        if(~isnan(pc))
+            personTime_gridded(i,j,:) = pc .* shipTime_gridded(i,j,:);
+        else
+            personTime_gridded(i,j,:) = nan;
+        end
         k = (i-1)*nyrs+j;
         percent_prog = floor(100 * k / nvessels / nyrs);
         percent_prog_ = floor(100 * (k-1) / nvessels / nyrs);
@@ -359,15 +392,16 @@ latmax_ = repmat(reshape(latmax, 1, 1, 1, nlat), nvessels, nyrs, nlon, 1);
 latmax = latmax_(:);
 
 ship_time = shipTime_gridded(:);
+person_time = personTime_gridded(:);
 
-output_3x1 = table(vessel_id, vessel_name, year, lonmin, lonmax, latmin, latmax, ship_time);
+output_3x1 = table(vessel_id, vessel_name, year, lonmin, lonmax, latmin, latmax, ship_time, person_time);
 
 
 % Incorporate meta vessel metadata
 
 % tmp = unique(output_3x1(:,["year", "vessel_id"]), 'stable');
 
-metadata_vars = ["year" "vessel_id" "dwt" "gross" "vessel_type" "activity_type"];
+metadata_vars = ["year" "vessel_id" "dwt" "gross" "vessel_type" "activity_type" "person_capacity"];
 md = metadata(:,metadata_vars);
 
 % There appears to be redundancy in the metadata table. Are there are
@@ -377,9 +411,11 @@ nvessels_md = length(all_vessel_id_md);
 % The problem seems to be NaNs in dwt & gross variables
 md.dwt(isnan(md.dwt)) = -inf;
 md.gross(isnan(md.gross)) = -inf;
+md.person_capacity(isnan(md.person_capacity)) = -inf;
 md = unique(md(:,2:end));
 md.dwt(md.dwt == -inf) = nan(1,1);
 md.gross(md.gross == -inf) = nan(1,1);
+md.person_capacity(md.person_capacity == -inf) = nan(1,1);
 
 
 output_9x3_ex = innerjoin(output_9x3, md, 'Keys', 'vessel_id');
