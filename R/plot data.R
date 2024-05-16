@@ -330,7 +330,7 @@ sc_h <- 0.9
 pw <- sc_w * A4_w
 ph <- sc_h * A4_h
 
-fileName <- paste0('ship traffic data_ship time', res, '.png')
+fileName <- paste0('ship traffic data_ship days_', res, '.png')
 ggsave(fileName, plot = p_ship_combine_s, device = 'png', path = dir_plots, width = pw, height = ph, units = 'in')
 
 A4_w <- 8.3 # A4 dimensions
@@ -340,7 +340,7 @@ sc_h <- 0.9
 pw <- sc_w * A4_w
 ph <- sc_h * A4_h
 
-fileName <- paste0('ship traffic data_person time', res, '.png')
+fileName <- paste0('ship traffic data_person days_', res, '.png')
 ggsave(fileName, plot = p_ship_combine_p, device = 'png', path = dir_plots, width = pw, height = ph, units = 'in')
 
 

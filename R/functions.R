@@ -2705,10 +2705,10 @@ make_plot <- function(
                  v <- unique(dat_background$variable)
                  if(length(v) != 1) error("Ship traffic metric must be specified")
                  leg_lab <- switch(v,
-                                   `ship time` = paste0('Ship time:', '\n', shipActivity,
-                                                        ' vessels', '\n', '(days year\u207B\u00B9)'),
-                                   `person time` = paste0('Person time:', '\n', shipActivity,
-                                                          ' vessels', '\n', '(days year\u207B\u00B9)'))
+                                   `ship time` = paste0('Ship traffic:', '\n', shipActivity,
+                                                        ' vessels', '\n', '(ship days year\u207B\u00B9)'),
+                                   `person time` = paste0('Ship traffic:', '\n', shipActivity,
+                                                          ' vessels', '\n', '(person days year\u207B\u00B9)'))
                  
                  if(!discreteColourScheme){
                    # Continuous colour scheme
@@ -3222,7 +3222,9 @@ geomean <- function(x, na.rm = FALSE){
 plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
                      legend_title = 'risk', Title = NULL, show_legend = TRUE,
                      showAxis = TRUE, latlim = NULL, axisTextSize = 4,
-                     cellBorderColour = 'grey', cellBorderWidth = 0.1){
+                     cellBorderColour = 'grey', cellBorderWidth = 0.1,
+                     na.colour = 'grey40', background.na.remove = FALSE,
+                     ice.colour = 'skyblue', land.colour = 'grey85'){
   data$rank <- factor(data$rank, levels = n:1, labels = n:1)
   # get the legend
   plt <-
@@ -3238,7 +3240,8 @@ plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
     geom_sf(data = data, aes(fill = rank), colour = cellBorderColour,
             linewidth = cellBorderWidth, show.legend = show_legend) +
     scale_fill_viridis_d(option = v_option, direction = v_direction,
-                         drop = FALSE, na.translate = FALSE, name = legend_title) +
+                         drop = FALSE, na.translate = TRUE, name = legend_title,
+                         na.value = na.colour, labels = c(levels(data$rank), 'no data')) +
     theme(
       axis.text = element_blank(),
       axis.ticks = element_blank(),
@@ -3248,7 +3251,7 @@ plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
     new_scale('fill') +
     geom_sf(data = nc,
             aes(fill = surface)) +
-    scale_fill_manual(values = c('grey','skyblue','skyblue','grey'), guide = 'none')
+    scale_fill_manual(values = c(land.colour,ice.colour,ice.colour,land.colour), guide = 'none')
   
   if(showAxis){
     assign('BBox', st_bbox(nc), envir = .GlobalEnv)
