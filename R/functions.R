@@ -328,9 +328,9 @@ get_data <- function(
     sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
     sstTrend_significantOnly = TRUE, pHTrend_significantOnly = TRUE,
     significanceLevel = 0.05, significanceContours = c(0.05, 0.25, 0.5),
-    SST_overallTrend = TRUE, pH_overallTrend = TRUE, roundShipTime = FALSE,
+    SST_overallTrend = TRUE, pH_overallTrend = TRUE, sigDigits = 2, roundShipTime = FALSE,
     shipOrPersonTime = NULL, indexGridCells = TRUE, loadTooltipFromFile = TRUE,
-    verbose = FALSE){
+    verbose = FALSE, theseData = NULL){
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Load data with spatial resolution given by res = '3x1' or '9x3'.
   # Required outputs are assigned to the function calling environment.
@@ -401,6 +401,9 @@ get_data <- function(
   }
   
   # Load ecoregion shape files -----------------------------------------------------
+  
+  if(is.null(theseData) || 'ecoregions' %in% theseData){
+  
   # verbose = TRUE
   f <- 'data/commondata/data0/meow_ecos_expl_clipped_expl.shp'
   f <- paste(dataDirectory, 'marine ecoregions', f, sep = '/')
@@ -422,10 +425,12 @@ get_data <- function(
 #   eco <- st_crop(eco, st_bbox(eco))
 #   
 #   assign('eco', eco, envir = parent.frame())
-  
+  }  
   
   # Load shipping data  -----------------------------------------------------
   
+  if(is.null(theseData) || 'ship' %in% theseData){
+    
   switch(shipSummaryDataOrRaw,
          summary = {
            # Summary section is redundant
@@ -529,7 +534,10 @@ get_data <- function(
            }
            ship$variable <- gsub('_', ' ', ship$variable)
            
-           ship <- subset(ship, value != 0) # remove zero measures
+           # Zero measurements are grid cells where no AIS pings were recorded -- 
+           # these could be omitted, but it's probably best to leave them in.
+           
+           # ship <- subset(ship, value != 0) # remove zero measures
            
            ship$activity_type <- factor(ship$activity_type, 
                                         levels = c('all','fishing','tourism','supply','research','other'),
@@ -560,8 +568,13 @@ get_data <- function(
   weblink_shipping <- 'https://doi.org/10.1073/pnas.2110303118'
   assign('weblink_shipping', weblink_shipping, envir = parent.frame())
   
+  ship_poly_local <- ship_poly
+  
+  }
   
   # Load plastic data -----------------------------------------------------
+  
+  if(is.null(theseData) || 'plastic' %in% theseData){
   
   # filepath = 'data/plastic_quantity'
   # # filename = 'plastic_quantity.csv'
@@ -586,8 +599,12 @@ get_data <- function(
     }else{loadTooltipFromFile <- FALSE}
   }
   
+  }
+  
   # Data pre-processing ----
   
+  if(is.null(theseData) || 'plastic' %in% theseData){
+    
   # Include spaces in names of data for better display
   DATA_names_orig <- names(DATA)
   DATA_names_spaces <- DATA_names_orig
@@ -894,7 +911,13 @@ get_data <- function(
   assign('DATA_sf', DATA_sf, envir = parent.frame())
   assign('DATA_long', DATA_long, envir = parent.frame())
   
+  }
+  
   # Load research station data ----------------------------------------------
+  
+  if(is.null(theseData) || 'facility' %in% theseData){
+    
+  
   filename <- 'COMNAP_Antarctic_Facilities_Master.csv'
   f <- paste(dataDirectory, 'research stations', 'COMNAP', filename, sep = '/')
   STATIONS <- read.csv(f, stringsAsFactors = TRUE)
@@ -902,7 +925,12 @@ get_data <- function(
   weblink_facilities <- 'https://github.com/PolarGeospatialCenter/comnap-antarctic-facilities'
   assign('weblink_facilities', weblink_facilities, envir = parent.frame())
   
+  }
+  
   # Data pre-processing ----
+
+  if(is.null(theseData) || 'facility' %in% theseData){
+    
   STATIONS$Type <- reorder(STATIONS$Type, rep(1, nrow(STATIONS)), sum, decreasing = TRUE)
   
   # Define tooltip variable for interactive info...
@@ -988,8 +1016,12 @@ get_data <- function(
   
   assign('STATIONS_sf', STATIONS_sf, envir = parent.frame())
   
+  }
   
   # Load krill data ---------------------------------------------------------
+  
+  if(is.null(theseData) || 'krill' %in% theseData){
+    
   filename <- 'krill_data_mapped.csv'
   f <- paste(dataDirectory, 'KRILLBASE', 'compiled', filename, sep = '/')
   KRILL <- read.csv(f, stringsAsFactors = TRUE)
@@ -997,15 +1029,19 @@ get_data <- function(
   weblink_krill <- 'https://www.doi.org/10.5285/8b00a915-94e3-4a04-a903-dd4956346439'
   assign('weblink_krill', weblink_krill, envir = parent.frame())
   
+  }
+  
   # Data pre-processing -----------------------------------------------------
+  
+  if(is.null(theseData) || 'krill' %in% theseData){
+
   KRILL <- KRILL[!is.nan(KRILL$value),] # omit missing data
   # Mean abundance across months for each grid cell
   KRILL_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, KRILL, 'mean')
   KRILL_allMonths$month <- 'all'
   KRILL_allMonths <- KRILL_allMonths[,c(1:4,6,5)]
   KRILL <- rbind(KRILL, KRILL_allMonths)
-  # Round to 2 significant figures
-  sigDigits <- 2
+  # Round to sigDigits significant figures
   KRILL$value <- signif(KRILL$value, sigDigits)
   
   lat_max_krill <- max(KRILL$latmax)
@@ -1036,8 +1072,14 @@ get_data <- function(
   }
   krill_poly$colourgroup <- factor(krill_poly$colourgroup, levels = colgroup)
   
+  krill_poly_local <- krill_poly
+  
+  }
+  
   # Load chlorophyll data ---------------------------------------------------------
   
+  if(is.null(theseData) || 'chl' %in% theseData){
+    
   filename <- paste0('chl_data_mapped_res_', res, '.csv')
   f <- paste(dataDirectory, 'chlorophyll', 'SeaWiFS', filename, sep = '/')
   
@@ -1046,7 +1088,12 @@ get_data <- function(
   weblink_chlorophyll <- 'https://catalogue.ceda.ac.uk/uuid/a91ae89c4c6d011f84cdfbc3d41a73c8'
   assign('weblink_chlorophyll', weblink_chlorophyll, envir = parent.frame())
   
+  }
+  
   # Data pre-processing -----------------------------------------------------
+  
+  if(is.null(theseData) || 'chl' %in% theseData){
+
   CHL <- CHL[!is.nan(CHL$value),] # omit missing data
   # Mean abundance across months for each grid cell
   CHL_allMonths <- aggregate(value ~ lonmin + lonmax + latmin + latmax, CHL, 'mean')
@@ -1072,9 +1119,14 @@ get_data <- function(
   chl_poly$month <- CHL$month
   chl_poly$value <- CHL$value
   
+  chl_poly_local <- chl_poly
+  
+  }  
   
   # Load SST trend (or anomaly) data --------------------------------------
   
+  if(is.null(theseData) || 'sst' %in% theseData){
+    
   if(SST_overallTrend){
     filename <- paste0('sst_time_series_trend_res_', res, '.csv') # my month-by-month trend calculation    
   }else{
@@ -1087,8 +1139,12 @@ get_data <- function(
   weblink_sst <- 'https://data.marine.copernicus.eu/product/SST_GLO_SST_L4_REP_OBSERVATIONS_010_024/download?dataset=ESACCI-GLO-SST-L4-REP-OBS-SST'
   assign('weblink_sst', weblink_sst, envir = parent.frame())
   
+  }
+  
   # Data pre-processing -----------------------------------------------------     
   
+  if(is.null(theseData) || 'sst' %in% theseData){
+    
   if(SST_overallTrend){
     
     coords <- c('lonmin','lonmax','latmin','latmax')
@@ -1188,10 +1244,15 @@ get_data <- function(
     sst_poly$pval <- SST$pval
     sst_poly$plevel <- SST$plevel
   }
+
+  sst_poly_local <- sst_poly
   
+  }
   
   # Load pH trend (or anomaly) data -----------------------------------------
   
+  if(is.null(theseData) || 'pH' %in% theseData){
+    
   if(pH_overallTrend){
     filename <- paste0('pH_time_series_trend_res_', res, '.csv') # my month-by-month trend calculation    
   }else{
@@ -1204,9 +1265,12 @@ get_data <- function(
   weblink_pH <- 'https://data.marine.copernicus.eu/product/MULTIOBS_GLO_BIO_CARBON_SURFACE_REP_015_008/description'
   assign('weblink_pH', weblink_pH, envir = parent.frame())
   
+  }
   
   # Data pre-processing -----------------------------------------------------     
   
+  if(is.null(theseData) || 'pH' %in% theseData){
+    
   if(pH_overallTrend){
     
     coords <- c('lonmin','lonmax','latmin','latmax')
@@ -1311,17 +1375,22 @@ get_data <- function(
     pH_poly$plevel <- pH$plevel
   }
   
+  pH_poly_local <- pH_poly
   
+  }
 
   # Load map shape files -----------------------------------------------------
   
+  if(is.null(theseData) || 'map' %in% theseData){
+    
   lat_lim_plastic <- ceiling(max(DATA_long$Latitude) / 5) * 5
   lat_lim_plastic <- c(-90, lat_lim_plastic)
-  lat_lim_cells <- c(-90, max(c(lat_max_chl,
-                                lat_max_krill,
-                                lat_max_sst,
-                                lat_max_pH,
-                                lat_max_ship)))
+  lat_lim_cells <- c(-90, max(c(#lat_max_chl,
+                                #lat_max_krill,
+                                lat_max_sst#,
+                                #lat_max_pH,
+                                #lat_max_ship
+                                )))
   
   assign('lat_lim_plastic', lat_lim_plastic, envir = parent.frame())
   assign('lat_lim_cells', lat_lim_cells, envir = parent.frame())
@@ -1389,32 +1458,64 @@ get_data <- function(
   # 
   # assign('nc', nc, envir = parent.frame())
   
+  }
+  
   # Tidy up indexing --------------------------------------------------------
   
-  if(indexGridCells){
-    
-    gridCellsWithData <- unique(c(
-      ship_poly$cell_index,
-      # STATIONS_sf$cell_index,
-      chl_poly$cell_index,
-      krill_poly$cell_index,
-      sst_poly$cell_index,
-      pH_poly$cell_index
-    ))
-    
+  x <- paste(c('ship','chl','krill','sst','pH'),'poly', sep = '_')
+  xl <- paste(x, 'local', sep = '_')
+  xi <- length(x)
+  e <- sapply(xl, function(z) exists(z))
+  
+  if(!indexGridCells){
+    if(is.null(theseData)){
+      assign('ship_poly', ship_poly, envir = parent.frame())
+      assign('krill_poly', krill_poly, envir = parent.frame())
+      assign('chl_poly', chl_poly, envir = parent.frame())
+      assign('sst_poly', sst_poly, envir = parent.frame())
+      assign('pH_poly', pH_poly, envir = parent.frame())
+    }else{
+      for(i in 1:xi){
+        if(e[i]) assign(x[i], get(x[i]), envir = parent.frame())
+      }
+    }
+  }else{
+    if(is.null(theseData)){
+      gridCellsWithData <- unique(c(
+        ship_poly$cell_index,
+        chl_poly$cell_index,
+        krill_poly$cell_index,
+        sst_poly$cell_index,
+        pH_poly$cell_index
+      ))
+    }else{
+      gridCellsWithData <- c()
+      for(i in 1:xi){
+        if(e[i]){
+          y <- get(x[i])
+          gridCellsWithData <- c(gridCellsWithData, y$cell_index)
+        }
+      }
+      gridCellsWithData <- unique(gridCellsWithData)
+    }
     i <- grid_cells_all$cell_index %in% gridCellsWithData
     grid_cells_all <- grid_cells_all[i,]
     relabelCells <- data.frame(old = grid_cells_all$cell_index)
     relabelCells$new <- 1:nrow(relabelCells)
-    
     relabelFun <- function(dat) sapply(1:nrow(dat), function(z) relabelCells$new[relabelCells$old == dat$cell_index[z]])
-    ship_poly$cell_index <- relabelFun(ship_poly)
-    # STATIONS_sf$cell_index <- relabelFun(STATIONS_sf)
-    chl_poly$cell_index <- relabelFun(chl_poly)
-    krill_poly$cell_index <- relabelFun(krill_poly)
-    sst_poly$cell_index <- relabelFun(sst_poly)
-    pH_poly$cell_index <- relabelFun(pH_poly)
-    grid_cells_all$cell_index <- relabelFun(grid_cells_all)
+    
+    if(is.null(theseData)){
+      ship_poly$cell_index <- relabelFun(ship_poly)
+      chl_poly$cell_index <- relabelFun(chl_poly)
+      krill_poly$cell_index <- relabelFun(krill_poly)
+      sst_poly$cell_index <- relabelFun(sst_poly)
+      pH_poly$cell_index <- relabelFun(pH_poly)
+      grid_cells_all$cell_index <- relabelFun(grid_cells_all)
+    }else{
+      for(i in 1:xi){
+        if(e[i]) assign(x[i], relabelFun(get(x[i])))
+      }
+    }
     
     grid_cells_all <- st_transform(grid_cells_all, crs = crs_use) # convert coordinates
     
@@ -1438,15 +1539,102 @@ get_data <- function(
     
     assign('plt_map_cells', plt_map_cells, envir = parent.frame())
     
+    if(is.null(theseData)){
+      assign('ship_poly', ship_poly, envir = parent.frame())
+      assign('krill_poly', krill_poly, envir = parent.frame())
+      assign('chl_poly', chl_poly, envir = parent.frame())
+      assign('sst_poly', sst_poly, envir = parent.frame())
+      assign('pH_poly', pH_poly, envir = parent.frame())
+    }else{
+      for(i in 1:xi){
+        if(e[i]) assign(x[i], get(x[i]), envir = parent.frame())
+      }
+    }
   }
   
-  assign('ship_poly', ship_poly, envir = parent.frame())
-  assign('krill_poly', krill_poly, envir = parent.frame())
-  assign('chl_poly', chl_poly, envir = parent.frame())
-  assign('sst_poly', sst_poly, envir = parent.frame())
-  assign('pH_poly', pH_poly, envir = parent.frame())
+  
+  
+  
+  
+  # if(indexGridCells){
+  #   
+  #   if(is.null(theseData)){
+  #     gridCellsWithData <- unique(c(
+  #       ship_poly$cell_index,
+  #       chl_poly$cell_index,
+  #       krill_poly$cell_index,
+  #       sst_poly$cell_index,
+  #       pH_poly$cell_index
+  #     ))
+  #   }else{
+  #     x <- paste(c('ship','chl','krill','sst','pH'),'poly','local',sep='_')
+  #     xi <- length(x)
+  #     e <- rep(FALSE, xi)
+  #     gridCellsWithData <- c()
+  #     for(i in 1:xi){
+  #       if(exists(x[i])){
+  #         e[i] <- TRUE
+  #         y <- get(x[i])
+  #         gridCellsWithData <- c(gridCellsWithData, y$cell_index) 
+  #       }
+  #     }
+  #     gridCellsWithData <- unique(gridCellsWithData)
+  #   }
+  #   
+  #   i <- grid_cells_all$cell_index %in% gridCellsWithData
+  #   grid_cells_all <- grid_cells_all[i,]
+  #   relabelCells <- data.frame(old = grid_cells_all$cell_index)
+  #   relabelCells$new <- 1:nrow(relabelCells)
+  #   
+  #   relabelFun <- function(dat) sapply(1:nrow(dat), function(z) relabelCells$new[relabelCells$old == dat$cell_index[z]])
+  #   
+  #   if(is.null(theseData)){
+  #     ship_poly$cell_index <- relabelFun(ship_poly)
+  #     chl_poly$cell_index <- relabelFun(chl_poly)
+  #     krill_poly$cell_index <- relabelFun(krill_poly)
+  #     sst_poly$cell_index <- relabelFun(sst_poly)
+  #     pH_poly$cell_index <- relabelFun(pH_poly)
+  #     grid_cells_all$cell_index <- relabelFun(grid_cells_all)
+  #   }else{
+  #     for(i in 1:xi){
+  #       if(e[i]){
+  #         assign(gsub('_local','',x[i]), relabelFun(get(x[i])))
+  #       }
+  #     }
+  #   }
+  #   
+  #   grid_cells_all <- st_transform(grid_cells_all, crs = crs_use) # convert coordinates
+  #   
+  #   assign('grid_cells_all', grid_cells_all, envir = parent.frame())
+  #   
+  #   plt_map_cells <-
+  #     ggplot(grid_cells_all) +
+  #     geom_sf(data = nc_cells,
+  #             aes(fill = surface),
+  #             show.legend = FALSE) +
+  #     scale_fill_manual(values = c('grey','skyblue','skyblue','grey')) +
+  #     geom_sf(alpha = 0) +
+  #     geom_sf_text(aes(label = cell_index), size = 3) +
+  #     theme(
+  #       axis.title = element_blank(),
+  #       axis.text = element_blank(),
+  #       axis.ticks = element_blank(),
+  #       panel.background = element_rect(fill = 'white', colour = 'white'),
+  #       plot.background = element_rect(fill = 'white', colour = 'white')
+  #     )
+  #   
+  #   assign('plt_map_cells', plt_map_cells, envir = parent.frame())
+  #   
+  # }
+  # 
+  # assign('ship_poly', ship_poly, envir = parent.frame())
+  # assign('krill_poly', krill_poly, envir = parent.frame())
+  # assign('chl_poly', chl_poly, envir = parent.frame())
+  # assign('sst_poly', sst_poly, envir = parent.frame())
+  # assign('pH_poly', pH_poly, envir = parent.frame())
   
 }
+
 
 
 # Interactive (shiny app) map functions -----------------------------------
@@ -1812,15 +2000,16 @@ make_plot <- function(
     dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE,
     stationsOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4,
     legPtSize_fill = 6, ptStroke = 2, alpha = 0.85, polyLineWidth = 0.75,
-    contourLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio,
+    contourLineWidth = 0.75, legWidth = 0.25, mapAspectRatio = aspectRatio,
     plotSignificanceContours = FALSE, significanceContours = NULL,
     sst_sigContours = significanceContours,
     pH_sigContours = significanceContours, stationPopSize = FALSE,
     expandBorder = FALSE, showCoordGrid = TRUE, singleLatAxis = FALSE,
     latlim = NULL, axisTextSize = 4, discreteColourScheme = TRUE,
-    nColours = NULL, cellBorderCol = 'grey', cellBorderWidth = 0.1,
-    overlay_labels = NULL, na.colour = 'grey40', background.na.remove = FALSE,
-    na.in.legend = TRUE, ice.colour = 'skyblue', land.colour = 'grey85'){
+    nColours = NULL, manual_legend_breaks = FALSE, cellBorderCol = 'grey',
+    cellBorderWidth = 0.1, overlay_labels = NULL, na.colour = 'grey40',
+    background.na.remove = FALSE, na.in.legend = TRUE, ice.colour = 'skyblue',
+    land.colour = 'grey85'){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
@@ -1833,6 +2022,8 @@ make_plot <- function(
   # Output:
   # A ggplot object containing interactive geoms compatible with girafe
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  
+  library(viridisLite)
   
   nc <- dat$nc
   dat_background <- dat$background
@@ -1969,7 +2160,7 @@ make_plot <- function(
            }else{
              # Discrete colour scheme
              # hard-code a colour scale for krill -- set this to TRUE to create
-             # colour scale automatically 
+             # colour scale automatically
              autoScaleColours <- FALSE
              if(autoScaleColours){
                # handle zeros in log-scale by setting to minimum positive value
@@ -2000,6 +2191,8 @@ make_plot <- function(
                                             labels = legLabs,
                                             include.lowest = TRUE)
                
+               levelsInData <- levels(dat_background$breaks) %in% dat_background$breaks
+               
                dat_background$breaks <- factor(dat_background$breaks,
                                                levels = c(rev(levels(dat_background$breaks))))
                
@@ -2026,7 +2219,7 @@ make_plot <- function(
                        onclick = paste0("window.open(`",
                                         as.character(weblink_krill), "`);"),
                        tooltip = weblink_krill),
-                     na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                     na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data'))
                  if(!na.in.legend & anyNA){
                    plt_background_leg <- plt_background_leg +
                      scale_fill_viridis_d_interactive(
@@ -2038,23 +2231,24 @@ make_plot <- function(
                          onclick = paste0("window.open(`",
                                           as.character(weblink_krill), "`);"),
                          tooltip = weblink_krill),
-                       na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                       na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data'))
                  }
                  
                }else{
                  plt_background <- plt_background + 
                    scale_fill_viridis_d(
                      option = 'plasma', direction = -1, name = legTitle,
-                     na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                     na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data'))
                  if(!na.in.legend & anyNA){
                    plt_background_leg <- plt_background_leg +
                      scale_fill_viridis_d(
                        option = 'plasma', direction = -1, name = legTitle,
-                       na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                       na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data'))
                  }
                }
                
              }else{
+
                # Manually specify the colour scale break points for krill so that
                # we avoid too many fractional values
                brks <- c(0,0.1,1,5,10,25,50,200)
@@ -2066,23 +2260,25 @@ make_plot <- function(
                                             labels = legLabs,
                                             include.lowest = TRUE)
 
+               levelsInData <- levels(dat_background$breaks) %in% dat_background$breaks
+
                dat_background$breaks <- factor(dat_background$breaks,
                                                levels = rev(levels(dat_background$breaks)))
-               
-               plt_background <- 
+
+               plt_background <-
                  ggplot() +
                  geom_sf(data = dat_background,
                          aes(fill = breaks), colour = cellBorderCol,
                          linewidth = cellBorderWidth)
-               
+
                if(!na.in.legend & anyNA){
                  plt_background_leg <- ggplot() +
                    geom_sf(data = subset(dat_background, !is.na(value)),
                            aes(fill = breaks), colour = cellBorderCol,
                            linewidth = cellBorderWidth)}
-               
+
                if(exists('weblink_krill')){
-                 plt_background <- plt_background + 
+                 plt_background <- plt_background +
                    scale_fill_viridis_d_interactive(
                      option = 'plasma',
                      direction = -1,
@@ -2092,7 +2288,10 @@ make_plot <- function(
                        onclick = paste0("window.open(`",
                                         as.character(weblink_krill), "`);"),
                        tooltip = weblink_krill),
-                     na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                     na.value = na.colour,
+                     labels = c(levels(dat_background$breaks)[levelsInData], 'no data')
+                     # drop = FALSE
+                     )
                  if(!na.in.legend & anyNA){
                    plt_background_leg <- plt_background_leg +
                      scale_fill_viridis_d_interactive(
@@ -2104,18 +2303,27 @@ make_plot <- function(
                          onclick = paste0("window.open(`",
                                           as.character(weblink_krill), "`);"),
                          tooltip = weblink_krill),
-                       na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                       na.value = na.colour,
+                       labels = c(levels(dat_background$breaks)[levelsInData], 'no data')
+                       # drop = FALSE
+                       )
                  }
                }else{
-                 plt_background <- plt_background + 
+                 plt_background <- plt_background +
                    scale_fill_viridis_d(
                      option = 'plasma', direction = -1, name = legTitle,
-                     na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                     na.value = na.colour,
+                     labels = c(levels(dat_background$breaks)[levelsInData], 'no data')
+                     # drop = FALSE
+                     )
                  if(!na.in.legend & anyNA){
                    plt_background_leg <- plt_background_leg +
                      scale_fill_viridis_d(
                        option = 'plasma', direction = -1, name = legTitle,
-                       na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                       na.value = na.colour,
+                       labels = c(levels(dat_background$breaks)[levelsInData], 'no data')
+                       # drop = FALSE
+                       )
                  }
                }
                
@@ -2585,7 +2793,11 @@ make_plot <- function(
                                             include.lowest = TRUE)
                
                dat_background$breaks <- factor(dat_background$breaks, 
-                                               levels = rev(levels(dat_background$breaks)))
+                                               levels = levels(dat_background$breaks))
+               # dat_background$breaks <- factor(dat_background$breaks, 
+               #                                 levels = rev(levels(dat_background$breaks)))
+               
+               levelsInData <- levels(dat_background$breaks) %in% dat_background$breaks
                
                plt_background <-
                  ggplot() +
@@ -2596,18 +2808,21 @@ make_plot <- function(
                if(weblink_exists){
                  plt_background <- plt_background + 
                    scale_fill_manual_interactive(
-                     values = rev(Cols),
+                     values = Cols[levelsInData],
+                     # values = rev(Cols[levelsInData]),
                      name = label_interactive(
                        legLabel, data_id = background.legend.id,
                        hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                        onclick = paste0("window.open(`", as.character(
                          weblink_pH), "`);"),
                        tooltip = weblink_pH),
-                     na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                     na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data')#,
+#                     drop = FALSE
+                     )
                }else{
                  plt_background <- plt_background +
-                   scale_fill_manual(values = rev(Cols), name = legLabel,
-                                     na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                   scale_fill_manual(values = Cols[levelsInData], name = legLabel,
+                                     na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data'))
                }
              }else{if(any_negative){
                # Create break points (all non-significant trends have value 0)
@@ -2820,34 +3035,90 @@ make_plot <- function(
                  }
                }else{
                  # Discrete colour scheme
+                 isNA <- is.na(dat_background$value)
+                 isZero <- !isNA & dat_background$value == 0
+                 anyZeros <- any(isZero)
                  dat_background$value_log10 <- log10(dat_background$value)
+                 mv <- round(dat_background$value[!isNA & !isZero])
+                 mv <- min(mv[mv > 0]) # minimum positive integer
+                 
                  # Create break points
-                 dat_background$breaks <- cut(dat_background$value_log10, nColours)
-                 # Adjust breaks for pretty legend labels
-                 brks <- gsub(']', '', gsub('\\(', '',
-                                            levels(dat_background$breaks)))
-                 brks <- unique(as.numeric(unlist(strsplit(brks, ','))))
-                 mag <- 10 ^ floor(brks)
-                 mag_ <- 0.5 * mag
-                 # mag_ <- mag
-                 brks <- 10 ^ brks
-                 nbrks <- length(brks)
-                 i <- 2:{nbrks-1}
-                 brks[i] <- round(brks[i] / mag[i]) * mag[i]
-                 brks[nbrks] <- ceiling(brks[nbrks] / mag_[nbrks]) * mag_[nbrks]
-                 brks[1] <- floor(brks[1] / {mag[1]}) * {mag[1]}
-                 if(brks[1] == 0.9) brks[1] <- 1
-                 brks_ <- e2sci(brks)
-                 legLabs <- sapply(
-                   1:nColours, function(z) paste0('[', brks_[z], ', ', brks_[z+1], ')'))
-                 legLabs[nbrks-1] <- gsub('\\)', ']', legLabs[nbrks-1])
-                 brks <- log10(brks)
-                 dat_background$breaks <- cut(dat_background$value_log10, brks,
-                                              labels = legLabs,
-                                              include.lowest = TRUE)
+                 if(all(manual_legend_breaks == FALSE)){
+                   if(!anyZeros){
+                     i <- !isNA & dat_background$value > mv
+                     brks <- seq(min(dat_background$value_log10[i]), max(dat_background$value_log10[i]), length.out = nColours)
+                     mag <- 10 ^ floor(brks)
+                     mag_ <- 0.5 * mag
+                     brks <- 10 ^ brks
+                     i <- 1:{nColours-1}
+                     brks[i] <- round(brks[i] / mag[i]) * mag[i]
+                     i <- nColours
+                     brks[i] <- ceiling(brks[i] / mag_[i]) * mag_[i]
+                     brks <- c(0, brks)
+                     # Adjust breaks for pretty legend labels
+                     brks_ <- brks
+                     brks_[brks > 0] <- e2sci(brks[brks > 0])
+                     legLabs <- sapply(
+                       1:nColours, function(z) paste0('[', brks_[z], ', ', brks_[z+1], ')'))
+                     legLabs[nColours-1] <- gsub('\\)', ']', legLabs[nColours-1])
+                     dat_background$breaks <- cut(dat_background$value, brks, 
+                                                  labels = legLabs, include.lowest = TRUE)
+                   }else{
+                     i <- !isNA & dat_background$value > mv
+                     brks <- seq(min(dat_background$value_log10[i]), max(dat_background$value_log10[i]), length.out = nColours-1)
+                     mag <- 10 ^ floor(brks)
+                     mag_ <- 0.5 * mag
+                     brks <- 10 ^ brks
+                     i <- 1:{nColours-2}
+                     brks[i] <- round(brks[i] / mag[i]) * mag[i]
+                     i <- nColours-1
+                     brks[i] <- ceiling(brks[i] / mag_[i]) * mag_[i]
+                     brks <- c(0, brks)
+                     # Adjust breaks for pretty legend labels
+                     brks_ <- brks
+                     brks_[brks > 0] <- e2sci(brks[brks > 0])
+                     legLabs <- sapply(
+                       1:{nColours-1}, function(z) paste0('[', brks_[z], ', ', brks_[z+1], ')'))
+                     legLabs[nColours-1] <- gsub('\\)', ']', legLabs[nColours-1])
+                     legLabs <- c('0', legLabs)
+                     
+                     i <- !isZero & !isNA
+                     v <- as.character(cut(dat_background$value[i], brks, 
+                                           labels = legLabs[-1], include.lowest = TRUE))
+                     dat_background$breaks[i] <- v
+                     dat_background$breaks[isZero] <- legLabs[1]
+                     dat_background$breaks <- factor(dat_background$breaks, levels = legLabs)
+                   }
+                 }else{
+                   # break points are input as function argument
+                   brks <- manual_legend_breaks
+                   brks_ <- brks
+                   brks_[brks > 0] <- e2sci(brks[brks > 0])
+                   if(!anyZeros){
+                     legLabs <- sapply(
+                       1:nColours, function(z) paste0('[', brks_[z], ', ', brks_[z+1], ')'))
+                     legLabs[nColours-1] <- gsub('\\)', ']', legLabs[nColours-1])
+                     dat_background$breaks <- cut(dat_background$value, brks, 
+                                                  labels = legLabs, include.lowest = TRUE)                   
+                   }else{
+                     legLabs <- sapply(
+                       1:{nColours-1}, function(z) paste0('[', brks_[z], ', ', brks_[z+1], ')'))
+                     legLabs[nColours-1] <- gsub('\\)', ']', legLabs[nColours-1])
+                     legLabs <- c('0', legLabs)
+                     
+                     i <- !isZero & !isNA
+                     v <- as.character(cut(dat_background$value[i], brks, 
+                                           labels = legLabs[-1], include.lowest = TRUE))
+                     dat_background$breaks[i] <- v
+                     dat_background$breaks[isZero] <- legLabs[1]
+                     dat_background$breaks <- factor(dat_background$breaks, levels = legLabs)
+                   }
+                 }
                  
                  dat_background$breaks <- factor(dat_background$breaks,
                                                  levels = rev(levels(dat_background$breaks)))
+                 
+                 levelsInData <- levels(dat_background$breaks) %in% dat_background$breaks
                  
                  plt_background <-
                    ggplot() +
@@ -2866,36 +3137,40 @@ make_plot <- function(
                  if(weblink_exists){
                    plt_background <- plt_background + 
                      scale_fill_viridis_d_interactive(
-                       option = 'mako', direction = -1, drop = FALSE,
+                       option = 'mako', direction = -1,
+                       # drop = FALSE,
                        name = label_interactive(
                          leg_lab, data_id = background.legend.id,
                          hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                          onclick = paste0("window.open(`", as.character(
                            weblink_shipping), "`);"),
                          tooltip = weblink_shipping),
-                       na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                       na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data'))
                    if(!na.in.legend & anyNA){
                      plt_background_leg <- plt_background_leg +
                        scale_fill_viridis_d_interactive(
-                         option = 'mako', direction = -1, drop = FALSE,
+                         option = 'mako', direction = -1,
+                         # drop = FALSE,
                          name = label_interactive(
                            leg_lab, data_id = background.legend.id,
                            hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                            onclick = paste0("window.open(`", as.character(
                              weblink_shipping), "`);"),
                            tooltip = weblink_shipping),
-                         na.value = na.colour, labels = c(levels(dat_background$breaks)))}
+                         na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData]))}
                    
                  }else{
                    plt_background <- plt_background +
-                     scale_fill_viridis_d(option = 'mako', direction = -1, drop = FALSE,
+                     scale_fill_viridis_d(option = 'mako', direction = -1,
+                                          # drop = FALSE,
                                           name = leg_lab,
-                                          na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))
+                                          na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data'))
                    if(!na.in.legend & anyNA){
                      plt_background_leg <- plt_background_leg +
-                       scale_fill_viridis_d(option = 'mako', direction = -1, drop = FALSE,
+                       scale_fill_viridis_d(option = 'mako', direction = -1,
+                                            # drop = FALSE,
                                             name = leg_lab,
-                                            na.value = na.colour, labels = c(levels(dat_background$breaks), 'no data'))}
+                                            na.value = na.colour, labels = c(levels(dat_background$breaks)[levelsInData], 'no data'))}
                  }
                }
              }
@@ -3059,14 +3334,20 @@ make_plot <- function(
     )
   
   
-  # leg_background <- get_plot_component(plt_background, 'guide-box', return_all = TRUE)[[1]] # this is equivalent to commented line below, but doesn't throw a warning
-
-  # leg_background <- get_legend(plt_background)
-  
   if(na.in.legend | !anyNA){
-    leg_background <- get_legend(plt_background)
+    leg_background <- get_plot_component(
+      plt_background + 
+        theme(legend.margin = margin(0,0,0,0),
+              legend.box.margin = margin(0,0,0,0)),
+      'guide-box', return_all = TRUE)[[1]] # this is equivalent to commented line below, but doesn't throw a warning    
+    # leg_background <- get_legend(plt_background)
   }else{
-    leg_background <- get_legend(plt_background_leg)
+    leg_background <- get_plot_component(
+      plt_background_leg + 
+        theme(legend.margin = margin(0,0,0,0),
+              legend.box.margin = margin(0,0,0,0)),
+      'guide-box', return_all = TRUE)[[1]]
+    # leg_background <- get_legend(plt_background_leg)
   }
   
   
@@ -3086,7 +3367,7 @@ make_plot <- function(
   
   # Coastline
   plt_map <- plt_map +
-    new_scale('fill') +
+    new_scale_fill() +
     geom_sf(data = nc,
             aes(fill = surface),
             show.legend = FALSE) +
@@ -3141,7 +3422,9 @@ make_plot <- function(
   
   if(anyStations | anyPlastic){
     plt_map <- plt_map +
+      suppressWarnings(
       scale_shape_manual(values = setNames(symbols$symbol, symbols$Type))
+    )
   }
   
   # Research stations
@@ -3245,7 +3528,7 @@ make_plot <- function(
     dat_plastic_$Source <- factor(dat_plastic_$Source,
                                   levels = unique(dat_plastic_$Source))
     
-    plt_map <- plt_map +
+     plt_map <- plt_map +
       new_scale_fill() +
       geom_sf_interactive(data = dat_plastic_,
                           aes(fill = Source, shape = SampleType_grouped,
@@ -3304,7 +3587,12 @@ make_plot <- function(
     }
     plt_stations <- plt_stations +
       theme(legend.key = element_blank())
-    leg_stations <- get_legend(plt_stations)
+    leg_stations <- get_plot_component(
+      plt_stations + 
+        theme(legend.margin = margin(0,0,0,0),
+              legend.box.margin = margin(0,0,0,0)),
+      'guide-box', return_all = TRUE)[[1]]
+    # leg_stations <- get_legend(plt_stations)
     # get legend dimensions
     lw = (leg_stations$widths)
     lh = (leg_stations$heights)
@@ -3355,7 +3643,9 @@ make_plot <- function(
       ) +
       scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
       theme(legend.key = element_blank())
-    leg_plastic <- get_legend(plt_plastic_samples)
+    leg_plastic <- get_plot_component(plt_plastic_samples,# + theme(legend.margin = margin(0,0,0,0)),
+                                      'guide-box', return_all = TRUE)[[1]]
+    # leg_plastic <- get_legend(plt_plastic_samples)
     # get legend dimensions
     lw = (leg_plastic$widths)
     lh = (leg_plastic$heights)
@@ -3396,19 +3686,31 @@ make_plot <- function(
   }
   
   # Find size (cm) of combined legend -- include spacings
-  leg_width <- {2 * 1} + 3 * max(c(leg_plastic_width, leg_stations_width,
+  leg_width <- {1 * 1} + 2 * max(c(leg_plastic_width, leg_stations_width,
                                    leg_background_width))
-  leg_height <- {3 * 2} + max(c(leg_plastic_height, leg_stations_height,
-                                leg_background_height))
+  leg_height <- {3 * 2} + max(c(leg_plastic_height, leg_stations_height + leg_background_height))
   # Size of map & complete plot
   tot_width = leg_width / legWidth
   map_width = tot_width - leg_width
   map_height <- map_width / mapAspectRatio
   tot_height <- max(map_height, leg_height)
   
-  # Combine all map components
-  leg_complete <- plot_grid(leg_background, leg_plastic, leg_stations,
-                            ncol = 3)
+  leg_blank <- patchwork::plot_spacer() + theme_void()# + theme(plot.margin = unit(c(0,0,0,0),'cm'))
+  
+  l1 <- plot_grid(
+    leg_blank, leg_plastic, leg_blank,
+    nrow = 3, rel_heights = c(
+    0.5*{tot_height-leg_plastic_height}, leg_plastic_height, 0.5*{tot_height-leg_plastic_height}))
+  l2 <- plot_grid(
+    leg_blank, leg_stations, leg_blank, leg_background, leg_blank,
+    nrow = 5, rel_heights = c(
+      0.45*{tot_height - {leg_stations_height + leg_background_height}},
+      leg_stations_height,
+      0.1*{tot_height - {leg_stations_height + leg_background_height}},
+      leg_background_height,
+      0.45*{tot_height - {leg_stations_height + leg_background_height}}
+      ), align = 'v', axis = 'l')
+  leg_complete <- plot_grid(l1, l2, ncol=2)
   
   plt_complete <- ggdraw(
     plot_grid(

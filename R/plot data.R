@@ -15,14 +15,13 @@ library(ggiraph) # this is good for interactivity, but cannot be converted to gr
 library(reshape2)
 library(this.path)
 
-# library(ggnewscale)
-# Use devtools to install ggnewscale version 0.4.3 as there seems to be bug in the
+# Install ggnewscale version 0.4.3 from GitHub as there seems to be bug in the
 # latest version -- this is annoying, but ggnewscale is vital for this map.
 # See this solution from the package developer: https://github.com/eliocamp/ggnewscale/issues/45
-# (I'm not convinced this helped! The issue seemed to solved by including '_new'
+# (I'm not convinced this helped! The issue seemed to be solved by including '_new'
 # as a suffix in arguments to the 'guides' function)
-library(devtools)
-ggnewscale_version <- '0.4.3'
+library(remotes)
+ggnewscale_version <- '0.4.10'
 ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
 ggnewscale_available <- require(ggnewscale, quietly = TRUE)
 if(!ggnewscale_available){
@@ -53,6 +52,8 @@ significantTrendsOnly <- TRUE
 # loadTooltipFromFile <- TRUE # this is only needed for the interactive map
 displayAllLitterTypes <- TRUE # If FALSE then only plastics are displayed. Set to TRUE to show samples of non-plastics -- this 
 
+roundShipTime <- FALSE
+
 res_options <- c('9x3', '3x1')
 res <- res_options[1]
 
@@ -61,7 +62,7 @@ get_data(
   res = res, allLitterTypes = displayAllLitterTypes, sstType = 'trend',
   pHType = 'trend', shipSummaryDataOrRaw = 'raw',
   sstTrend_significantOnly = significantTrendsOnly,
-  pHTrend_significantOnly = significantTrendsOnly, roundShipTime = TRUE,
+  pHTrend_significantOnly = significantTrendsOnly, roundShipTime = roundShipTime,
   indexGridCells = FALSE, loadTooltipFromFile = TRUE)
 
 
@@ -81,7 +82,8 @@ make_background_map <- function(
     pval_contours = FALSE, contourLineWidth = 0.25,
     ptStroke = 1, axisTextSize = 4, discreteColourScheme = FALSE,
     overlay_labels = NULL, latlim = NULL, nColours = NULL,
-    background.na.remove = FALSE, na.in.legend = TRUE){
+    background.na.remove = FALSE, na.in.legend = TRUE,
+    manual_legend_breaks = FALSE){
   if(backgroundOnly & stationsOnly){
     warning('Cannot select both backgroundOnly and stationsOnly')
     return(NULL)}
@@ -116,7 +118,8 @@ make_background_map <- function(
     axisTextSize = axisTextSize, singleLatAxis = FALSE,
     discreteColourScheme = discreteColourScheme,
     overlay_labels = overlay_labels, latlim = latlim, nColours = nColours,
-    background.na.remove = background.na.remove, na.in.legend = na.in.legend)
+    background.na.remove = background.na.remove, na.in.legend = na.in.legend,
+    manual_legend_breaks = manual_legend_breaks)
 
   mp
 }
@@ -243,15 +246,23 @@ p_ship_p$plot_complete
 # Shipping by vessel type
 axisTextSize <- 3
 ship_classes <- levels(ship_poly$activity)
+manual_legend_breaks_p <- c(0,5,50,500,2500,9.5e4) # choose a single break vector to identical scale for all vessel types
+manual_legend_breaks_p_all <- c(0,5,50,500,2500,1.5e5)
+manual_legend_breaks_s <- c(0,5,50,100,200,400)
+manual_legend_breaks_s_all <- c(0,5,50,100,200,850)
+
 for(i in 1:length(ship_classes)){
   ship_class <- ship_classes[i]
   plt_name0 <- paste0('p_ship_', ship_class)
   for(j in metrics){
+    manual_legend_breaks <- switch(j,
+                                   `ship time` = if(ship_classes[i] != 'all') manual_legend_breaks_s else manual_legend_breaks_s_all,
+                                   `person time` = if(ship_classes[i] != 'all') manual_legend_breaks_p else manual_legend_breaks_p_all)
     plt_name <- paste0(plt_name0, '_', substr(j,1,1))
     p <- make_background_map(
       background, ship_class, ship_data = ship_data, axisTextSize = axisTextSize,
-      discreteColourScheme = TRUE, latlim = latlim, shipOrPersonTime = j, nColours = 5,
-      na.in.legend = FALSE)
+      discreteColourScheme = TRUE, latlim = latlim, shipOrPersonTime = j, nColours = 6,
+      na.in.legend = FALSE, manual_legend_breaks = manual_legend_breaks)
     assign(plt_name, p)
   }
 }

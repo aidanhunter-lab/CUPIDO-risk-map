@@ -10,7 +10,7 @@ pkg.list <- c('remotes','shiny','sp','sf','mapdata',
               # 'maptools', # deprecated package
               'ggplot2','gtable','grid',
               'gridExtra','cowplot','RColorBrewer','scales','ggiraph','reshape2',
-              'flextable','DT','devtools')
+              'flextable','DT','patchwork') #,'devtools')
 
 # It seems that the code for generating multi-layered plots with multiple colour/fill
 # scales is not robust to updated package versions, so using specific package is
@@ -21,21 +21,21 @@ pkg.version <- c(remotes = '2.5.0', shiny = '1.7.4', sp = '2.1.4', sf = '1.0.16'
                  # maptools = '1.1.6',
                  ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4.0',
                  gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1.3', scales = '1.2.1',
-                 ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27',
-                 devtools = '2.4.5')
+                 ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1',
+                 DT = '0.27', patchwork = '1.2.0') #, devtools = '2.4.5')
 
 # Notation for archived versions on CRAN varies slightly -- using either a period or dash for minor versions
 pkg.version.archive <- c(remotes = '2.5.0', shiny = '1.7.4', sp = '2.1-4', sf = '1.0-16', mapdata = '2.3-1',
                          # maptools = '1.1.6',
                          ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4-0',
                          gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1-3', scales = '1.2.1',
-                         ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27',
-                         devtools = '2.4.5')
+                         ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1',
+                         DT = '0.27', patchwork = '1.2.0') #, devtools = '2.4.5')
 
 # Any problems arising after a fresh install may be due incompatibilities between
 # newer package versions, so if there are problems then try running with the package
 # versions listed here.
-install.listed.pkg.version <- TRUE # if any package is missing, install listed version (TRUE) or latest version (FALSE)?
+install.listed.pkg.version <- FALSE # if any package is missing, install listed version (TRUE) or latest version (FALSE)?
 
 # Load packages, installing if necessary.
 for(i in 1:length(pkg.list)){
@@ -85,7 +85,9 @@ for(i in 1:length(pkg.list)){
 # The package developer proposed a solution to the bug here: https://github.com/eliocamp/ggnewscale/issues/45
 # but I'm not convinced this helped! The issue seemed to solved by including '_new'
 # as a suffix in arguments to the 'guides' function.
-ggnewscale_version <- '0.4.3'
+
+# ggnewscale_version <- '0.4.3'
+ggnewscale_version <- '0.4.10'
 ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
 ggnewscale_available <- require(ggnewscale, quietly = TRUE)
 if(!ggnewscale_available){
@@ -114,18 +116,116 @@ source('functions.R', local = TRUE)
 significantTrendsOnly <- TRUE
 loadTooltipFromFile <- TRUE # set to FALSE when new plastic data is included or any modifications are made to the data
 displayAllLitterTypes <- TRUE # If FALSE then only plastics are displayed. Set to TRUE to show samples of non-plastics -- this is important when trawls bring up items that appear to be plastic (e.g., Kuklinski data)
+displayBackgroundNAs <- TRUE
 
-# source('import_data.R') # function (get_data) to load/organise data
-get_data(
-  baseDirectory = dir_base, dataDirectory = dir_data, mapDirectory = dir_map,
-  res = '3x1', 
-  allLitterTypes = displayAllLitterTypes,
-  sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
-  sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
-  roundShipTime = TRUE, shipOrPersonTime = NULL, indexGridCells = FALSE,
-  loadTooltipFromFile = loadTooltipFromFile)
+roundShipTime <- FALSE
+
+if(!displayBackgroundNAs){
+  get_data(
+    baseDirectory = dir_base, dataDirectory = dir_data, mapDirectory = dir_map,
+    res = '3x1', 
+    allLitterTypes = displayAllLitterTypes,
+    sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
+    sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
+    roundShipTime = roundShipTime, shipOrPersonTime = NULL, indexGridCells = FALSE,
+    loadTooltipFromFile = loadTooltipFromFile, theseData = NULL)
+}else{
+  # Include NA values for empty grid cells in all background data sets. Use the
+  # sea surface temperature data to define the grid cells because this data set
+  # has values for every cell.
+  get_data(
+    baseDirectory = dir_base, dataDirectory = dir_data, mapDirectory = dir_map,
+    res = '9x3', 
+    allLitterTypes = displayAllLitterTypes,
+    sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
+    sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
+    roundShipTime = roundShipTime, shipOrPersonTime = NULL, indexGridCells = FALSE,
+    loadTooltipFromFile = loadTooltipFromFile,
+    theseData = c('map', 'plastic', 'facility', 'ecoregions', 'krill','ship','sst'))
+  
+  sst_poly_9x3 <- sst_poly
+  
+  get_data(
+    baseDirectory = dir_base, dataDirectory = dir_data, mapDirectory = dir_map,
+    res = '3x1', 
+    allLitterTypes = displayAllLitterTypes,
+    sstType = 'trend', pHType = 'trend', shipSummaryDataOrRaw = 'raw',
+    sstTrend_significantOnly = significantTrendsOnly, pHTrend_significantOnly = significantTrendsOnly,
+    roundShipTime = roundShipTime, shipOrPersonTime = NULL, indexGridCells = FALSE,
+    loadTooltipFromFile = loadTooltipFromFile,
+    theseData = c('chl','sst','pH'))
+  
+  all_cells_9x3 <- unique(sst_poly_9x3[,'geometry'])
+  all_cells_3x1 <- unique(sst_poly[,'geometry'])
+  rm(sst_poly_9x3)
+  # Chlorophyll
+  for(l in unique(chl_poly$month)){
+    d <- chl_poly[chl_poly$month == l,]
+    i <- !all_cells_3x1$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells_3x1[i,]
+    j$month <- l
+    j$value <- NA
+    chl_poly <- rbind(chl_poly, j)
+    chl_poly <- chl_poly[order(chl_poly$month),]
+  }
+  # Krill
+  for(l in unique(krill_poly$month)){
+    d <- krill_poly[krill_poly$month == l,]
+    i <- !all_cells_9x3$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells_9x3[i,]
+    j$month <- l
+    j$value <- NA
+    j$colourgroup <- NA
+    krill_poly <- rbind(krill_poly, j)
+    krill_poly <- krill_poly[order(krill_poly$month),]
+  }
+  # Sea surface temperature
+  for(l in unique(sst_poly$metric)){
+    d <- sst_poly[sst_poly$metric == l,]
+    i <- !all_cells_3x1$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells_3x1[i,]
+    j$metric <- l
+    j$value <- NA
+    j$pval <- NA
+    j$plevel <- NA
+    sst_poly <- rbind(sst_poly, j)
+    sst_poly <- sst_poly[order(sst_poly$metric),]
+  }
+  # pH
+  for(l in unique(pH_poly$metric)){
+    d <- pH_poly[pH_poly$metric == l,]
+    i <- !all_cells_3x1$geometry %in% d$geometry
+    if(sum(i) == 0) next
+    j <- all_cells_3x1[i,]
+    j$metric <- l
+    j$value <- NA
+    j$pval <- NA
+    j$plevel <- NA
+    pH_poly <- rbind(pH_poly, j)
+    pH_poly <- pH_poly[order(pH_poly$metric),]
+  }
+  # Shipping
+  for(l in unique(ship_poly$activity)){
+    for(m in unique(ship_poly$variable)){
+      d <- ship_poly[ship_poly$activity == l & ship_poly$variable == m,]
+      i <- !all_cells_9x3$geometry %in% d$geometry
+      if(sum(i) == 0) next
+      j <- all_cells_9x3[i,]
+      j$year <- 'all'
+      j$activity <- l
+      j$variable <- m
+      j$value <- NA
+      ship_poly <- rbind(ship_poly, j)
+      ship_poly <- ship_poly[order(ship_poly$activity, ship_poly$variable),]
+    }
+  }
+}
 
 nc <- nc_plastic
+
 
 # It will be nice to able to select between trend data and anomalies from within
 # the Shiny app. This will involve returning both data sets from the get_data
@@ -348,8 +448,8 @@ ui <- fluidPage(
                                 });
                             '),
            # h3("Data plot"),
-           plotOutput('blank', width = '100%', height = '10px'),
-           # ggiraphOutput('plt')
+           plotOutput('blank', width = paste0(9/12*100,'%'), height = '10px'),
+           # plotOutput('blank', width = '100%', height = '10px'),
            girafeOutput('plt')
     ),
     
@@ -359,8 +459,9 @@ ui <- fluidPage(
     column(width = 12, #offset = 3,
            
            # wellPanel(
-             h4('Selected plastic data'),
-             dataTableOutput('datatab_plastic')
+           h4('Selected plastic data'),
+           DT::DTOutput('datatab_plastic')
+           # shiny::dataTableOutput('datatab_plastic')
            # )
            
     )
@@ -370,8 +471,9 @@ ui <- fluidPage(
     column(width = 12,
            
            # wellPanel(
-             h4('Selected facilities'),
-             dataTableOutput('datatab_stations')
+           h4('Selected facilities'),
+           DT::DTOutput('datatab_stations')
+           # shiny::dataTableOutput('datatab_stations')
            # )
            
     )
@@ -379,7 +481,7 @@ ui <- fluidPage(
 )
 
 # Define server logic ----
-server <- function(input, output, session) {
+server <- function(input, output, session){
   
   # Updating some Shiny inputs takes a long time because plotting the plastic
   # data is costly. Use 'debounce' function to delay updates, preventing each
@@ -406,7 +508,7 @@ server <- function(input, output, session) {
     )
   })
   # Plastic data
-  filtered_plastic_data <-reactive({
+  filtered_plastic_data <- reactive({
     x <- listInputs()
     y <- subset(DATA_long,
                 x$YearRange[1] <= Year & Year <= x$YearRange[2] &
@@ -425,9 +527,7 @@ server <- function(input, output, session) {
       subset(DATA_sf, data_id %in% fp$samples)
     )
   })
-  
-  
-  
+
   # Get background type
   which_background <- reactive({
       backgroundOptions <- c('none', 'krill', 'chl', 'sst', 'pH', 'ship')
@@ -487,8 +587,6 @@ server <- function(input, output, session) {
     return(input$DisplaySignificanceContours)
   )
   
-  
-  
   # Filter plot symbols based on sample & station types
   Symbols <- reactive({
     x <- listInputs()
@@ -510,7 +608,8 @@ server <- function(input, output, session) {
   
   # Create blank plot to specify sizing/aspect ratio of main plot
   output$blank = renderPlot({
-    ggplot(data.frame(x = 1, y = 1), aes(x, y)) + geom_point() + theme_void()
+    ggplot(data.frame()) + geom_point() + xlim(0,1) + ylim(0,1) + theme_void()
+    # ggplot(data.frame(x = 1, y = 1), aes(x, y)) + geom_point() + theme_void()
   })
   blankwidth = reactive({
     # this is the magic that makes it work
@@ -599,13 +698,12 @@ server <- function(input, output, session) {
     d
   })
   
-  output$datatab_plastic <- renderDataTable(displayed_data_table_plastic())#,
+  output$datatab_plastic <- DT::renderDT(displayed_data_table_plastic())
+  # output$datatab_plastic <- shiny::renderDataTable(displayed_data_table_plastic())#,
                                             # extensions = 'Buttons',
                                             # options = list(dom = 'Bfrtip',
                                             #                buttons = c('copy', 'csv')))
-  
 
-  
   display_data_table_stations <- reactive({
     d <- filtered_station_data()
     d <- as.data.frame(d)
@@ -625,10 +723,9 @@ server <- function(input, output, session) {
     d
   })
   
-  output$datatab_stations <- renderDataTable(display_data_table_stations())
-  
+  output$datatab_stations <- DT::renderDT(display_data_table_stations())
+  # output$datatab_stations <- shiny::renderDataTable(display_data_table_stations())
 
-      
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
   
