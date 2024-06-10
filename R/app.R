@@ -6,31 +6,24 @@
 
 # Packages ----------------------------------------------------------------
 # Required packages
-pkg.list <- c('remotes','shiny','sp','sf','mapdata',
-              # 'maptools', # deprecated package
-              'ggplot2','gtable','grid',
-              'gridExtra','cowplot','RColorBrewer','scales','ggiraph','reshape2',
-              'flextable','DT','patchwork') #,'devtools')
-
-# It seems that the code for generating multi-layered plots with multiple colour/fill
-# scales is not robust to updated package versions, so using specific package is
-# required. This is an issue to address in future...
+pkg.list <- c(
+  'remotes','shiny','sp','sf','mapdata','ggplot2','gtable','grid','gridExtra','patchwork',
+  'cowplot','RColorBrewer','scales','ggiraph','reshape2','flextable','DT') #,'devtools','maptools') # deprecated package
 
 # Package versions used for interactive map version 1.0:
-pkg.version <- c(remotes = '2.5.0', shiny = '1.7.4', sp = '2.1.4', sf = '1.0.16', mapdata = '2.3.1',
-                 # maptools = '1.1.6',
-                 ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4.0',
-                 gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1.3', scales = '1.2.1',
-                 ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1',
-                 DT = '0.27', patchwork = '1.2.0') #, devtools = '2.4.5')
+pkg.version <- c(
+  remotes = '2.5.0', shiny = '1.7.4', sp = '2.1.4', sf = '1.0.16', mapdata = '2.3.1',
+  ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4.0',gridExtra = '2.3', patchwork = '1.2.0',
+  cowplot = '1.1.1', RColorBrewer = '1.1.3', scales = '1.2.1', ggiraph = '0.8.7',
+  reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27') #, devtools = '2.4.5', maptools = '1.1.6')
 
 # Notation for archived versions on CRAN varies slightly -- using either a period or dash for minor versions
-pkg.version.archive <- c(remotes = '2.5.0', shiny = '1.7.4', sp = '2.1-4', sf = '1.0-16', mapdata = '2.3-1',
-                         # maptools = '1.1.6',
-                         ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4-0',
-                         gridExtra = '2.3', cowplot = '1.1.1', RColorBrewer = '1.1-3', scales = '1.2.1',
-                         ggiraph = '0.8.7', reshape2 = '1.4.4', flextable = '0.9.1',
-                         DT = '0.27', patchwork = '1.2.0') #, devtools = '2.4.5')
+pkg.version.archive <- c(
+  remotes = '2.5.0', shiny = '1.7.4', sp = '2.1-4', sf = '1.0-16', mapdata = '2.3-1',
+  ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4-0', gridExtra = '2.3', patchwork = '1.2.0',
+  cowplot = '1.1.1', RColorBrewer = '1.1-3', scales = '1.2.1', ggiraph = '0.8.7',
+  reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27') #, devtools = '2.4.5', maptools = '1.1.6')
+
 
 # Any problems arising after a fresh install may be due incompatibilities between
 # newer package versions, so if there are problems then try running with the package
@@ -79,13 +72,8 @@ for(i in 1:length(pkg.list)){
   }
 }
 
-# We need another package, ggnewscale, that, at the time of writing, needs to be
-# installed from GitHub. It also needs to be an old version as there appeared to
-# be a bug in the latest version.
-# The package developer proposed a solution to the bug here: https://github.com/eliocamp/ggnewscale/issues/45
-# but I'm not convinced this helped! The issue seemed to solved by including '_new'
-# as a suffix in arguments to the 'guides' function.
-
+# When I initially wrote this code it was necessary to install an old version of
+# ggnewscale from GitHub, but the problem seems to have been fixed in a later version.
 # ggnewscale_version <- '0.4.3'
 ggnewscale_version <- '0.4.10'
 ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
