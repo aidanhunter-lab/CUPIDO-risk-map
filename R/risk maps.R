@@ -40,20 +40,23 @@ library(ggplot2)
 library(gridExtra)
 library(cowplot)
 library(remotes)
-ggnewscale_version <- '0.4.3'
-ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
-ggnewscale_available <- require(ggnewscale, quietly = TRUE)
-if(!ggnewscale_available){
-  install_github(ggnewscale_download_path)
-  library(ggnewscale)
-}else{
-  if(packageVersion('ggnewscale') != ggnewscale_version){
-    detach("package:ggnewscale", unload = TRUE)
-    remove.packages('ggnewscale')
-    install_github(ggnewscale_download_path)
-    library(ggnewscale)
-  }
-}
+library(ggnewscale)
+
+# # ggnewscale_version <- '0.4.10'
+# ggnewscale_version <- '0.4.3'
+# ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
+# ggnewscale_available <- require(ggnewscale, quietly = TRUE)
+# if(!ggnewscale_available){
+#   install_github(ggnewscale_download_path)
+#   library(ggnewscale)
+# }else{
+#   if(packageVersion('ggnewscale') != ggnewscale_version){
+#     detach("package:ggnewscale", unload = TRUE)
+#     remove.packages('ggnewscale')
+#     install_github(ggnewscale_download_path)
+#     library(ggnewscale)
+#   }
+# }
 
 library(this.path)
 
@@ -907,12 +910,12 @@ par(mfrow = c(1,1))
 plot(x, y)
 plot(x, y, log = 'y')
 
-y_ <- y[y >= 1] # data less than 1 is lowest rank
+y_ <- y[y > 0] # measurement zeros are lowest rank
 x_ <- {1:length(y_)} / length(y_)
 # yp <- y[y>0]
 plot(x_, y_, log = 'y')
 
-y_r <- y_[-c({length(y_)-2}:length(y_))] # omit outliers
+y_r <- y_[-c(1, {length(y_)-2}:length(y_))] # omit outliers
 x_r <- 1:length(y_r)
 plot(x_r, y_r, log = 'y')
 
@@ -993,13 +996,13 @@ par(mfrow = c(1,1))
 plot(x, y)
 plot(x, y, log = 'y')
 
-y_ <- y[y >= 1] # data less than 1 is lowest rank
+y_ <- y[y > 0] # measurement zeros are lowest rank
 x_ <- {1:length(y_)} / length(y_)
 # yp <- y[y>0]
 plot(x_, y_, log = 'y')
 
-y_r <- y_[-c({length(y_)-2}:length(y_))] # omit outliers
-x_r <- 1:length(y_r)
+y_r <- y_[-c(1, {length(y_)-2}:length(y_))] # omit outliers
+x_r <- 1:length(y_r) / length(y_r)
 plot(x_r, y_r, log = 'y')
 
 yl <- log10(y_r)
@@ -1053,7 +1056,8 @@ plt_ship_raw <-
   geom_hline(yintercept = r[2:nranks], linetype = 3) +
   annotate('text', x = 1, y = r[2:nranks], label = as.character(r[2:nranks]), vjust = 0, hjust = 0) +
   xlab(expression(grid ~ cell ~ index)) +
-  ylab(expression(ship ~ traffic ~ (person ~ days ~ year ^ {-1}))) +
+  ylab(expression(ship ~ traffic ~ (PD ~ y ^ {'-1'} ~ (10^4 ~ km^2) ^ {'-1'}))) +
+  # ylab(expression(ship ~ traffic ~ (person ~ days ~ year ^ {-1}))) +
   scale_y_continuous(trans = 'log10', labels = function(x){
     f <- format(x, scientific = FALSE)
     while(any(grepl(' ', f))) f <- gsub(' ', '', f)
