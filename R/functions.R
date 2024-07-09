@@ -402,21 +402,21 @@ get_data <- function(
   
   # Load ecoregion shape files -----------------------------------------------------
 
-  if(is.null(theseData) || 'ecoregions' %in% theseData){
-
-  # verbose = TRUE
-  f <- 'data/commondata/data0/meow_ecos_expl_clipped_expl.shp'
-  f <- paste(dataDirectory, 'marine ecoregions', f, sep = '/')
-  eco <- st_read(f, quiet = !verbose)
-
-  # Filter ecoregions by province
-  keepProvinces <- c(60, 61, 48, 59, 62) # 60=Scotia Sea, 61=Continental High Antarctic, 48=Magellenic, 59=Subantarctic Islands, 62=Subantarctic New Zealand
-  eco <- eco[eco$PROV_CODE %in% keepProvinces,]
-
-  # Change coordinate reference system
-  eco <- st_transform(eco, crs_use)
-
-  }
+  # if(is.null(theseData) || 'ecoregions' %in% theseData){
+  # 
+  # # verbose = TRUE
+  # f <- 'data/commondata/data0/meow_ecos_expl_clipped_expl.shp'
+  # f <- paste(dataDirectory, 'marine ecoregions', f, sep = '/')
+  # eco <- st_read(f, quiet = !verbose)
+  # 
+  # # Filter ecoregions by province
+  # keepProvinces <- c(60, 61, 48, 59, 62) # 60=Scotia Sea, 61=Continental High Antarctic, 48=Magellenic, 59=Subantarctic Islands, 62=Subantarctic New Zealand
+  # eco <- eco[eco$PROV_CODE %in% keepProvinces,]
+  # 
+  # # Change coordinate reference system
+  # eco <- st_transform(eco, crs_use)
+  # 
+  # }
   
   # Load shipping data  -----------------------------------------------------
   
@@ -1408,14 +1408,14 @@ get_data <- function(
   assign('nc_plastic', nc[[1]], envir = parent.frame())
   assign('nc_cells', nc[[2]], envir = parent.frame())
   
-  # Trim ecoregions to coastline boundaries
-  eco <- lapply(1:length(nc), function(z){
-    x <- eco
-    attr(st_geometry(x), 'bbox') <- st_bbox(nc[[z]])
-    suppressWarnings(st_crop(x, st_bbox(x)))})
-  
-  assign('eco_plastic', eco[[1]], envir = parent.frame())
-  assign('eco_cells', eco[[2]], envir = parent.frame())
+  # # Trim ecoregions to coastline boundaries
+  # eco <- lapply(1:length(nc), function(z){
+  #   x <- eco
+  #   attr(st_geometry(x), 'bbox') <- st_bbox(nc[[z]])
+  #   suppressWarnings(st_crop(x, st_bbox(x)))})
+  # 
+  # assign('eco_plastic', eco[[1]], envir = parent.frame())
+  # assign('eco_cells', eco[[2]], envir = parent.frame())
   
   # Below is code for loading old data
 
