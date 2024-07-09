@@ -2,7 +2,7 @@
 
 # Packages ----------------------------------------------------------------
 
-library(sp)
+# library(sp)
 library(sf)
 # library(maptools) # for the ContourLines2SLDF() function used to map contour lines DEPRECATED PACKAGE
 library(ggplot2)
@@ -15,26 +15,26 @@ library(ggiraph) # this is good for interactivity, but cannot be converted to gr
 library(reshape2)
 library(this.path)
 
-# Install ggnewscale version 0.4.3 from GitHub as there seems to be bug in the
-# latest version -- this is annoying, but ggnewscale is vital for this map.
-# See this solution from the package developer: https://github.com/eliocamp/ggnewscale/issues/45
-# (I'm not convinced this helped! The issue seemed to be solved by including '_new'
-# as a suffix in arguments to the 'guides' function)
-library(remotes)
-ggnewscale_version <- '0.4.10'
-ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
-ggnewscale_available <- require(ggnewscale, quietly = TRUE)
-if(!ggnewscale_available){
-  install_github(ggnewscale_download_path)
-  library(ggnewscale)
-}else{
-  if(packageVersion('ggnewscale') != ggnewscale_version){
-    detach("package:ggnewscale", unload = TRUE)
-    remove.packages('ggnewscale')
-    install_github(ggnewscale_download_path)
-    library(ggnewscale)
-  }
-}
+# # Install ggnewscale version 0.4.3 from GitHub as there seems to be bug in the
+# # latest version -- this is annoying, but ggnewscale is vital for this map.
+# # See this solution from the package developer: https://github.com/eliocamp/ggnewscale/issues/45
+# # (I'm not convinced this helped! The issue seemed to be solved by including '_new'
+# # as a suffix in arguments to the 'guides' function)
+# library(remotes)
+# ggnewscale_version <- '0.4.10'
+# ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
+# ggnewscale_available <- require(ggnewscale, quietly = TRUE)
+# if(!ggnewscale_available){
+#   install_github(ggnewscale_download_path)
+#   library(ggnewscale)
+# }else{
+#   if(packageVersion('ggnewscale') != ggnewscale_version){
+#     detach("package:ggnewscale", unload = TRUE)
+#     remove.packages('ggnewscale')
+#     install_github(ggnewscale_download_path)
+#     library(ggnewscale)
+#   }
+# }
 
 # Directory info ----------------------------------------------------------
 

@@ -45,7 +45,7 @@ getMapData <- function(
   # Load packages & set directories -----------------------------------------
   # Required packages
   library(sf)
-  library(sp)
+  # library(sp)
   
   # Specify directories of stored shape files
   if(!is.null(mapSource)) dataDirectory <- paste(dataDirectory, mapSource, sep = '/')
@@ -340,7 +340,7 @@ get_data <- function(
   # Load packages
   library(reshape2)
   library(mapdata)
-  library(sp)
+  # library(sp)
   library(sf)
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   

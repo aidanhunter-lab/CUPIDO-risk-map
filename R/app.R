@@ -7,22 +7,22 @@
 # Packages ----------------------------------------------------------------
 # Required packages
 pkg.list <- c(
-  'remotes','shiny','sp','sf','mapdata','ggplot2','gtable','grid','gridExtra','patchwork',
-  'cowplot','RColorBrewer','scales','ggiraph','reshape2','flextable','DT') #,'devtools','maptools') # deprecated package
+  'remotes','shiny','sf','mapdata','ggplot2','gtable','grid','gridExtra','patchwork',
+  'cowplot','RColorBrewer','scales','ggiraph','reshape2','flextable','DT','ggnewscale') #,'devtools','maptools', 'sp') # deprecated package
 
 # Package versions used for interactive map version 1.0:
 pkg.version <- c(
-  remotes = '2.5.0', shiny = '1.7.4', sp = '2.1.4', sf = '1.0.16', mapdata = '2.3.1',
+  remotes = '2.5.0', shiny = '1.7.4', sf = '1.0.16', mapdata = '2.3.1',
   ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4.0',gridExtra = '2.3', patchwork = '1.2.0',
   cowplot = '1.1.1', RColorBrewer = '1.1.3', scales = '1.2.1', ggiraph = '0.8.7',
-  reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27') #, devtools = '2.4.5', maptools = '1.1.6')
+  reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27', ggnewscale = '0.4.10') #, devtools = '2.4.5', maptools = '1.1.6', sp = '2.1.4')
 
 # Notation for archived versions on CRAN varies slightly -- using either a period or dash for minor versions
 pkg.version.archive <- c(
-  remotes = '2.5.0', shiny = '1.7.4', sp = '2.1-4', sf = '1.0-16', mapdata = '2.3-1',
+  remotes = '2.5.0', shiny = '1.7.4', sf = '1.0-16', mapdata = '2.3-1',
   ggplot2 = '3.4.4', gtable = '0.3.3', grid = '4.4-0', gridExtra = '2.3', patchwork = '1.2.0',
   cowplot = '1.1.1', RColorBrewer = '1.1-3', scales = '1.2.1', ggiraph = '0.8.7',
-  reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27') #, devtools = '2.4.5', maptools = '1.1.6')
+  reshape2 = '1.4.4', flextable = '0.9.1', DT = '0.27', ggnewscale = '0.4.10') #, devtools = '2.4.5', maptools = '1.1.6', sp = '2.1-4')
 
 
 # Any problems arising after a fresh install may be due incompatibilities between
@@ -72,23 +72,23 @@ for(i in 1:length(pkg.list)){
   }
 }
 
-# When I initially wrote this code it was necessary to install an old version of
-# ggnewscale from GitHub, but the problem seems to have been fixed in a later version.
-# ggnewscale_version <- '0.4.3'
-ggnewscale_version <- '0.4.10'
-ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
-ggnewscale_available <- require(ggnewscale, quietly = TRUE)
-if(!ggnewscale_available){
-  install_github(ggnewscale_download_path)
-  library(ggnewscale)
-}else{
-  if(packageVersion('ggnewscale') != ggnewscale_version){
-    detach("package:ggnewscale", unload = TRUE)
-    remove.packages('ggnewscale')
-    install_github(ggnewscale_download_path)
-    library(ggnewscale)
-  }
-}
+# # When I initially wrote this code it was necessary to install an old version of
+# # ggnewscale from GitHub, but the problem seems to have been fixed in a later version.
+# # ggnewscale_version <- '0.4.3'
+# ggnewscale_version <- '0.4.10'
+# ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
+# ggnewscale_available <- require(ggnewscale, quietly = TRUE)
+# if(!ggnewscale_available){
+#   install_github(ggnewscale_download_path)
+#   library(ggnewscale)
+# }else{
+#   if(packageVersion('ggnewscale') != ggnewscale_version){
+#     detach("package:ggnewscale", unload = TRUE)
+#     remove.packages('ggnewscale')
+#     install_github(ggnewscale_download_path)
+#     library(ggnewscale)
+#   }
+# }
 
 # Directory info ----------------------------------------------------------
 
