@@ -45,7 +45,7 @@ getMapData <- function(
   # Load packages & set directories -----------------------------------------
   # Required packages
   library(sf)
-  # library(sp)
+  library(sp)
   
   # Specify directories of stored shape files
   if(!is.null(mapSource)) dataDirectory <- paste(dataDirectory, mapSource, sep = '/')
@@ -340,7 +340,7 @@ get_data <- function(
   # Load packages
   library(reshape2)
   library(mapdata)
-  # library(sp)
+  library(sp)
   library(sf)
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
@@ -401,31 +401,22 @@ get_data <- function(
   }
   
   # Load ecoregion shape files -----------------------------------------------------
-  
+
   if(is.null(theseData) || 'ecoregions' %in% theseData){
-  
+
   # verbose = TRUE
   f <- 'data/commondata/data0/meow_ecos_expl_clipped_expl.shp'
   f <- paste(dataDirectory, 'marine ecoregions', f, sep = '/')
   eco <- st_read(f, quiet = !verbose)
-  
+
   # Filter ecoregions by province
   keepProvinces <- c(60, 61, 48, 59, 62) # 60=Scotia Sea, 61=Continental High Antarctic, 48=Magellenic, 59=Subantarctic Islands, 62=Subantarctic New Zealand
   eco <- eco[eco$PROV_CODE %in% keepProvinces,]
-  
+
   # Change coordinate reference system
   eco <- st_transform(eco, crs_use)
-  
-# #  adjust from here down
-#   
-#   # Match bounding box to coastline data
-#   attr(st_geometry(eco), 'bbox') <- st_bbox(nc)
-#   
-#   # Crop ecoregions to map limits
-#   eco <- st_crop(eco, st_bbox(eco))
-#   
-#   assign('eco', eco, envir = parent.frame())
-  }  
+
+  }
   
   # Load shipping data  -----------------------------------------------------
   
