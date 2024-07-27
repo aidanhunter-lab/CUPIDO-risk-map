@@ -3318,6 +3318,7 @@ make_plot <- function(
   
   plt_background <- plt_background +
     theme(
+      legend.justification = 'left',
       axis.text = element_blank(),
       axis.ticks = element_blank(),
       panel.background = element_rect(fill = 'white', colour = 'white'),
@@ -3462,6 +3463,7 @@ make_plot <- function(
   
   if(stationsOnly){
     plt_map <- plt_map +
+      guides(fill='none') +
       guides(
         shape = guide_legend(override.aes = list(
           size = legPtSize, stroke = 1),
@@ -3577,7 +3579,8 @@ make_plot <- function(
             override.aes = list(size = legPtSize, shape = 1)))
     }
     plt_stations <- plt_stations +
-      theme(legend.key = element_blank())
+      theme(legend.key = element_blank(),
+            legend.justification = 'left')
     leg_stations <- get_plot_component(
       plt_stations + 
         theme(legend.margin = margin(0,0,0,0),
@@ -3633,7 +3636,8 @@ make_plot <- function(
         }
       ) +
       scale_shape_manual(values = setNames(symbols_$symbol, symbols_$Type)) +
-      theme(legend.key = element_blank())
+      theme(legend.key = element_blank(),
+            legend.justification = 'left')
     leg_plastic <- get_plot_component(plt_plastic_samples,# + theme(legend.margin = margin(0,0,0,0)),
                                       'guide-box', return_all = TRUE)[[1]]
     # leg_plastic <- get_legend(plt_plastic_samples)
@@ -3686,29 +3690,50 @@ make_plot <- function(
   map_height <- map_width / mapAspectRatio
   tot_height <- max(map_height, leg_height)
   
-  leg_blank <- patchwork::plot_spacer() + theme_void()# + theme(plot.margin = unit(c(0,0,0,0),'cm'))
+  # leg_blank <- patchwork::plot_spacer() + theme_void()# + theme(plot.margin = unit(c(0,0,0,0),'cm'))
+  # 
+  # l1 <- plot_grid(
+  #   leg_blank, leg_plastic, leg_blank,
+  #   nrow = 3, rel_heights = c(
+  #   0.5*{tot_height-leg_plastic_height}, leg_plastic_height, 0.5*{tot_height-leg_plastic_height}))
+  # l2 <- plot_grid(
+  #   leg_blank, leg_stations, leg_blank, leg_background, leg_blank,
+  #   nrow = 5, rel_heights = c(
+  #     0.45*{tot_height - {leg_stations_height + leg_background_height}},
+  #     leg_stations_height,
+  #     0.1*{tot_height - {leg_stations_height + leg_background_height}},
+  #     leg_background_height,
+  #     0.45*{tot_height - {leg_stations_height + leg_background_height}}
+  #     ), align = 'v', axis = 'l')
+  # leg_complete <- plot_grid(l1, l2, ncol=2)
+  # 
+  # plt_complete <- ggdraw(
+  #   plot_grid(
+  #     plt_map,
+  #     leg_complete,
+  #     ncol = 2, rel_widths = c(1-legWidth, legWidth), align = 'h', axis = 't'))
+
+  lph <- rep('1',ceiling(leg_plastic_height))
+  lsh <- rep('2',ceiling(leg_stations_height))
+  lbh <- rep('3',ceiling(leg_background_height))
+  lsbh <- c(lsh,lbh)
+  lpad <- length(lph) - length(lsbh)# - 1
+  if(lpad > 0){
+    lsbh <- c(rep('#', floor(0.5 * lpad)), lsbh, rep('#', ceiling(0.5*lpad)))
+  }else{
+    lph <- c(rep('#', floor(0.5 * abs(lpad))), lph, rep('#', ceiling(0.5 * abs(lpad))))
+  }
+  leg_layout <- cbind(lph, rep('#',length(lph)), lsbh)
+  leg_layout <- apply(leg_layout, 1, function(z) paste(z, collapse = ''))
+  leg_layout <- paste(leg_layout, collapse = '\n')
   
-  l1 <- plot_grid(
-    leg_blank, leg_plastic, leg_blank,
-    nrow = 3, rel_heights = c(
-    0.5*{tot_height-leg_plastic_height}, leg_plastic_height, 0.5*{tot_height-leg_plastic_height}))
-  l2 <- plot_grid(
-    leg_blank, leg_stations, leg_blank, leg_background, leg_blank,
-    nrow = 5, rel_heights = c(
-      0.45*{tot_height - {leg_stations_height + leg_background_height}},
-      leg_stations_height,
-      0.1*{tot_height - {leg_stations_height + leg_background_height}},
-      leg_background_height,
-      0.45*{tot_height - {leg_stations_height + leg_background_height}}
-      ), align = 'v', axis = 'l')
-  leg_complete <- plot_grid(l1, l2, ncol=2)
-  
-  plt_complete <- ggdraw(
-    plot_grid(
-      plt_map,
-      leg_complete,
-      ncol = 2, rel_widths = c(1-legWidth, legWidth), align = 'h', axis = 't'))
-  
+  leg_complete <- ggdraw(leg_plastic) + ggdraw(leg_stations) + 
+    ggdraw(leg_background) + NULL + 
+    plot_layout(design = leg_layout)
+
+  plt_complete <- plt_map + leg_complete + 
+    plot_layout(ncol = 2, widths = c(1-legWidth, legWidth))
+    
   return(
     list(
       plot = plt_complete, width = tot_width, height = tot_height

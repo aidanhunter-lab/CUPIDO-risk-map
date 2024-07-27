@@ -14,6 +14,7 @@ library(scales)
 library(ggiraph) # this is good for interactivity, but cannot be converted to grobs for layout...
 library(reshape2)
 library(this.path)
+library(ggnewscale)
 
 # # Install ggnewscale version 0.4.3 from GitHub as there seems to be bug in the
 # # latest version -- this is annoying, but ggnewscale is vital for this map.
@@ -71,7 +72,7 @@ get_data(
 # 1. background data
 
 nc <- nc_cells
-eco <- eco_cells
+# eco <- eco_cells # data on ecoregions is now omitted
 latlim <- lat_lim_cells
 set_plot_params(nc, DATA_sf, STATIONS_sf)
 
@@ -246,7 +247,7 @@ p_ship_p$plot_complete
 # Shipping by vessel type
 axisTextSize <- 3
 ship_classes <- levels(ship_poly$activity)
-manual_legend_breaks_p <- c(0,5,50,500,2500,9.5e4) # choose a single break vector to identical scale for all vessel types
+manual_legend_breaks_p <- c(0,5,50,500,2500,9.5e4) # choose a single break vector to create identical scale for all vessel types
 manual_legend_breaks_p_all <- c(0,5,50,500,2500,1.5e5)
 manual_legend_breaks_s <- c(0,5,50,100,200,400)
 manual_legend_breaks_s_all <- c(0,5,50,100,200,850)
@@ -262,7 +263,7 @@ for(i in 1:length(ship_classes)){
     p <- make_background_map(
       background, ship_class, ship_data = ship_data, axisTextSize = axisTextSize,
       discreteColourScheme = TRUE, latlim = latlim, shipOrPersonTime = j, nColours = 6,
-      na.in.legend = FALSE, manual_legend_breaks = manual_legend_breaks)
+      na.in.legend = TRUE, manual_legend_breaks = manual_legend_breaks)
     assign(plt_name, p)
   }
 }
@@ -413,7 +414,7 @@ p_stations_ <- plot_grid(p_stations$plot, p_stations$legend, rel_widths = rw) +
   theme(plot.margin = unit(c(0,0,0,0), 'cm'))
 
 p_all_s <- plot_grid(
-  p_chl_, p_krill_, p_sst_, p_pH_, p_ship_s_, p_stations_,
+  p_krill_, p_chl_, p_sst_, p_pH_, p_ship_s_, p_stations_,
   nrow = nrw, ncol = ncl, align = 'hv', axis = 'tblr',
   labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9,
   label_fontface = 2, label_fontfamily = 'serif') + 
@@ -421,7 +422,7 @@ p_all_s <- plot_grid(
         plot.background = element_rect(fill = 'white', colour = 'white'))
 
 p_all_p <- plot_grid(
-  p_chl_, p_krill_, p_sst_, p_pH_, p_ship_p_, p_stations_,
+  p_krill_, p_chl_, p_sst_, p_pH_, p_ship_p_, p_stations_,
   nrow = nrw, ncol = ncl, align = 'hv', axis = 'tblr',
   labels = LETTERS[1:npanels], label_x = 0.05, label_y = 0.9,
   label_fontface = 2, label_fontfamily = 'serif') + 
@@ -447,7 +448,7 @@ ggsave(fileName, plot = p_all_p, device = 'png', path = dir_plots, width = pw,
 # 2. plastic data
 
 nc <- nc_plastic
-eco <- eco_plastic
+# eco <- eco_plastic
 set_plot_params(nc, DATA_sf, STATIONS_sf)
 latlim <- lat_lim_plastic
 
@@ -522,7 +523,7 @@ for(i in 1:nrow(Symbols)){
   if(j %in% sg) Symbols$Type[i] <- sgnew[which(sg == j)]}
 Symbols$Type <- as.factor(Symbols$Type)
 stations <- NULL
-ptSize <- 4
+ptSize <- 3
 
 p_pla <- make_plastic_map(plastic, stations, ptSize, Symbols, alpha = 0.9,
                           latlim = latlim, overlay_labels = labelSeas)
@@ -532,7 +533,7 @@ p_plastic <- p_pla$plot_complete +
 
 A4_w <- 8.3 # A4 dimensions
 A4_h <- 11.7
-sc_w <- 1.2 # scaling factors
+sc_w <- 1.35 # scaling factors
 sc_h <- 0.8
 pw <- sc_w * A4_w
 ph <- sc_h * pw
