@@ -322,6 +322,12 @@ backgroundData_choiceValues <- switch(shipSummaryDataOrRaw,
 
 ui <- fluidPage(
   
+  # Suppress warning messages
+  tags$style(type="text/css",
+             ".shiny-output-error { visibility: hidden; }",
+             ".shiny-output-error:before { visibility: hidden; }"
+  ),
+
   # App title
   titlePanel('Mapping Southern Ocean Plastic Data'),
   
@@ -439,7 +445,7 @@ ui <- fluidPage(
            plotOutput('blank', width = paste0(9/12*100,'%'), height = '10px'),
            # plotOutput('blank', width = '100%', height = '10px'),
            girafeOutput('plt')
-    ),
+    )
     
   ),
   
@@ -623,12 +629,12 @@ server <- function(input, output, session){
     h <- pm$height
     bw <- blankwidth()
     bh <- bw / {w / h}
-    # w <- blankwidth()
-    # h <- blankheight()
+    w <- as.vector(bw / input$dpi)[1]
+    h <- as.vector(bh / input$dpi)[1]
     x <- girafe(code = print(p),
-                width_svg = (bw / {input$dpi}),
-                height_svg = (bh / {input$dpi})
-    )
+                width_svg = w,
+                height_svg = h) # this line causes a warning message that I can't get rid of directly, so warnings are masked in the ui section
+    
     x <- girafe_options(x,
                         opts_sizing(rescale = FALSE),
                         # opts_tooltip(css = 'background:white;'),
