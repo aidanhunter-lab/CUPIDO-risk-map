@@ -391,13 +391,13 @@ ui <- fluidPage(
                            'Depot' = 'Depot'),
                          multiple = TRUE, selected = c('Station', 'Camp', 'Refuge', 'Airfield Camp', 'Laboratory', 'Depot')),
 
-             # Input: display ecoregions
-             checkboxInput('DisplayEcoregions','Display ecoregions',
-                           value = FALSE),
-
-             # Input: display contours of linear model p-values
-             checkboxInput('DisplaySignificanceContours','Display linear trend p-values',
-                           value = FALSE),
+             # # Input: display ecoregions
+             # checkboxInput('DisplayEcoregions','Display ecoregions',
+             #               value = FALSE),
+             # 
+             # # Input: display contours of linear model p-values
+             # checkboxInput('DisplaySignificanceContours','Display linear trend p-values',
+             #               value = FALSE),
              
              # Input: shipping metric (ship or person time)
              radioButtons('ShipMetric', 'Ship traffic metric:',
@@ -565,15 +565,15 @@ server <- function(input, output, session){
     return(background_dat)
   })
   
-  # Display ecoregions
-  display_ecoregions <-reactive(
-    return(input$DisplayEcoregions)
-  )
+  # # Display ecoregions
+  # display_ecoregions <-reactive(
+  #   return(input$DisplayEcoregions)
+  # )
   
-  # Display p-values of linear trends
-  display_trend_pvals <-reactive(
-    return(input$DisplaySignificanceContours)
-  )
+  # # Display p-values of linear trends
+  # display_trend_pvals <-reactive(
+  #   return(input$DisplaySignificanceContours)
+  # )
   
   # Filter plot symbols based on sample & station types
   Symbols <- reactive({
@@ -590,7 +590,7 @@ server <- function(input, output, session){
     background <- filtered_background_dat()
     symbols <- Symbols()
     return(
-      list(nc = nc, background = background, stations = stations, plastic = plastic, symbols = symbols) #, pltColours = pltColours)
+      list(nc = nc, background = background, stations = stations, plastic = plastic, symbols = symbols)
     )
   })
   
@@ -610,8 +610,9 @@ server <- function(input, output, session){
   
   plot_main <- reactive({
     return(
-      make_plot(dat = listData(), background = which_background(), displayEcoregions = display_ecoregions(),
-                     plotSignificanceContours = display_trend_pvals(), latlim = lat_lim_plastic)
+      make_plot(dat = listData(), background = which_background(),
+                # displayEcoregions = display_ecoregions(), plotSignificanceContours = display_trend_pvals(),
+                latlim = lat_lim_plastic)
     )
   })
 

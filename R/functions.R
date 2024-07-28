@@ -1991,7 +1991,7 @@ make_plot <- function(
     dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE,
     stationsOnly = FALSE, plasticOnly = FALSE, ptSize = 6, legPtSize = 4,
     legPtSize_fill = 6, ptStroke = 2, alpha = 0.85, polyLineWidth = 0.75,
-    contourLineWidth = 0.75, legWidth = 0.25, mapAspectRatio = aspectRatio,
+    contourLineWidth = 0.75, legWidth = 0.3, mapAspectRatio = aspectRatio,
     plotSignificanceContours = FALSE, significanceContours = NULL,
     sst_sigContours = significanceContours,
     pH_sigContours = significanceContours, stationPopSize = FALSE,
@@ -3690,6 +3690,9 @@ make_plot <- function(
   map_height <- map_width / mapAspectRatio
   tot_height <- max(map_height, leg_height)
   
+  # Arranging this legend has been tricky...
+  
+  # Using cowplot...
   # leg_blank <- patchwork::plot_spacer() + theme_void()# + theme(plot.margin = unit(c(0,0,0,0),'cm'))
   # 
   # l1 <- plot_grid(
@@ -3713,6 +3716,7 @@ make_plot <- function(
   #     leg_complete,
   #     ncol = 2, rel_widths = c(1-legWidth, legWidth), align = 'h', axis = 't'))
 
+  # Using patchwork to directly control layout
   lph <- rep('1',ceiling(leg_plastic_height))
   lsh <- rep('2',ceiling(leg_stations_height))
   lbh <- rep('3',ceiling(leg_background_height))
@@ -3723,17 +3727,113 @@ make_plot <- function(
   }else{
     lph <- c(rep('#', floor(0.5 * abs(lpad))), lph, rep('#', ceiling(0.5 * abs(lpad))))
   }
-  leg_layout <- cbind(lph, rep('#',length(lph)), lsbh)
+  lp <- rep('#',length(lph))
+  leg_layout <- cbind(lph, lp, lsbh, lp)
+  # leg_layout <- cbind(lph, rep(2,length(lph)), lsbh, rep(5,length(lph)))
   leg_layout <- apply(leg_layout, 1, function(z) paste(z, collapse = ''))
   leg_layout <- paste(leg_layout, collapse = '\n')
-  
-  leg_complete <- ggdraw(leg_plastic) + ggdraw(leg_stations) + 
-    ggdraw(leg_background) + NULL + 
-    plot_layout(design = leg_layout)
 
-  plt_complete <- plt_map + leg_complete + 
+  leg_complete <- ggdraw(leg_plastic) + ggdraw(leg_stations) +
+    ggdraw(leg_background) +
+    plot_layout(design = leg_layout)
+  # leg_complete <- ggdraw(leg_plastic) + plot_spacer() + ggdraw(leg_stations) +
+  #   ggdraw(leg_background) + plot_spacer() +
+  #   plot_layout(design = leg_layout)
+
+  plt_complete <- plt_map + leg_complete +
     plot_layout(ncol = 2, widths = c(1-legWidth, legWidth))
-    
+  
+  # Using table grobs to merge all legends into single grob (should be the
+  # slickest method but it caused issues)...
+  # leg_p <- !is.null(leg_plastic)
+  # leg_s <- !is.null(leg_stations)
+  # leg_b <- !is.null(leg_background)
+  # legs <- paste(c('p','s','b')[c(leg_p,leg_s,leg_b)], collapse = '')
+  # leg_complete <- switch(legs,
+  #                        psb = {
+  #                          w1 <- unit(max(as.vector(leg_stations$widths),as.vector(leg_background$widths)),'cm')
+  #                          l1 <- gtable_col('combine1', list(leg_stations, leg_background), width = w1)
+  #                          w2 <- unit(max(as.vector(leg_plastic$widths)), 'cm')
+  #                          gtable_row('combine2', list(leg_plastic, l1), widths = unit(c(w2,w1), 'cm'))
+  #                        },
+  #                        ps = {
+  #                          w1 <- unit(max(as.vector(leg_stations$widths)),'cm')
+  #                          l1 <- gtable_col('combine1', list(leg_stations), width = w1)
+  #                          w2 <- unit(max(as.vector(leg_plastic$widths)), 'cm')
+  #                          gtable_row('combine2', list(leg_plastic, l1), widths = unit(c(w2,w1), 'cm'))
+  #                        },
+  #                        pb = {
+  #                          w1 <- unit(max(as.vector(leg_background$widths)),'cm')
+  #                          l1 <- gtable_col('combine1', list(leg_background), width = w1)
+  #                          w2 <- unit(max(as.vector(leg_plastic$widths)), 'cm')
+  #                          gtable_row('combine2', list(leg_plastic, l1), widths = unit(c(w2,w1), 'cm'))
+  #                        },
+  #                        sb = {
+  #                          w1 <- unit(max(as.vector(leg_stations$widths),as.vector(leg_background$widths)),'cm')
+  #                          gtable_col('combine1', list(leg_stations, leg_background), width = w1)
+  #                        },
+  #                        p = {
+  #                          w1 <- unit(max(as.vector(leg_plastic$widths)),'cm')
+  #                          gtable_col('combine1', list(leg_plastic), width = w1)
+  #                        },
+  #                        s = {
+  #                          w1 <- unit(max(as.vector(leg_stations$widths)),'cm')
+  #                          gtable_col('combine1', list(leg_stations), width = w1)
+  #                        },
+  #                        b = {
+  #                          w1 <- unit(max(as.vector(leg_background$widths)),'cm')
+  #                          gtable_col('combine1', list(leg_background), width = w1)
+  #                        })
+# 
+#   plt_complete <- plt_map + ggdraw(leg_complete) + 
+#     plot_layout(ncol = 2, widths = c(1-legWidth, legWidth))
+  
+  
+  # if(leg_all){
+  #   # leg_complete <- leg_plastic
+  #   # leg_complete$grobs[[3]] <- leg_stations$grobs[[1]]
+  #   # leg_complete$grobs[[4]] <- leg_stations$grobs[[2]]
+  #   # leg_complete$grobs[[5]] <- leg_background$grobs[[1]]
+  #   # leg_complete$grobs[[6]] <- leg_background$grobs[[2]]
+  #   # 
+  #   # leg_complete$layout[3:4,] <- leg_stations$layout[1:2,]
+  #   # leg_complete$layout[5,] <- leg_background$layout[1,]
+  #   # leg_complete$layout[3:5,c('l','r')] <- 5
+  #   # leg_complete$layout[5,c('t','b')] <- 7
+  #   # leg_complete$layout[2,'b'] <- 8
+  #   # leg_complete$layout[6,] <- leg_plastic$layout[3,]
+  #   # leg_complete$layout[6,c('b','r')] <- apply(leg_complete$layout[,c('b','r')],2,max) + 1
+  #   # leg_complete$layout$z <- c(1:5, 0)
+  #   # 
+  #   # leg_complete$heights[2] <- unit(0.1, 'cm')
+  #   # leg_complete$heights[3] <- unit(max(as.vector(leg_plastic$heights[3]),
+  #   #                                     as.vector(leg_stations$heights[3])),'cm')
+  #   # leg_complete$heights[4] <- unit(0.2, 'cm')
+  #   # leg_complete$heights[5] <- leg_stations$heights[5]
+  #   # leg_complete$heights[6] <- unit(0.2, 'cm')
+  #   # leg_complete$heights[7] <- leg_background$heights[3]
+  #   # leg_complete$heights[8] <- leg_plastic$heights[5] - leg_stations$heights[5] -
+  #   #   leg_complete$heights[6] - leg_background$heights[3]
+  #   # leg_complete$heights[9:10] <- unit(c(0.5,0.1),c('cm','null'))
+  #   # 
+  #   # 
+  #   # leg_complete$widths[4] <- unit(0.1, 'cm')
+  #   # leg_complete$widths[5] <- unit(max(c(as.vector(leg_stations$widths[3]),
+  #   #                                      as.vector(leg_background$widths[3]))), 'cm')
+  #   # 
+  #   # leg_complete$widths[6:7] <- unit(c(0,0),c('cm','null'))
+  #   # 
+  #   
+  #   w1 <- unit(max(as.vector(leg_stations$widths),as.vector(leg_background$widths)),'cm')
+  #   l1 <- gtable_col('combine1', list(leg_stations, leg_background), width = w)
+  #   w2 <- unit(max(as.vector(leg_plastic$widths)), 'cm')
+  #   leg_complete <- gtable_row('combine2', list(leg_plastic, l1), widths = unit(c(w2,w1), 'cm'))
+  #   
+  #   # gtable_show_layout(leg_complete)
+  # }
+
+
+  
   return(
     list(
       plot = plt_complete, width = tot_width, height = tot_height
