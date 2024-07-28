@@ -1891,33 +1891,29 @@ overlay_coordinate_grid <- function(
   # axis lines
   if(singleLatAxis) lons <- 0 else lons <- lon_vals
   nlon <- length(lons)
-  lat_lines <- lapply(1:nlon, function(z) data.frame(lon = rep(lons[z], 2), lat = latlim))
-  lat_lines <- lapply(1:nlon, function(z){
-    lat_line <- lat_lines[[z]]
-    lat_line <- st_linestring(x = as.matrix(lat_line), dim = 'XY')
-    lat_line <- st_sfc(lat_line, crs = crs_world)
-    lat_line <- st_transform(lat_line, crs_use)
-  })
-  for(j in 1:nlon) plt <- plt + geom_sf(data = lat_lines[[j]]) # axis line
+  lat_lines <- matrix(c(rep(lons, each = 2), rep(latlim,4)), ncol = 2)
+  lat_lines <- st_linestring(x = lat_lines, dim = 'XY')
+  lat_lines <- st_sfc(lat_lines, crs = crs_world)
+  lat_lines <- st_transform(lat_lines, crs_use)
+  plt <- plt + geom_sf(data = lat_lines) # axis line
   # axis ticks
   nlat <- length(lat_increments)
   lr <- 1 / {{lat_increments - min(lat_increments)} / diff(range(lat_increments))}
   lr[1] <- 0
   lon_width0 <- 1.4
   lon_width <- lr * lon_width0
-  gridPos <- lapply(1:nlon, function(w){
+  gridPos <- vector('list', length = nlon * nlat)
+  for(w in 1:nlon){
     lon <- lons[w]
-    lapply(1:nlat,
-           function(z){
-             y <- data.frame(lon = lon + c(-1,1) * lon_width[z],
-                             lat = rep(lat_increments[z], 2))
-             y <- st_linestring(x = as.matrix(y), dim = 'XY')
-             y <- st_sfc(y, crs = crs_world)
-             y <- st_transform(y, crs = crs_use)
-             y})})
-  for(i in 1:nlon)
-    for(j in 1:nlat)
-      plt <- plt + geom_sf(data = gridPos[[i]][[j]]) # axis ticks
+    for(z in 1:nlat){
+      u <- {w-1} * nlat + z
+      gridPos[[u]] <- matrix(c(lon + c(-1,1) * lon_width[z],
+               rep(lat_increments[z], 2)), ncol = 2)
+    }}
+  gridPos <- st_multilinestring(x = gridPos, dim = 'XY')
+  gridPos <- st_sfc(gridPos, crs = crs_world)
+  gridPos <- st_transform(gridPos, crs = crs_use)
+  plt <- plt + geom_sf(data = gridPos)
   # Repeat for minor ticks
   if(minorTicks){
     nlat_m <- length(lat_increments_minor)
@@ -1925,63 +1921,65 @@ overlay_coordinate_grid <- function(
     # lr[1] <- 0
     lon_width <- 0.4 * lon_width0
     lon_width <- lr * lon_width
-    gridPos_m <- lapply(1:nlon, function(w){
+    gridPos_m <- vector('list', length = nlon * nlat_m)
+    for(w in 1:nlon){
       lon <- lons[w]
-      lapply(1:nlat_m,
-             function(z){
-               y <- data.frame(lon = lon + c(-1,1) * lon_width[z],
-                               lat = rep(lat_increments_minor[z], 2))
-               y <- st_linestring(x = as.matrix(y), dim = 'XY')
-               y <- st_sfc(y, crs = crs_world)
-               y <- st_transform(y, crs = crs_use)
-               y})})
-    for(i in 1:nlon)
-      for(j in 1:nlat_m)
-        plt <- plt + geom_sf(data = gridPos_m[[i]][[j]]) # axis ticks
+      for(z in 1:nlat_m){
+        u <- {w-1} * nlat_m + z
+        gridPos_m[[u]] <- matrix(c(lon + c(-1,1) * lon_width[z],
+                                 rep(lat_increments_minor[z], 2)), ncol = 2)
+      }}
+    gridPos_m <- st_multilinestring(x = gridPos_m, dim = 'XY')
+    gridPos_m <- st_sfc(gridPos_m, crs = crs_world)
+    gridPos_m <- st_transform(gridPos_m, crs = crs_use)
+    plt <- plt + geom_sf(data = gridPos_m) # axis ticks
   }
   
+  gridPos <- st_cast(gridPos, "LINESTRING")
   
-  tick_labs <- lapply(1:nlat, function(z) paste(abs(lat_increments[z]), '* degree ~ S'))
+  tick_labs <- paste(abs(lat_increments), '* degree ~ S')
   xnudge <- 0.025 * diff(BBox[c('xmin','xmax')])
-  # if(singleLatAxis) i <- 1:nlat else i <- 2:nlat
-  for(j in 2:nlat){
-    plt <- plt +
-      geom_sf_text(
-        data = gridPos[[which(lons == 0)]][[j]], label = tick_labs[[j]],
-        parse = TRUE, hjust = 0, nudge_x = xnudge, size = textSize)
-  }
-  
+  plt <- plt +
+    geom_sf_text(
+      data = gridPos[2:nlat,], label = tick_labs[2:nlat],
+      parse = TRUE, hjust = 0, nudge_x = xnudge, size = textSize
+    )
+
   #~~~~~~~~~~
   # Longitude
   #~~~~~~~~~~
   nlon <- length(lon_vals)
-  lon_points <- data.frame(lon = lon_vals, lat = rep(max(latlim), nlon))
-  gridPos <- lapply(1:nlon,
-                    function(z){
-                      y <- lon_points[z,]
-                      y <- st_point(as.matrix(y), dim = 'XY')
-                      y <- st_sfc(y, crs = crs_world)
-                      y <- st_transform(y, crs = crs_use)
-                      y})
-  lon_labs <- lapply(1:nlon, function(z) paste(lon_vals[z] %% 360, '* degree ~ E')) 
+  lon_points <- matrix(c(lon_vals, rep(max(latlim), nlon)), ncol = 2)
+
+  gridPos <- st_multipoint(lon_points, dim = 'XY')
+  gridPos <- st_sfc(gridPos, crs = crs_world)
+  gridPos <- st_transform(gridPos, crs = crs_use)  
+  
+  gridPos <- st_cast(gridPos, 'POINT')
+  
+  lon_labs <- paste(lon_vals %% 360, '* degree ~ E') 
   ynudge <- 0.0175 * diff(BBox[c('ymin','ymax')])
+  vj <- numeric(nlon)
+  xn <- numeric(nlon)
+  yn <- numeric(nlon)
+  r <- numeric(nlon)
+  
   for(j in 1:nlon){
-    vj <- 0
+    vj[j] <- 0
     lv <- lon_vals[j] %% 360
     if({0 <= lv & lv <= 90} | 270 <= lv) inv <- FALSE else inv <- TRUE
-    r <- {360 - lv} %% 360 # rotation angle for longitude labels
-    xn <- xnudge * sin(lv * pi / 180)
-    yn <- ynudge * cos(lv * pi / 180)
+    r[j] <- {360 - lv} %% 360 # rotation angle for longitude labels
+    xn[j] <- xnudge * sin(lv * pi / 180)
+    yn[j] <- ynudge * cos(lv * pi / 180)
     if(inv){
-      r <- {r - 180} %% 360
-      vj <- 1
+      r[j] <- {r[j] - 180} %% 360
+      vj[j] <- 1
     }
+  }
     plt <- plt + 
       geom_sf_text(
-        data = gridPos[[j]], label = lon_labs[[j]], parse = TRUE, vjust = vj,
+        data = gridPos, label = lon_labs, parse = TRUE, vjust = vj,
         nudge_x = xn, nudge_y = yn, size = textSize, angle = r)
-  }
-  
   plt <- plt + theme(axis.title = element_blank())
   return(plt)
 }
