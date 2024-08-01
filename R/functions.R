@@ -1834,7 +1834,7 @@ make_plot <- function(
     nColours = NULL, manual_legend_breaks = FALSE, cellBorderCol = 'grey',
     cellBorderWidth = 0.1, overlay_labels = NULL, na.colour = 'grey40',
     background.na.remove = FALSE, na.in.legend = TRUE, ice.colour = 'skyblue',
-    land.colour = 'grey85'){
+    land.colour = 'grey85', forApp = FALSE){
   #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Function to generate map plot, called from inside the server function after
   # data have been filtered by user selected inputs.
@@ -1960,7 +1960,8 @@ make_plot <- function(
                      onclick = paste0("window.open(`",
                                       as.character(weblink_krill), "`);"),
                      tooltip = weblink_krill),
-                   na.value = na.colour)
+                   na.value = na.colour) +
+                 theme(legend.title = element_text_interactive())
                if(!na.in.legend & anyNA){
                  plt_background_leg <- plt_background_leg +
                    scale_fill_viridis_c_interactive(
@@ -1971,7 +1972,8 @@ make_plot <- function(
                        onclick = paste0("window.open(`",
                                         as.character(weblink_krill), "`);"),
                        tooltip = weblink_krill),
-                     na.value = na.colour)
+                     na.value = na.colour) +
+                   theme(legend.title = element_text_interactive())
                }
                }else{
                plt_background <- plt_background +
@@ -2056,7 +2058,8 @@ make_plot <- function(
                        tooltip = weblink_krill),
                      na.value = na.colour,
                      labels = c(levels(dat_background$breaks)[levelsInData],
-                                'no data'))
+                                'no data')) +
+                   theme(legend.title = element_text_interactive())
                  if(!na.in.legend & anyNA){
                    plt_background_leg <- plt_background_leg +
                      scale_fill_viridis_d_interactive(
@@ -2070,7 +2073,8 @@ make_plot <- function(
                          tooltip = weblink_krill),
                        na.value = na.colour,
                        labels = c(levels(dat_background$breaks)[levelsInData],
-                                  'no data'))
+                                  'no data')) +
+                     theme(legend.title = element_text_interactive())
                  }
                  
                }else{
@@ -2137,7 +2141,8 @@ make_plot <- function(
                      na.value = na.colour,
                      labels = c(levels(dat_background$breaks)[levelsInData],
                                 'no data')
-                     )
+                     ) +
+                   theme(legend.title = element_text_interactive())
                  if(!na.in.legend & anyNA){
                    plt_background_leg <- plt_background_leg +
                      scale_fill_viridis_d_interactive(
@@ -2152,7 +2157,8 @@ make_plot <- function(
                        na.value = na.colour,
                        labels = c(levels(dat_background$breaks)[levelsInData],
                                   'no data')
-                       )
+                       ) +
+                     theme(legend.title = element_text_interactive())
                  }
                }else{
                  plt_background <- plt_background +
@@ -2195,7 +2201,8 @@ make_plot <- function(
                      hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                      onclick = paste0("window.open(`", as.character(
                        weblink_chlorophyll), "`);"),
-                     tooltip = weblink_chlorophyll))
+                     tooltip = weblink_chlorophyll)) +
+                 theme(legend.title = element_text_interactive())
              }else{
                plt_background <- plt_background +
                  scale_fill_viridis_c(option = 'viridis', trans = 'log10',
@@ -2238,17 +2245,45 @@ make_plot <- function(
                        aes(fill = breaks), colour = cellBorderCol,
                        linewidth = cellBorderWidth) +
                guides(fill = guide_legend(reverse = FALSE))
+             
+             if(!na.in.legend & anyNA){
+               plt_background_leg <- ggplot() +
+                 geom_sf(data = subset(dat_background, !is.na(value)),
+                         aes(fill = breaks), colour = cellBorderCol,
+                         linewidth = cellBorderWidth)}
+
              if(exists('weblink_chlorophyll')){
                plt_background <- plt_background + 
                  scale_fill_viridis_d_interactive(
-                   option = 'viridis', direction = -1, name = label_interactive(
+                   option = 'viridis',
+                   direction = -1,
+                   name = label_interactive(
                      legTitle, data_id = background.legend.id,
                      hover_css = 'fill:blue;font-size:13px;font-weight:bold',
-                     onclick = paste0("window.open(`", as.character(
-                       weblink_chlorophyll), "`);"),
+                     onclick = paste0("window.open(`",
+                                      as.character(weblink_chlorophyll), "`);"),
                      tooltip = weblink_chlorophyll),
                    na.value = na.colour,
-                   labels = c(levels(dat_background$breaks), 'no data'))
+                   labels = c(levels(dat_background$breaks), 'no data')) +
+                 theme(legend.title = element_text_interactive())
+               if(!na.in.legend & anyNA){
+                 plt_background_leg <- plt_background_leg +
+                   scale_fill_viridis_d_interactive(
+                     option = 'viridis',
+                     direction = -1,
+                     name = label_interactive(
+                       legTitle, data_id = background.legend.id,
+                       hover_css = 'fill:blue;font-size:13px;font-weight:bold',
+                       onclick = paste0("window.open(`",
+                                        as.character(weblink_chlorophyll), "`);"),
+                       tooltip = weblink_chlorophyll),
+                     na.value = na.colour,
+                     labels = c(levels(dat_background$breaks),
+                                'no data')
+                   ) +
+                   theme(legend.title = element_text_interactive())
+               }
+               
              }else{
                plt_background <- plt_background +
                  scale_fill_viridis_d(
@@ -2304,7 +2339,8 @@ make_plot <- function(
                        onclick = paste0("window.open(`",
                                         as.character(weblink_sst), "`);"),
                        tooltip = weblink_sst), 
-                     na.value = na.colour)
+                     na.value = na.colour) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_gradientn(colours = Cols, values = cval,
@@ -2330,7 +2366,8 @@ make_plot <- function(
                        hover_css = 'fill:blue;font-size:13px;font-weight:bold',
                        onclick = paste0("window.open(`",
                                         as.character(weblink_sst), "`);"),
-                       tooltip = weblink_sst))
+                       tooltip = weblink_sst)) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_gradientn(colours = Cols[1:{ncol_sst_+1}],
@@ -2355,7 +2392,8 @@ make_plot <- function(
                        onclick = paste0("window.open(`",
                                         as.character(weblink_sst), "`);"),
                        tooltip = weblink_sst),
-                     na.value = na.colour)
+                     na.value = na.colour) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background + 
                    scale_fill_gradientn(colours = Cols[{ncol_sst_+1}:ncol_sst],
@@ -2412,7 +2450,8 @@ make_plot <- function(
                          weblink_sst), "`);"),
                        tooltip = weblink_sst),
                      na.value = na.colour,
-                     labels = c(levels(dat_background$breaks), 'no data'))
+                     labels = c(levels(dat_background$breaks), 'no data')) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_manual(
@@ -2461,7 +2500,8 @@ make_plot <- function(
                          weblink_sst), "`);"),
                        tooltip = weblink_sst),
                      na.value = na.colour,
-                     labels = c(levels(dat_background$breaks), 'no data'))
+                     labels = c(levels(dat_background$breaks), 'no data')) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_manual(values = Cols_neg, name = legLabel,
@@ -2511,7 +2551,8 @@ make_plot <- function(
                          weblink_sst), "`);"),
                        tooltip = weblink_sst),
                      na.value = na.colour,
-                     labels = c(levels(dat_background$breaks), 'no data'))
+                     labels = c(levels(dat_background$breaks), 'no data')) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_manual(values = Cols_pos, name = legLabel,
@@ -2569,7 +2610,8 @@ make_plot <- function(
                        onclick = paste0("window.open(`",
                                         as.character(weblink_pH), "`);"),
                        tooltip = weblink_pH),
-                     na.value = na.colour)
+                     na.value = na.colour) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_gradientn(colours = Cols, values = cval,
@@ -2594,7 +2636,8 @@ make_plot <- function(
                                         as.character(weblink_pH), "`);"),
                        tooltip = weblink_pH),
                      na.value = na.colour) +
-                   guides(fill = guide_colorbar(reverse = TRUE))
+                   guides(fill = guide_colorbar(reverse = TRUE)) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_gradientn(colours = rev(Cols[1:{ncol_pH_+1}]),
@@ -2621,7 +2664,8 @@ make_plot <- function(
                        onclick = paste0("window.open(`",
                                         as.character(weblink_pH), "`);"),
                        tooltip = weblink_pH),
-                     na.value = na.colour)
+                     na.value = na.colour) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background + 
                    scale_fill_gradientn(
@@ -2683,7 +2727,8 @@ make_plot <- function(
                      na.value = na.colour,
                      labels = c(levels(dat_background$breaks)[levelsInData],
                                 'no data')
-                     )
+                     ) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_manual(
@@ -2736,7 +2781,8 @@ make_plot <- function(
                          weblink_pH), "`);"),
                        tooltip = weblink_pH),
                      na.value = na.colour,
-                     labels = c(levels(dat_background$breaks), 'no data'))
+                     labels = c(levels(dat_background$breaks), 'no data')) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_manual(
@@ -2790,7 +2836,8 @@ make_plot <- function(
                          weblink_pH), "`);"),
                        tooltip = weblink_pH),
                      na.value = na.colour,
-                     labels = c(levels(dat_background$breaks), 'no data'))
+                     labels = c(levels(dat_background$breaks), 'no data')) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- plt_background +
                    scale_fill_manual(
@@ -2833,7 +2880,8 @@ make_plot <- function(
                        tooltip = weblink_shipping)) +
                    geom_sf(data = dat_background[!vesselsPresent,],
                            fill = 'white', colour = cellBorderCol,
-                           linewidth = polyLineWidth)
+                           linewidth = polyLineWidth) +
+                   theme(legend.title = element_text_interactive())
                }else{
                  plt_background <- 
                    ggplot() + 
@@ -2857,12 +2905,27 @@ make_plot <- function(
                if(length(v) != 1) error("Ship traffic metric must be specified")
                leg_lab <- switch(
                  v,
-                 `ship time` = paste0('Ship traffic:', '\n', shipActivity,
-                                      ' vessels', '\n',
-                                      '(ship days year\u207B\u00B9)'),
-                 `person time` = paste0('Ship traffic:', '\n', shipActivity,
-                                        ' vessels', '\n',
-                                        '(person days year\u207B\u00B9)'))
+                 `ship time` = {
+                   if(forApp){
+                     paste0('Ship traffic:', '\n', shipActivity,
+                            ' vessels', '\n',
+                            '(ship days', '\n', ' year\u207B\u00B9)')
+                   }else{
+                     paste0('Ship traffic:', '\n', shipActivity,
+                            ' vessels', '\n',
+                            '(ship days year\u207B\u00B9)')}
+                 },
+                 `person time` = {
+                   if(forApp){
+                     paste0('Ship traffic:', '\n', shipActivity,
+                            ' vessels', '\n',
+                            '(person days', '\n', ' year\u207B\u00B9)')
+                   }else{
+                     paste0('Ship traffic:', '\n', shipActivity,
+                            ' vessels', '\n',
+                            '(person days year\u207B\u00B9)')  
+                   }
+                 })
                
                if(!discreteColourScheme){
                  # Continuous colour scheme
@@ -2886,7 +2949,8 @@ make_plot <- function(
                          onclick = paste0("window.open(`",
                                           weblink_shipping, "`);"),
                          tooltip = weblink_shipping),
-                       na.value = na.colour)
+                       na.value = na.colour) +
+                     theme(legend.title = element_text_interactive())
                    if(!na.in.legend & anyNA){
                      plt_background_leg <- plt_background_leg +
                        scale_fill_viridis_c_interactive(
@@ -2897,7 +2961,9 @@ make_plot <- function(
                            onclick = paste0("window.open(`",
                                             weblink_shipping, "`);"),
                            tooltip = weblink_shipping),
-                         na.value = na.colour)}
+                         na.value = na.colour) +
+                       theme(legend.title = element_text_interactive())
+                     }
                  }else{
                    plt_background <- plt_background +
                      scale_fill_viridis_c(option = 'mako', trans = 'log10',
@@ -3041,7 +3107,8 @@ make_plot <- function(
                          tooltip = weblink_shipping),
                        na.value = na.colour,
                        labels = c(levels(dat_background$breaks)[levelsInData],
-                                  'no data'))
+                                  'no data')) +
+                     theme(legend.title = element_text_interactive())
                    if(!na.in.legend & anyNA){
                      plt_background_leg <- plt_background_leg +
                        scale_fill_viridis_d_interactive(
@@ -3054,7 +3121,9 @@ make_plot <- function(
                              weblink_shipping), "`);"),
                            tooltip = weblink_shipping),
                          na.value = na.colour,
-                         labels = c(levels(dat_background$breaks)[levelsInData]))}
+                         labels = c(levels(dat_background$breaks)[levelsInData])) +
+                       theme(legend.title = element_text_interactive())
+                     }
                    
                  }else{
                    plt_background <- plt_background +
@@ -3142,11 +3211,15 @@ make_plot <- function(
   
   
   if(na.in.legend | !anyNA){
-    leg_background <- get_plot_component(
+    leg_background <- get_legend(
       plt_background + 
         theme(legend.margin = margin(0,0,0,0),
-              legend.box.margin = margin(0,0,0,0)),
-      'guide-box', return_all = TRUE)[[1]]
+              legend.box.margin = margin(0,0,0,0)))    
+    # leg_background <- get_plot_component(
+    #   plt_background + 
+    #     theme(legend.margin = margin(0,0,0,0),
+    #           legend.box.margin = margin(0,0,0,0)),
+    #   'guide-box', return_all = TRUE)[[1]]
   }else{
     leg_background <- get_plot_component(
       plt_background_leg + 

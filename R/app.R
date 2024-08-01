@@ -381,18 +381,18 @@ ui <- fluidPage(
           selected = c('Station', 'Camp', 'Refuge', 'Airfield Camp',
                        'Laboratory', 'Depot')),
 
-        # Input: shipping metric (ship or person time)
-        radioButtons(
-          'ShipMetric', 'Ship traffic metric:',
-          choiceNames = c('ship time', 'person time'),
-          choiceValues = c('ship time', 'person time')),
-        
         # Input: background layers
         radioButtons(
           'background', 'Background data:',
           choiceNames = backgroundData_choiceNames,
           choiceValues = backgroundData_choiceValues,
-          selected = 'none')
+          selected = 'none'),
+        
+        # Input: shipping metric (ship or person time)
+        radioButtons(
+          'ShipMetric', 'Ship traffic metric:',
+          choiceNames = c('ship time', 'person time'),
+          choiceValues = c('ship time', 'person time'))
       )
     ),
     
@@ -566,7 +566,7 @@ server <- function(input, output, session){
   plot_main <- reactive({
     return(
       make_plot(dat = listData(), background = which_background(),
-                latlim = lat_lim_plastic)
+                latlim = lat_lim_plastic, forApp = TRUE)
     )
   })
 
