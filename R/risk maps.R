@@ -1484,8 +1484,8 @@ plt_stations_combined <- ggdraw(arrangeGrob(
 
 
 plt_biota <- ggdraw(arrangeGrob(
-  plt_chl$plot + theme(legend.position = 'none'),
   plt_krill$plot + theme(legend.position = 'none'),
+  plt_chl$plot + theme(legend.position = 'none'),
   plt_chl$legend,
   nrow = 1, widths = c(0.425, 0.425, 0.15), top = 'Biota'))
 plt_stress <- ggdraw(arrangeGrob(
@@ -1501,14 +1501,15 @@ plt_activity <- ggdraw(arrangeGrob(
 
 # Save these plots for supplementary material
 # Chlorophyll and krill
-plt_raw1 <- plt_chl_raw + theme(legend.position = 'none')
-plt_raw2 <- plt_krill_raw + theme(legend.position = 'none')
+plt_raw1 <- plt_krill_raw + theme(legend.position = 'none')
+plt_raw2 <- plt_chl_raw + theme(legend.position = 'none')
 leg_raw <- ggdraw(get_legend(plt_chl_raw))
-plt_map1 <- plt_chl$plot + theme(legend.position = 'none') + 
+plt_map1 <- plt_krill$plot + theme(legend.position = 'none') + 
   labs(title = element_blank())
-plt_map2 <- plt_krill$plot + theme(legend.position = 'none') + 
+plt_map2 <- plt_chl$plot + theme(legend.position = 'none') + 
   labs(title = element_blank())
-leg_map <- plt_chl$legend
+leg_map <- get_legend(plt_chl$plot)
+# leg_map <- plt_chl$legend
 
 rh <- c(0.4, 0.6) # relative heights of panels
 lx <- c(0.05, 0.15) # label adjustment factors
@@ -1518,10 +1519,10 @@ label_fontface <- 2
 label_fontfamily <- 'serif'
 
 title_left <- ggdraw() +
-  draw_label('Chlorophyll', fontface = label_fontface,
+  draw_label('Krill', fontface = label_fontface,
              fontfamily = label_fontfamily, x = 0.55)
 title_right <- ggdraw() +
-  draw_label('Krill', fontface = label_fontface,
+  draw_label('Chlorophyll', fontface = label_fontface,
              fontfamily = label_fontfamily, x = 0.55)
 plt_left <- plot_grid(
   plt_raw1 + theme(plot.margin = unit(c(0.5,0.5,0,1), 'cm')),
@@ -1559,7 +1560,8 @@ plt_map1 <- plt_sst$plot +
   theme(legend.position = 'none') + labs(title = element_blank())
 plt_map2 <- plt_pH$plot +
   theme(legend.position = 'none') + labs(title = element_blank())
-leg_map <- plt_sst$legend
+leg_map <- get_legend(plt_pH$plot)
+# leg_map <- plt_sst$legend
 
 title_left <- ggdraw() +
   draw_label('SST', fontface = label_fontface,
@@ -1600,7 +1602,10 @@ plt_map1 <- plt_ship$plot +
   theme(legend.position = 'none') + labs(title = element_blank())
 plt_map2 <- plt_stations$plot +
   theme(legend.position = 'none') + labs(title = element_blank())
-leg_map <- plt_stations$legend
+# leg_map <- plt_stations$legend
+leg_map <- get_legend(plt_stations$plot)
+ll <- get_legend(plt_ship$plot)
+leg_map$grobs[[3]] <- ll$grobs[[1]]
 
 title_left <- ggdraw() +
   draw_label('Ship traffic', fontface = label_fontface,
