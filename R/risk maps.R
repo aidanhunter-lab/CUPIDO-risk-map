@@ -1292,8 +1292,8 @@ abline(h = rank_limits_stations_ships)
 
 # Choose rounded values based on rank_limits_stations_ships
 r <- rank_limits_stations_ships
-r[2:nranks] <- c(5, 50, 350, 2500)
-# r[2:nranks] <- c(5, 25, 150, 1500)
+# r[2:nranks] <- c(5, 50, 350, 2500)
+r[2:nranks] <- c(5, 40, 250, 1600)
 
 # Assign disturbance ranks to each grid cell
 for(i in 1:nranks){
