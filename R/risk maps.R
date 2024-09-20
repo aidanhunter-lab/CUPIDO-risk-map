@@ -1284,8 +1284,8 @@ plot(x, y, col = as.factor(names(y)))
 plot(x, y, col = as.factor(names(y)), log = 'y')
 
 
-# y_ <- y[y >= 1] # data less than 1 is lowest rank
-y_ <- y[y > 0] # measurement zeros are lowest rank -- not applicable when both data sets are spatially smoothed
+y_ <- y[y >= 1] # data less than 1 is lowest rank
+# y_ <- y[y > 0] # measurement zeros are lowest rank -- not applicable when both data sets are spatially smoothed
 
 # # Cells with zero population density are not assigned a rank and will not appear
 # # on the map. This only applies when distanceLimit is set.
@@ -1294,8 +1294,8 @@ x_ <- 1:length(y_)
 
 plot(x_, y_, log = 'y', col = as.factor(names(y_)))
 
-# y_r <- y_[1:{length(y_)-2}] # omit outliers
-y_r <- y_[-c(length(y_))] # omit outliers
+y_r <- y_[1:{length(y_)-2}] # omit outliers
+# y_r <- y_[-c(length(y_))] # omit outliers
 x_r <- 1:length(y_r)
 
 plot(x_r, y_r, log = 'y', col = as.factor(names(y_r)))
@@ -1315,8 +1315,8 @@ abline(h = rank_limits_stations_ships)
 
 # Choose rounded values based on rank_limits_stations_ships
 r <- rank_limits_stations_ships
-# r[2:nranks] <- c(5, 30, 250, 2500)
-# r[2:nranks] <- c(5, 25, 150, 1500)
+# r[2:nranks] <- c(5, 50, 350, 2500)
+r[2:nranks] <- c(5, 40, 250, 1600)
 
 # plot(x, y, col = as.factor(names(y)), log = 'y')
 # abline(h = r)
