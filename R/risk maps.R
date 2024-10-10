@@ -41,30 +41,13 @@ library(gridExtra)
 library(cowplot)
 library(remotes)
 library(ggnewscale)
-
-# This is no-longer needed after ggnewscale updated version
-# ggnewscale_version <- '0.4.3'
-# ggnewscale_download_path <- paste0('eliocamp/ggnewscale@v', ggnewscale_version)
-# ggnewscale_available <- require(ggnewscale, quietly = TRUE)
-# if(!ggnewscale_available){
-#   install_github(ggnewscale_download_path)
-#   library(ggnewscale)
-# }else{
-#   if(packageVersion('ggnewscale') != ggnewscale_version){
-#     detach("package:ggnewscale", unload = TRUE)
-#     remove.packages('ggnewscale')
-#     install_github(ggnewscale_download_path)
-#     library(ggnewscale)
-#   }
-# }
 library(this.path)
 
 # Directories -------------------------------------------------------------
-
 dir_base <- dirname(this.dir())
-dir_data <- paste(dir_base, 'data', sep = '/')
-dir_map <- paste(dir_data, 'map', sep = '/')
-dir_plots <- paste(dir_base, 'plots', sep = '/')
+dir_data <- file.path(dir_base, 'data')
+dir_map <- file.path(dir_data, 'map')
+dir_plots <- file.path(dir_base, 'plots')
 if(!dir.exists(dir_plots)) dir.create(dir_plots)
 
 # Load functions ----------------------------------------------------------
@@ -82,6 +65,8 @@ loadTooltipFromFile <- TRUE
 displayAllLitterTypes <- TRUE
 
 roundShipTime <- FALSE
+
+reduceDomain <- TRUE
 
 res <- '9x3'
 
@@ -112,6 +97,36 @@ if(!is.null(pH_poly$month))
 ship_type <- 'all'
 ship <- subset(ship_poly, activity == ship_type)
 
+if(reduceDomain){
+  # Restrict latitudinal domain of risk maps to the latitudinal extent of the
+  # combined shipping and facility data. Shipping data is only available south of
+  # 60 degrees south, so this is the domain limit.
+  lat_lim_ship <- range(st_coordinates(st_transform(ship, crs = crs_world))[,'Y'])
+  lat_lim_station <- range(st_coordinates(st_transform(STATIONS_sf, crs = crs_world))[,'Y'])
+  excludeAnyStations <- lat_lim_station[2] > lat_lim_ship[2] # 
+  # excludeAnyStations # Good. We don't need to exclude facilities due to restricting latitudinal domain.
+  excludeCells <- grid_cells_all$cell_index[!{grid_cells_all$cell_index %in% ship$cell_index}]
+}
+
+# if(reduceDomain){
+#   # Restrict latitudinal domain of risk maps to the latitudinal extent of the
+#   # combined shipping and facility data. Shipping data is only available south of
+#   # 60 degrees south, so this is the domain limit.
+#   lat_lim_ship <- range(st_coordinates(st_transform(ship, crs = crs_world))[,'Y'])
+#   lat_lim_station <- range(st_coordinates(st_transform(STATIONS_sf, crs = crs_world))[,'Y'])
+#   excludeAnyStations <- lat_lim_station[2] > lat_lim_ship[2] # 
+#   # excludeAnyStations # Good. We don't need to exclude facilities due to restricting latitudinal domain.
+#   
+#   # No need to use latitudes to reduce domain, just use cell indices.
+#   chl <- chl[chl$cell_index %in% ship$cell_index,]
+#   krill <- krill[krill$cell_index %in% ship$cell_index,]
+#   sst <- sst[sst$cell_index %in% ship$cell_index,]
+#   pH <- pH[pH$cell_index %in% ship$cell_index,]
+#   grid_cells_all <- grid_cells_all[grid_cells_all$cell_index %in% ship$cell_index,]
+#   
+# }
+
+# Handle NA values
 chl_na <- chl
 krill_na <- krill
 sst_na <- sst
@@ -213,7 +228,8 @@ y <- sort(chl$value)
 plot(x, y)
 plot(x, y, log = 'y')
 
-yr <- y[-c({length(y)-1}:length(y))]
+# yr <- y[-c({length(y)-1}:length(y))]
+yr <- y # there are no obvious outliers after restricting domain
 yl <- log10(yr)
 r <- 10 ^ seq(min(yl), max(yl), length = nranks + 1) # even spread on log scale
 r <- round(r / {orderOfMagnitude(r) / 10}) * {orderOfMagnitude(r) / 10}
@@ -298,6 +314,7 @@ plot(x_p, y_p, log = 'y')
 
 # Rank as an even spread on log scale after removing outliers.
 y_r <- y_p[-c(1,{length(y_p)-2}:length(y_p))]
+# y_r <- y_p
 x_r <- 1:length(y_r)
 plot(x_r, y_r, log = 'y')
 yl <- log10(y_r)
@@ -383,6 +400,8 @@ plot(x, y)
 
 # trim outliers then group
 ol <- c(1:4, {length(y)-3}:length(y))
+# ol <- c({length(y)}:length(y)) # adjust outliers now that domain is reduced
+
 # normalise with square root transform
 yl <- y ^ 0.5
 y_r <- yl[-ol]
@@ -1314,8 +1333,8 @@ abline(h = rank_limits_stations_ships)
 
 # Choose rounded values based on rank_limits_stations_ships
 r <- rank_limits_stations_ships
-# r[2:nranks] <- c(5, 50, 350, 2500)
-r[2:nranks] <- c(5, 40, 250, 1600)
+# r[2:nranks] <- c(5, 40, 250, 1600)
+r[2:nranks] <- c(7, 50, 380, 2800)
 
 # plot(x, y, col = as.factor(names(y)), log = 'y')
 # abline(h = r)
@@ -1579,7 +1598,10 @@ plt_biota_combined <- plot_grid(plt_left, plt_right, plt_leg,
 a4_dim <- c(8.3, 11.7)
 pw <- 1.5 * a4_dim[1]
 ph <- 1.5 * 0.5 * a4_dim[2]
-ggsave('biota_prevalence_ranking.png', plt_biota_combined, 'png', dir_plots,
+
+fn <- 'biota_prevalence_ranking.png'
+# if(reduceDomain) fn <- sub('.png', '_reducedDomain.png', fn)
+ggsave(fn, plt_biota_combined, 'png', dir_plots,
        width = pw, height = ph, units = 'in')
 
 # SST and pH
@@ -1621,7 +1643,9 @@ plt_stress_combined <- plot_grid(plt_left, plt_right, plt_leg,
                                  ncol = 3, rel_widths = c(1,1,0.2)) + 
   theme(plot.background = element_rect(fill = 'white', colour = 'white'))
 
-ggsave('physical_stress_ranking.png', plt_stress_combined, 'png', dir_plots,
+fn <- 'physical_stress_ranking.png'
+# if(reduceDomain) fn <- sub('.png', '_reducedDomain.png', fn)
+ggsave(fn, plt_stress_combined, 'png', dir_plots,
        width = pw, height = ph, units = 'in')
 
 # shipping and facilities
@@ -1665,10 +1689,10 @@ plt_activity_combined <- plot_grid(plt_left, plt_right, plt_leg,
                                    ncol = 3, rel_widths = c(1,1,0.2)) + 
   theme(plot.background = element_rect(fill = 'white', colour = 'white'))
 
-ggsave('human_disturbance_ranking_ship_smooth.png', plt_activity_combined, 'png',
+fn <- 'human_disturbance_ranking.png'
+# if(reduceDomain) fn <- sub('.png', '_reducedDomain.png', fn)
+ggsave(fn, plt_activity_combined, 'png',
        dir_plots, width = pw, height = ph, units = 'in')
-
-
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Merge data sets to create risk rankings
@@ -1759,6 +1783,10 @@ ship$type <- 'ship'
 stations$type <- 'station'
 
 # Merge the data frames
+if(reduceDomain){
+  ship <- ship[!{ship$cell_index %in% excludeCells},]
+  stations <- stations[!{stations$cell_index %in% excludeCells},]
+}
 dat <- rbind(ship[columns], stations[columns])
 all_polygons <- sort(unique(dat$cell_index)) # find all mapped polygons
 npolys <- length(all_polygons)
@@ -1807,6 +1835,11 @@ plt_biota_activity
 
 dat_biota$type <- 'biota'
 dat_activity$type <- 'activity'
+
+if(reduceDomain){
+  dat_biota <- dat_biota[!{dat_biota$cell_index %in% excludeCells},]
+  dat_activity <- dat_activity[!{dat_activity$cell_index %in% excludeCells},]
+}
 dat <- rbind(dat_biota, dat_activity)
 
 all_polygons <- sort(unique(dat$cell_index))
@@ -1855,6 +1888,11 @@ plt_stessor_activity
 
 dat_stress$type <- 'stress'
 dat_activity$type <- 'activity'
+if(reduceDomain){
+  dat_stress <- dat_stress[!{dat_stress$cell_index %in% excludeCells},]
+  dat_activity <- dat_activity[!{dat_activity$cell_index %in% excludeCells},]
+}
+
 dat <- rbind(dat_stress, dat_activity)
 
 all_polygons <- sort(unique(dat$cell_index))
@@ -2000,7 +2038,10 @@ sc_w <- 1.5 # scaling factors
 sc_h <- 1.2
 pw <- sc_w * A4_w
 ph <- sc_h * A4_h
-ggsave('main_results_ranking_ship_smooth.png', plt_results, 'png', dir_plots, width = pw,
+
+fn <- 'main_results_ranking.png'
+# if(reduceDomain) fn <- sub('.png', '_reducedDomain.png', fn)
+ggsave(fn, plt_results, 'png', dir_plots, width = pw,
        height = ph, units = 'in')
 
 
