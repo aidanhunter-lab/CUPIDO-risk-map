@@ -3,8 +3,9 @@
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Data organisation functions ---------------------------------------------
-
-# Utility function to make map grid polygons
+# Some utility functions used to load and prepare data for analysis and mapping
+# createPolygons() --------------------------------------------------------
+# Make map grid polygons
 createPolygons <- function(dat){
   # Generate list of polygons describing lon/lat bounding box for each row of
   # input data frame. The input data must contain columns called 'lonmin',
@@ -25,8 +26,7 @@ createPolygons <- function(dat){
     )}
   )
 }
-
-
+# getMapData() ------------------------------------------------------------
 # Get southern hemisphere map data sourced from Natural Earth
 getMapData <- function(
     dataDirectory, mapSource = 'Natural Earth',
@@ -240,8 +240,7 @@ getMapData <- function(
   # End ---------------------------------------------------------------------
   return(output)
 }
-
-
+# get_data() --------------------------------------------------------------
 # Load and organise data required for maps
 get_data <- function(
     baseDirectory, dataDirectory, mapDirectory, res,
@@ -1494,10 +1493,9 @@ get_data <- function(
   
 }
 
-
-
 # Interactive (shiny app) map functions -----------------------------------
-
+# Functions required by the interactive online map
+# fun_flextable() ---------------------------------------------------------
 # Define interactive tooltip for plastic data
 fun_flextable <- function(
     x, longVars, singleRowVars, sampleType, DATA_name_swap){
@@ -1625,7 +1623,8 @@ fun_flextable <- function(
   }
 }
 
-# Set the plotting parameters
+# set_plot_params() -------------------------------------------------------
+# Define plotting parameters
 set_plot_params <- function(base_map, plastics, stations){
   
   # Plot symbols - store in separate data frame
@@ -1705,6 +1704,7 @@ set_plot_params <- function(base_map, plastics, stations){
   
 }
 
+# overlay_coordinate_grid() -----------------------------------------------
 # Coordinate axes for map
 overlay_coordinate_grid <- function(
     plt, latlim = NULL, lat_increments = NULL, lat_step = 10,
@@ -1820,6 +1820,7 @@ overlay_coordinate_grid <- function(
   return(plt)
 }
 
+# make_plot() -------------------------------------------------------------
 # The main plotting function
 make_plot <- function(
     dat, background = 'none', displayEcoregions = FALSE, backgroundOnly = FALSE,
@@ -3601,17 +3602,16 @@ make_plot <- function(
   )
 }
 
-
 # Risk map functions ------------------------------------------------------
-
-# geometric mean of vector x
+# Functions involved in generating the risk maps
+# geomean() ---------------------------------------------------------------
+# Geometric mean of vector x
 geomean <- function(x, na.rm = FALSE){
   if(na.rm) x <- x[!is.na(x)]
   return(exp(sum(log(x)) / length(x)))
 }
-
-
-# function to plot risk levels
+# plot_fun() --------------------------------------------------------------
+# Plot risk levels
 plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
                      legend_title = 'risk', Title = NULL, show_legend = TRUE,
                      showAxis = TRUE, latlim = NULL, axisTextSize = 4,
@@ -3658,8 +3658,8 @@ plot_fun <- function(data, n = nranks, v_option = 'viridis', v_direction = -1,
   if(!is.null(Title)) plt <- plt + labs(title = Title)
   return(list(plot = plt, legend = leg))
 }
-
-# function to plot stations
+# plot_fun_stations() -----------------------------------------------------
+# Plot risk levels for stations
 plot_fun_stations <- function(
     data_stations, data_grid_cells, rank_type = 'additive', n = nranks,
     v_option = 'viridis', v_direction = -1, alpha = 0.75, stroke = 1, 
@@ -3733,17 +3733,17 @@ plot_fun_stations <- function(
   output <- list(plot = plt, legend = leg)
   return(output)
 }
-
-# Use a continuous 'score' to assess risk. This behaves better than integer ranks
-# under averaging and may be transformed into an integer 'rank' by taking the ceiling
-# (or floor).
+# score2rank() ------------------------------------------------------------
+# Use a continuous 'score' to assess risk. This behaves better than integer
+# ranks under averaging and may be transformed into an integer 'rank' by taking
+# the ceiling (or floor).
 score2rank <- function(x, base = 0){
   y <- ceiling(x)
   if(is.numeric(base)) y[y == base] <- base + 1
   y
 }
-
-# functions for rounding -- used in automated process for selecting ranking limit values
+# zerosAfterDecimal() -----------------------------------------------------
+# Function for rounding. Used in process that selects ranking limit values
 zerosAfterDecimal <- function(x){
   if(x == 0) out <- 0 else{
     options(scipen = 999)
@@ -3758,6 +3758,7 @@ zerosAfterDecimal <- function(x){
   }
   return(out)
 }
+# orderOfMagnitude() ------------------------------------------------------
 orderOfMagnitude <- Vectorize(function(x){
   if(x == 0) out <- 1 else{
     z <- zerosAfterDecimal(x)
@@ -3768,5 +3769,3 @@ orderOfMagnitude <- Vectorize(function(x){
       }}}
   return(out)
 })
-# orderOfMagnitude <- Vectorize(orderOfMagnitude)
-
