@@ -1,6 +1,8 @@
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Mapping Southern Ocean microplastic and environmental data -- a Shiny app
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Mapping Southern Ocean microplastic and environmental data -- a Shiny app.
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Dr Aidan Hunter, Ecosystems group, British Antarctic Survey (2024).
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # This interactive map, version 1.0, was created using R version 4.4
 
@@ -62,8 +64,8 @@ for(i in 1:length(pkg.list)){
 # Directory info ----------------------------------------------------------
 
 dir_base <- dirname(getwd())
-dir_data <- paste(dir_base, 'data', sep = '/')
-dir_map <- paste(dir_data, 'map', sep = '/')
+dir_data <- file.path(dir_base, 'data')
+dir_map <- file.path(dir_data, 'map')
 
 # Load data ---------------------------------------------------------------
 
@@ -199,7 +201,8 @@ set_flextable_defaults(
 
 set_plot_params(nc, DATA_sf, STATIONS_sf)
 
-# Define UI for plastic data map app ----
+
+# Define UI for plastic data map app --------------------------------------
 
 # Define lists of names for background data
 backgroundData_choiceNames <- list(
