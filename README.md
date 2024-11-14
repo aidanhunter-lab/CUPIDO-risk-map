@@ -2,7 +2,7 @@
 <!-- ![project logo](misc/CUPIDO-logo.png) -->
 <!-- <img src="misc/CUPIDO-logo.png" width="200"> -->
 ## Overview
-This work is output from the [CUPIDO project](https://www.bas.ac.uk/project/cupido/), that is an investigation of how zooplankton interact with marine microplastic and the potential consequences for the carbon cycle. <div style="float: right;">![project logo](misc/CUPIDO-logo.png)</div>
+This work is output from the [CUPIDO project](https://www.bas.ac.uk/project/cupido/), that is an investigation of how zooplankton interact with marine microplastic and the potential consequences for the carbon cycle. <div style="float: right;"><img src="misc/CUPIDO-logo.png" width="200"></div>
 The repository contains the code required to reproduce the study entitled __Microplastic hotspots mapped across the Southern Ocean reveal areas of potential ecological impact__, published in Nature Scientific Reports.
 The study objective was to assess and visualise the spatial distribution of ecological risk posed by microplastics in the Southern Ocean.
 The approach taken was a spatial overlap analysis of multiple datasets including plankton, physical ocean variables, ship traffic, research stations, and __in situ__ microplastic samples.
