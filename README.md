@@ -1,8 +1,12 @@
-# Mapping microplastic's ecological impact in the Southern Ocean
+# Mapping microplastic's ecological impact in the Southern Ocean <div style="float: right;">![project logo](CUPIDO-logo.png)</div>
 
 <!-- ![project logo](misc/CUPIDO-logo.png) -->
 
-<img src="misc/CUPIDO-logo.png" width="200">
+<!-- <img src="misc/CUPIDO-logo.png" width="200"> -->
+
+
+
+
 
 ## Overview
 This work is output from the [CUPIDO project](https://www.bas.ac.uk/project/cupido/), that is an investigation of how zooplankton interact with marine microplastic and the potential consequences for the carbon cycle.
