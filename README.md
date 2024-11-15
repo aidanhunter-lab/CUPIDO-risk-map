@@ -1,18 +1,20 @@
+<img src="misc/CUPIDO-logo.png" align="right" width="200">
+
 # Mapping microplastic's ecological impact in the Southern Ocean
 ## Overview
-<img src="misc/CUPIDO-logo.png" align="right" width="200">
-This work is output from the <a href="https://www.bas.ac.uk/project/cupido/">CUPIDO</a> project, that is an investigation of how zooplankton interact with marine microplastic and the potential consequences for the carbon cycle.
-The repository contains the code required to reproduce the study entitled <i>Microplastic hotspots mapped across the Southern Ocean reveal areas of potential ecological impact</i>, published in Nature Scientific Reports.
+<!-- <img src="misc/CUPIDO-logo.png" align="right" width="200"> -->
+This work is output from the UKRI Future Leaders Fellowship <a href="https://www.bas.ac.uk/project/cupido/">CUPIDO</a> project, that is an investigation of how zooplankton interact with marine microplastic and the potential consequences for the carbon cycle.
+The repository contains the code required to reproduce the study entitled <i>Microplastic hotspots mapped across the Southern Ocean reveal areas of potential ecological impact</i>, published in Nature Scientific Reports by Hunter et al. (2024).
 The study objective was to assess and visualise the spatial distribution of ecological risk posed by microplastics in the Southern Ocean.
-The approach taken was a spatial overlap analysis of multiple datasets including plankton, physical ocean variables, ship traffic, research stations, and <i>in situ</i> microplastic samples.
+The approach taken was a spatial overlap analysis of multiple datasets comprising plankton, physical ocean variables, ship traffic, research stations, and <i>in situ</i> microplastic samples.
 These data may be explored, filtered, and downloaded using an interactive web application: <a href="southernoceanplastic.data.bas.ac.uk">southernoceanplastic.data.bas.ac.uk</a>.
 
 ## Code summary
 #### Data
-All compiled data required to generate output maps are stored in CUPIDO-risk-map/data/. The original data sets are not included, but may be downloaded via some of the MatLab scripts or directly from source. The compiled data may then be reproduced from MatLab scripts included here. The original data may be included at a later date (except for the propriatory ship traffic data which may only be available upon direct request).
+All compiled data required to generate output maps are stored in CUPIDO-risk-map/data/. The original data sets are not included, but may be downloaded via some of the MatLab scripts or directly from source. The compiled data may then be reproduced from MatLab scripts included here. The original data may be included at a later date (except for the proprietary ship traffic data which are conditionally available upon direct request).
 
 #### Software
-All scripts for downloading data and preparing it for mapping were written in MatLab 2023b. At some point, for consistency and to run entirely on open source software, these may be converted into R.
+All scripts for downloading data and preparing them for mapping were written in MatLab 2023b. At some point, for consistency and to run entirely on open source software, these may be converted into R.
 
 Code required to generate all maps, including the interactive map, was written in R 4.4.1. The simplest way to view the interactive map is from the weblink ([southernoceanplastic.data.bas.ac.uk](southernoceanplastic.data.bas.ac.uk)), but it may also be launched directly from this code base by opening an R session from within the CUPIDO-risk-map/R/ directory then inputting the command `source('run_app.R')`. Running the interactive map locally requires installation of several software dependencies (see below), and it may take a little longer to load the first time it is opened.
 
