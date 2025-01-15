@@ -1100,7 +1100,9 @@ get_data <- function(
   
   SST <- read.csv(f)
   
-  weblink_sst <- 'https://data.marine.copernicus.eu/product/SST_GLO_SST_L4_REP_OBSERVATIONS_010_024/download?dataset=ESACCI-GLO-SST-L4-REP-OBS-SST'
+  # weblink_sst <- 'https://data.marine.copernicus.eu/product/SST_GLO_SST_L4_REP_OBSERVATIONS_010_024/download?dataset=ESACCI-GLO-SST-L4-REP-OBS-SST'
+  weblink_sst <- 'https://doi.org/10.48670/moi-00169'
+  
   assign('weblink_sst', weblink_sst, envir = parent.frame())
   
   }
@@ -1236,7 +1238,9 @@ get_data <- function(
   
   pH <- read.csv(f)
   
-  weblink_pH <- 'https://data.marine.copernicus.eu/product/MULTIOBS_GLO_BIO_CARBON_SURFACE_REP_015_008/description'
+  # weblink_pH <- 'https://data.marine.copernicus.eu/product/MULTIOBS_GLO_BIO_CARBON_SURFACE_REP_015_008/description'
+  weblink_pH <- 'https://doi.org/10.48670/moi-00047'
+  
   assign('weblink_pH', weblink_pH, envir = parent.frame())
   
   }
