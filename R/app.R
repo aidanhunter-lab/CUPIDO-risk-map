@@ -9,7 +9,7 @@
 # Packages ----------------------------------------------------------------
 # Required packages
 pkg.list <- c(
-  'remotes','shiny','sp','sf','mapdata','ggplot2','gtable','grid','gridExtra',
+  'remotes','shiny', 'shinydashboard','sp','sf','mapdata','ggplot2','gtable','grid','gridExtra',
   'patchwork','cowplot','RColorBrewer','scales','ggiraph','reshape2',
   'flextable','DT','ggnewscale')
 
@@ -311,7 +311,14 @@ ui <- fluidPage(
   ),
   
   # App title
-  titlePanel('Mapping Southern Ocean Plastic Data'),
+  titlePanel(title = div(h2('Mapping Southern Ocean Plastic Data'),
+                        h4(HTML("<p><a target='_blank' href='http://dx.doi.org/10.1038/s41598-024-79816-y'>http://dx.doi.org/10.1038/s41598-024-79816-y</a></p>"))),
+             windowTitle = 'Southern Ocean Plastic Data'),
+  
+  # dashboardHeader(
+  #   title= div(h2('Mapping Southern Ocean Plastic Data'), h4('http://dx.doi.org/10.1038/s41598-024-79816-y'))
+  # ),
+  
   fluidRow(
     column(
       width = 3,
